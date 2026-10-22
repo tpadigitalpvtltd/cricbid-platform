@@ -389,49 +389,12 @@ export async function POST(request: Request) {
     // Increment count in tournament store (Awaited)
     await incrementRegistrationCountAsync(tournament.slug);
 
-    // Sync to Google Sheet
-    let sheetSyncSuccess = false;
-    let sheetSyncMessage = 'Not configured';
-
-    const targetSheetUrl =
-      (tournament.googleSheetUrl && tournament.googleSheetUrl.startsWith('http'))
-        ? tournament.googleSheetUrl
-        : (process.env.GOOGLE_SHEET_SCRIPT_URL || MASTER_GOOGLE_SHEET_URL);
-
-    if (targetSheetUrl && targetSheetUrl.startsWith('http') && !targetSheetUrl.includes('YOUR_SCRIPT')) {
-      try {
-        const sheetResponse = await fetch(targetSheetUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(registrationRecord),
-          redirect: 'follow',
-        });
-
-        if (sheetResponse.ok) {
-          const sheetResult = await sheetResponse.json().catch(() => null);
-          sheetSyncSuccess = true;
-          sheetSyncMessage = sheetResult?.message || 'Synced with Google Sheet successfully';
-        } else {
-          sheetSyncMessage = `Google Apps Script returned status ${sheetResponse.status}`;
-        }
-      } catch (sheetError: any) {
-        console.error('Failed to sync to Google Sheet:', sheetError);
-        sheetSyncMessage = `Sync failed: ${sheetError?.message || 'Network error'}`;
-      }
-    } else {
-      sheetSyncMessage = 'Google Sheet Script URL is not configured';
-    }
-
     return NextResponse.json({
       success: true,
       message: isPaidTournament
         ? 'Player registered & fee verified successfully!'
         : 'Free player registration completed successfully!',
       registration: registrationRecord,
-      sheetSync: {
-        synced: sheetSyncSuccess,
-        message: sheetSyncMessage,
-      },
     });
   } catch (error: any) {
     console.error('Registration processing error:', error);

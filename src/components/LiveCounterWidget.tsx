@@ -14,7 +14,6 @@ export const LiveCounterWidget: React.FC<LiveCounterWidgetProps> = ({
 }) => {
   const [count, setCount] = useState<number>(initialCount);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [source, setSource] = useState<'google_sheet' | 'local_store'>('local_store');
 
   const fetchLiveCount = async () => {
     try {
@@ -24,7 +23,6 @@ export const LiveCounterWidget: React.FC<LiveCounterWidgetProps> = ({
         const data = await res.json();
         if (data && typeof data.registeredCount === 'number') {
           setCount(data.registeredCount);
-          if (data.source) setSource(data.source);
         }
       }
     } catch (err) {
@@ -61,11 +59,9 @@ export const LiveCounterWidget: React.FC<LiveCounterWidgetProps> = ({
             <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 uppercase tracking-widest flex items-center gap-1">
               <Radio className="w-2.5 h-2.5 animate-pulse" /> LIVE DRAFT POOL
             </span>
-            {source === 'google_sheet' && (
-              <span className="text-[10px] font-semibold text-emerald-400 flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3" /> Synced to Sheet
-              </span>
-            )}
+            <span className="text-[10px] font-semibold text-emerald-400 flex items-center gap-1">
+              <ShieldCheck className="w-3 h-3" /> Verified Live
+            </span>
           </div>
           
           <div className="flex items-baseline gap-2 mt-0.5">

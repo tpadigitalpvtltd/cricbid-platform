@@ -87,7 +87,7 @@ export default function HomePage() {
         </h1>
 
         <p className="text-sm sm:text-base text-slate-400 max-w-2xl mx-auto mt-4 leading-relaxed">
-          CricBid connects cricket tournament organizers and aspiring players. Host free tournaments with instant Google Sheets sync or register for high-stakes IPL-style player auctions.
+          CricBid connects cricket tournament organizers and aspiring players. Host tournaments with instant digital player passes, verified live drafts, and high-stakes IPL-style player auctions.
         </p>
 
         {/* Action Buttons */}
@@ -328,7 +328,7 @@ export default function HomePage() {
               Organizing A Cricket Tournament?
             </h2>
             <p className="text-xs sm:text-sm text-slate-400 mt-2 leading-relaxed">
-              Launch your auction pool registration portal in under 2 minutes. Sync all player photos and stats straight into your Google Sheet without writing a single line of backend code.
+              Launch your auction pool registration portal in under 2 minutes. Collect player registrations, generate verified digital holographic passes, and manage your auction pool seamlessly.
             </p>
           </div>
 

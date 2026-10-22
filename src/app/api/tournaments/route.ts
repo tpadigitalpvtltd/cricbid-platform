@@ -70,10 +70,23 @@ export async function POST(request: Request) {
       'https://images.unsplash.com/photo-1624526267942-ab0ff8a3e972?q=80&w=1200&auto=format&fit=crop',
     ];
 
-    const chosenBanner =
-      bannerUrl && typeof bannerUrl === 'string' && bannerUrl.trim().startsWith('http')
-        ? bannerUrl.trim()
-        : defaultBanners[Math.floor(Math.random() * defaultBanners.length)];
+    let chosenBanner = defaultBanners[Math.floor(Math.random() * defaultBanners.length)];
+    if (bannerUrl && typeof bannerUrl === 'string') {
+      const trimmedBanner = bannerUrl.trim();
+      if (trimmedBanner.startsWith('data:image/svg')) {
+        return NextResponse.json(
+          { success: false, error: 'SVG image format is not permitted for security reasons' },
+          { status: 400 }
+        );
+      }
+      if (
+        trimmedBanner.startsWith('http://') ||
+        trimmedBanner.startsWith('https://') ||
+        trimmedBanner.startsWith('data:image/')
+      ) {
+        chosenBanner = trimmedBanner;
+      }
+    }
 
     // Abuse prevention: Public organizers can only create Free tournaments.
     // Paid tournaments require Super Admin authorization.
@@ -89,7 +102,7 @@ export async function POST(request: Request) {
       bannerUrl: chosenBanner,
       registrationDeadline: registrationDeadline || '2026-12-31',
       auctionDate: auctionDate || '2027-01-10',
-      googleSheetUrl: googleSheetUrl?.trim() || '',
+      googleSheetUrl: '',
       isPaid: isPaidMode,
       entryFee: tournamentFee,
       organizerName: organizerName?.trim()?.slice(0, 80) || 'Tournament Host',

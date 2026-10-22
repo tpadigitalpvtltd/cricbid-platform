@@ -8,7 +8,6 @@ import {
   MapPin,
   Calendar,
   Image as ImageIcon,
-  FileSpreadsheet,
   Lock,
   Sparkles,
   ArrowRight,
@@ -17,7 +16,12 @@ import {
   Info,
   ExternalLink,
   Flame,
+  Upload,
+  Camera,
+  Check,
+  RefreshCw,
 } from 'lucide-react';
+import { compressImage } from '@/lib/utils';
 
 const PRESET_BANNERS = [
   {
@@ -42,6 +46,9 @@ export default function HostTournamentPage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdSlug, setCreatedSlug] = useState<string | null>(null);
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
+  const [isCustomBanner, setIsCustomBanner] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
     title: '',
@@ -51,10 +58,31 @@ export default function HostTournamentPage() {
     bannerUrl: PRESET_BANNERS[0].url,
     registrationDeadline: '2026-11-30',
     auctionDate: '2026-12-05',
-    googleSheetUrl: '',
     organizerName: '',
     organizerContact: '',
   });
+
+  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload a valid image file (JPG, PNG, WEBP)');
+      return;
+    }
+
+    try {
+      setIsUploadingBanner(true);
+      const base64 = await compressImage(file, 1200, 630, 0.82);
+      setForm((prev) => ({ ...prev, bannerUrl: base64 }));
+      setIsCustomBanner(true);
+    } catch (err) {
+      console.error('Banner upload error:', err);
+      alert('Failed to process image. Please try another photo.');
+    } finally {
+      setIsUploadingBanner(false);
+    }
+  };
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -105,7 +133,7 @@ export default function HostTournamentPage() {
             Host Your Cricket Tournament
           </h1>
           <p className="text-sm text-slate-400 mt-1 max-w-xl mx-auto">
-            Create an auction portal, collect player applications, and sync registrations directly to your Google Sheet.
+            Create an official tournament portal, collect player applications, and issue digital player passes.
           </p>
         </div>
 
@@ -228,51 +256,161 @@ export default function HostTournamentPage() {
             </div>
           </div>
 
-          {/* Section 2: Banner & Schedule */}
+          {/* Section 2: Banner / Cover Photo & Schedule */}
           <div className="bg-slate-900/60 rounded-3xl p-5 sm:p-7 border border-slate-800 backdrop-blur-md shadow-xl">
             <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
               <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xs">
                 2
               </div>
               <h3 className="text-sm font-bold uppercase tracking-wider text-white">
-                Banner & Important Dates
+                Tournament Cover Photo & Dates
               </h3>
             </div>
 
-            {/* Banner Presets */}
-            <div className="mb-4">
+            {/* Live Banner Preview & Gallery Upload */}
+            <div className="mb-6">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">
-                Select Banner / Cover Image
+                Tournament Banner / Cover Photo
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {PRESET_BANNERS.map((preset) => {
-                  const isSelected = form.bannerUrl === preset.url;
-                  return (
-                    <button
-                      type="button"
-                      key={preset.name}
-                      onClick={() => setForm({ ...form, bannerUrl: preset.url })}
-                      className={`relative rounded-xl overflow-hidden border transition-all text-left group ${
-                        isSelected
-                          ? 'border-amber-400 ring-2 ring-amber-400/40 shadow-lg'
-                          : 'border-slate-800 hover:border-slate-600'
-                      }`}
-                    >
-                      <div className="h-16 w-full relative">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={preset.url}
-                          alt={preset.name}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                      </div>
-                      <div className="p-1.5 bg-slate-950 text-[10px] font-bold text-slate-300 truncate">
-                        {preset.name}
-                      </div>
-                    </button>
-                  );
-                })}
+
+              {/* Banner Visual Card */}
+              <div className="relative w-full aspect-[21/9] sm:aspect-[16/6] rounded-2xl overflow-hidden border-2 border-slate-700 bg-slate-950 shadow-2xl group mb-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={form.bannerUrl}
+                  alt="Tournament Cover Preview"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-black/40 to-black/20" />
+
+                {/* Badge on Banner */}
+                <div className="absolute top-3 left-3 flex items-center gap-2">
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border flex items-center gap-1.5 shadow-lg backdrop-blur-md ${
+                    isCustomBanner
+                      ? 'bg-emerald-500/95 text-slate-950 border-emerald-400 font-black'
+                      : 'bg-slate-900/80 text-amber-400 border-amber-400/50'
+                  }`}>
+                    {isCustomBanner ? (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-slate-950" />
+                        Custom Gallery Photo
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        Stadium Preset
+                      </>
+                    )}
+                  </span>
+                </div>
+
+                {/* Tournament Info Preview on Banner */}
+                <div className="absolute bottom-3 left-3 right-3 sm:bottom-4 sm:left-5 sm:right-5">
+                  <div className="text-white font-black text-sm sm:text-xl uppercase tracking-tight drop-shadow-md truncate">
+                    {form.title || 'Your Tournament Title'}
+                  </div>
+                  <div className="text-amber-400 text-[10px] sm:text-xs font-semibold drop-shadow">
+                    {form.city ? `📍 ${form.city} • Official Draft 2026` : 'Official Player Registration Portal'}
+                  </div>
+                </div>
+
+                {/* Upload Button Overlay */}
+                <div className="absolute top-3 right-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingBanner}
+                    className="px-3 py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white text-xs font-bold border border-slate-700 shadow-lg flex items-center gap-1.5 backdrop-blur-md transition-all active:scale-95"
+                  >
+                    {isUploadingBanner ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                        <span>Compressing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Upload Photo</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleBannerUpload}
+                className="hidden"
+              />
+
+              {/* Gallery Pick Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-2xl bg-slate-950 border border-slate-800 mb-4">
+                <div className="flex items-center gap-2.5 text-xs text-slate-300">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                    <Camera className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-white block">Gallery se Cover Photo upload karein</span>
+                    <span className="text-[11px] text-slate-400">JPG, PNG, WEBP — automatically optimized for fast mobile loading</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingBanner}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-400 hover:from-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shrink-0 shadow-md active:scale-95"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Choose From Gallery</span>
+                </button>
+              </div>
+
+              {/* Preset Stadium Backgrounds */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                  Or Choose From Stadium Presets
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {PRESET_BANNERS.map((preset) => {
+                    const isSelected = !isCustomBanner && form.bannerUrl === preset.url;
+                    return (
+                      <button
+                        type="button"
+                        key={preset.name}
+                        onClick={() => {
+                          setForm({ ...form, bannerUrl: preset.url });
+                          setIsCustomBanner(false);
+                        }}
+                        className={`relative rounded-xl overflow-hidden border transition-all text-left group ${
+                          isSelected
+                            ? 'border-amber-400 ring-2 ring-amber-400/40 shadow-lg'
+                            : 'border-slate-800 hover:border-slate-600'
+                        }`}
+                      >
+                        <div className="h-14 w-full relative">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={preset.url}
+                            alt={preset.name}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                          {isSelected && (
+                            <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center">
+                              <Check className="w-3 h-3 stroke-[3]" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-1.5 bg-slate-950 text-[10px] font-bold text-slate-300 truncate">
+                          {preset.name}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
@@ -314,67 +452,47 @@ export default function HostTournamentPage() {
             </div>
           </div>
 
-          {/* Section 3: Google Sheets & Organizer Contact */}
+          {/* Section 3: Organizer Contact Details */}
           <div className="bg-slate-900/60 rounded-3xl p-5 sm:p-7 border border-slate-800 backdrop-blur-md shadow-xl">
             <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
               <div className="w-7 h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-bold text-xs">
                 3
               </div>
               <h3 className="text-sm font-bold uppercase tracking-wider text-white">
-                Google Sheet Webhook (Optional)
+                Organizer Contact & Helpline
               </h3>
             </div>
 
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                  Your Google Apps Script Web App URL
+                  Organizer / Committee Name
                 </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-                  </div>
-                  <input
-                    type="url"
-                    placeholder="https://script.google.com/macros/s/AKfycb.../exec"
-                    value={form.googleSheetUrl}
-                    onChange={(e) => setForm({ ...form, googleSheetUrl: e.target.value })}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-amber-400 transition-all placeholder:text-slate-600 font-mono text-xs"
-                  />
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
-                  Every player registration is automatically appended into this spreadsheet in real time. (Leave blank to use default portal sheet).
-                </p>
+                <input
+                  type="text"
+                  placeholder="e.g. Maharashtra Sports Club"
+                  value={form.organizerName}
+                  onChange={(e) => setForm({ ...form, organizerName: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-amber-400 transition-all placeholder:text-slate-600"
+                />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                    Organizer Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Maharashtra Sports Club"
-                    value={form.organizerName}
-                    onChange={(e) => setForm({ ...form, organizerName: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-amber-400 transition-all placeholder:text-slate-600"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
-                    Organizer WhatsApp / Helpline
-                  </label>
-                  <input
-                    type="tel"
-                    placeholder="e.g. +91 98765 43210"
-                    value={form.organizerContact}
-                    onChange={(e) => setForm({ ...form, organizerContact: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-amber-400 transition-all placeholder:text-slate-600 font-mono"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                  Organizer WhatsApp / Helpline
+                </label>
+                <input
+                  type="tel"
+                  placeholder="e.g. +91 98765 43210"
+                  value={form.organizerContact}
+                  onChange={(e) => setForm({ ...form, organizerContact: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-amber-400 transition-all placeholder:text-slate-600 font-mono"
+                />
               </div>
             </div>
+            <p className="text-[11px] text-slate-400 mt-2.5 leading-relaxed">
+              Players will see this contact info on the tournament page to clarify rules, queries, and match locations.
+            </p>
           </div>
 
           {/* Section 4: Tiered Model Badge (LOCKED / DISABLED) */}

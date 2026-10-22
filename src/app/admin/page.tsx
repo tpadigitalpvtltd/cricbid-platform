@@ -36,7 +36,10 @@ import {
   Filter,
   FileSpreadsheet,
   Download,
+  Upload,
+  Camera,
 } from 'lucide-react';
+import { compressImage } from '@/lib/utils';
 
 const PRESET_BANNERS = [
   {
@@ -82,6 +85,10 @@ export default function AdminPage() {
   const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null);
 
   // Create Tournament Form State
+  const [isUploadingAdminBanner, setIsUploadingAdminBanner] = useState(false);
+  const fileInputAdminCreateRef = React.useRef<HTMLInputElement>(null);
+  const fileInputAdminEditRef = React.useRef<HTMLInputElement>(null);
+
   const [createForm, setCreateForm] = useState({
     title: '',
     tagline: '',
@@ -94,8 +101,32 @@ export default function AdminPage() {
     entryFee: 150,
     organizerName: 'Tournament Host',
     organizerContact: '',
-    googleSheetUrl: '',
   });
+
+  const handleAdminBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>, isEditMode = false) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload a valid image file (JPG, PNG, WEBP)');
+      return;
+    }
+
+    try {
+      setIsUploadingAdminBanner(true);
+      const base64 = await compressImage(file, 1200, 630, 0.82);
+      if (isEditMode && editingTournament) {
+        setEditingTournament((prev) => prev ? ({ ...prev, bannerUrl: base64 }) : null);
+      } else {
+        setCreateForm((prev) => ({ ...prev, bannerUrl: base64 }));
+      }
+    } catch (err) {
+      console.error('Admin banner upload error:', err);
+      alert('Failed to process image. Please try another photo.');
+    } finally {
+      setIsUploadingAdminBanner(false);
+    }
+  };
 
   // Check auth via secure server session
   useEffect(() => {
@@ -287,7 +318,6 @@ export default function AdminPage() {
           entryFee: 150,
           organizerName: 'Tournament Host',
           organizerContact: '',
-          googleSheetUrl: '',
         });
         await fetchTournaments();
         alert('Tournament created successfully!');
@@ -1113,6 +1143,79 @@ export default function AdminPage() {
                 </div>
               </div>
 
+              {/* Cover Photo / Banner Selection & Upload */}
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs text-slate-300 font-bold block">
+                    Tournament Cover Photo / Banner
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => fileInputAdminCreateRef.current?.click()}
+                    disabled={isUploadingAdminBanner}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-all"
+                  >
+                    {isUploadingAdminBanner ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        <span>Compressing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3 h-3" />
+                        <span>Upload From Gallery</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Banner Preview */}
+                <div className="relative w-full h-24 rounded-xl overflow-hidden border border-slate-700 bg-slate-900 mb-2.5">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={createForm.bannerUrl}
+                    alt="Cover preview"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent" />
+                  <div className="absolute bottom-2 left-2 text-[11px] font-bold text-white truncate max-w-[80%]">
+                    {createForm.title || 'Tournament Title Preview'}
+                  </div>
+                </div>
+
+                <input
+                  ref={fileInputAdminCreateRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => handleAdminBannerUpload(e, false)}
+                  className="hidden"
+                />
+
+                {/* Presets Grid */}
+                <div className="grid grid-cols-4 gap-1.5">
+                  {PRESET_BANNERS.map((preset) => {
+                    const isSelected = createForm.bannerUrl === preset.url;
+                    return (
+                      <button
+                        type="button"
+                        key={preset.name}
+                        onClick={() => setCreateForm({ ...createForm, bannerUrl: preset.url })}
+                        className={`relative rounded-lg overflow-hidden border transition-all text-left ${
+                          isSelected
+                            ? 'border-amber-400 ring-2 ring-amber-400/50'
+                            : 'border-slate-800 hover:border-slate-700 opacity-60 hover:opacity-100'
+                        }`}
+                      >
+                        <div className="h-9 w-full relative">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={preset.url} alt={preset.name} className="w-full h-full object-cover" />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Dates */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -1322,15 +1425,77 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Banner URL */}
-              <div>
-                <label className="text-xs text-slate-400 font-bold block mb-1">Banner Image URL</label>
+              {/* Cover Photo / Banner Selection & Upload */}
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs text-slate-300 font-bold block">
+                    Tournament Cover Photo / Banner
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => fileInputAdminEditRef.current?.click()}
+                    disabled={isUploadingAdminBanner}
+                    className="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-all"
+                  >
+                    {isUploadingAdminBanner ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        <span>Compressing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3 h-3" />
+                        <span>Upload From Gallery</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Banner Preview */}
+                <div className="relative w-full h-24 rounded-xl overflow-hidden border border-slate-700 bg-slate-900 mb-2.5">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={editingTournament.bannerUrl}
+                    alt="Cover preview"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent" />
+                  <div className="absolute bottom-2 left-2 text-[11px] font-bold text-white truncate max-w-[80%]">
+                    {editingTournament.title || 'Tournament Title Preview'}
+                  </div>
+                </div>
+
                 <input
-                  type="url"
-                  value={editingTournament.bannerUrl}
-                  onChange={(e) => setEditingTournament({ ...editingTournament, bannerUrl: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs focus:outline-none focus:border-cyan-400"
+                  ref={fileInputAdminEditRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => handleAdminBannerUpload(e, true)}
+                  className="hidden"
                 />
+
+                {/* Presets Grid */}
+                <div className="grid grid-cols-4 gap-1.5">
+                  {PRESET_BANNERS.map((preset) => {
+                    const isSelected = editingTournament.bannerUrl === preset.url;
+                    return (
+                      <button
+                        type="button"
+                        key={preset.name}
+                        onClick={() => setEditingTournament({ ...editingTournament, bannerUrl: preset.url })}
+                        className={`relative rounded-lg overflow-hidden border transition-all text-left ${
+                          isSelected
+                            ? 'border-cyan-400 ring-2 ring-cyan-400/50'
+                            : 'border-slate-800 hover:border-slate-700 opacity-60 hover:opacity-100'
+                        }`}
+                      >
+                        <div className="h-9 w-full relative">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={preset.url} alt={preset.name} className="w-full h-full object-cover" />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800">

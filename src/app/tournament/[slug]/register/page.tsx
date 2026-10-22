@@ -182,10 +182,6 @@ export default function TournamentRegistrationPage() {
         // Re-fetch players list
         fetchRegisteredPlayers();
 
-        if (result.sheetSync?.synced) {
-          addToast('success', 'Google Sheet Synced', 'Player record successfully added to Google Sheet!');
-        }
-
         addToast(
           'success',
           'Registration Confirmed',
