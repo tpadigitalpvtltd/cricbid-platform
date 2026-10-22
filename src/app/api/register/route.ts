@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import {
-  getTournamentBySlug,
+  getTournamentBySlugAsync,
   incrementRegistrationCount,
   savePlayerRegistration,
+  MASTER_GOOGLE_SHEET_URL,
 } from '@/lib/tournamentStore';
 
 export async function POST(request: Request) {
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
     }
 
     // Lookup tournament details if slug provided
-    const tournament = tournamentSlug ? getTournamentBySlug(tournamentSlug) : null;
+    const tournament = tournamentSlug ? await getTournamentBySlugAsync(tournamentSlug) : null;
     const isPaidTournament = tournament ? tournament.isPaid : false;
     const tournamentTitle = tournament ? tournament.title : 'Cricket Tournament 2026';
     const tournamentEntryFee = tournament ? tournament.entryFee : (Number(process.env.NEXT_PUBLIC_REGISTRATION_FEE) || 499);
@@ -122,13 +123,13 @@ export async function POST(request: Request) {
     let sheetSyncSuccess = false;
     let sheetSyncMessage = 'Not configured';
 
-    // Prioritize tournament-specific Google Sheet URL, fallback to global env
+    // Prioritize tournament-specific Google Sheet URL, fallback to master sheet URL
     const targetSheetUrl =
       (tournament && tournament.googleSheetUrl && tournament.googleSheetUrl.startsWith('http'))
         ? tournament.googleSheetUrl
-        : process.env.GOOGLE_SHEET_SCRIPT_URL;
+        : (process.env.GOOGLE_SHEET_SCRIPT_URL || MASTER_GOOGLE_SHEET_URL);
 
-    if (targetSheetUrl && targetSheetUrl.startsWith('http') && !targetSheetUrl.includes('AKfycb...')) {
+    if (targetSheetUrl && targetSheetUrl.startsWith('http') && !targetSheetUrl.includes('YOUR_SCRIPT')) {
       try {
         const sheetResponse = await fetch(targetSheetUrl, {
           method: 'POST',

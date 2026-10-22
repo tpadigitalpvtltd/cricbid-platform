@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getTournamentBySlug, updateTournament } from '@/lib/tournamentStore';
+import { getTournamentBySlugAsync, updateTournament, MASTER_GOOGLE_SHEET_URL } from '@/lib/tournamentStore';
 
 export async function GET(
   request: Request,
@@ -7,7 +7,7 @@ export async function GET(
 ) {
   try {
     const { slug } = params;
-    const tournament = getTournamentBySlug(slug);
+    const tournament = await getTournamentBySlugAsync(slug);
 
     if (!tournament) {
       return NextResponse.json(
@@ -20,11 +20,11 @@ export async function GET(
     let source = 'local_store';
 
     // If Google Sheet Web App URL is connected, query live count from sheet
-    const sheetUrl = tournament.googleSheetUrl || process.env.GOOGLE_SHEET_SCRIPT_URL;
+    const sheetUrl = tournament.googleSheetUrl || process.env.GOOGLE_SHEET_SCRIPT_URL || MASTER_GOOGLE_SHEET_URL;
 
-    if (sheetUrl && sheetUrl.startsWith('http') && !sheetUrl.includes('AKfycb...')) {
+    if (sheetUrl && sheetUrl.startsWith('http') && !sheetUrl.includes('YOUR_SCRIPT')) {
       try {
-        const countUrl = `${sheetUrl}${sheetUrl.includes('?') ? '&' : '?'}action=count`;
+        const countUrl = `${sheetUrl}${sheetUrl.includes('?') ? '&' : '?'}action=count&slug=${encodeURIComponent(slug)}`;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500); // 3.5s timeout
 

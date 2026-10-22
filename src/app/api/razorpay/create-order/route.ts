@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import Razorpay from 'razorpay';
-import { getTournamentBySlug } from '@/lib/tournamentStore';
+import { getTournamentBySlugAsync } from '@/lib/tournamentStore';
 
 export async function POST(request: Request) {
   try {
@@ -9,7 +9,7 @@ export async function POST(request: Request) {
 
     let tournament = null;
     if (tournamentSlug) {
-      tournament = getTournamentBySlug(tournamentSlug);
+      tournament = await getTournamentBySlugAsync(tournamentSlug);
     }
 
     const amountInINR =
@@ -19,8 +19,14 @@ export async function POST(request: Request) {
 
     const amountInPaise = amountInINR * 100;
 
-    const keyId = tournament?.razorpayKeyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-    const keySecret = tournament?.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET;
+    const keyId =
+      tournament?.razorpayKeyId ||
+      process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
+      'rzp_live_TlrysnDtv6awCC';
+    const keySecret =
+      tournament?.razorpayKeySecret ||
+      process.env.RAZORPAY_KEY_SECRET ||
+      '0fkxySFC1Mqcw8WXwIyJzwST';
 
     // Check if real keys are configured
     const isConfigured =

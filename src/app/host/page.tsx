@@ -78,7 +78,19 @@ export default function HostTournamentPage() {
       });
 
       const data = await res.json();
-      if (res.ok && data.success) {
+      if (res.ok && data.success && data.tournament) {
+        // Save locally on client as well to guarantee zero data loss across cold starts
+        try {
+          const stored = localStorage.getItem('cricbid_client_tournaments');
+          const list = stored ? JSON.parse(stored) : [];
+          const exists = list.some((t: any) => t.slug === data.tournament.slug);
+          if (!exists) {
+            list.unshift(data.tournament);
+            localStorage.setItem('cricbid_client_tournaments', JSON.stringify(list));
+          }
+        } catch (e) {
+          // ignore localStorage failure
+        }
         setCreatedSlug(data.tournament.slug);
       } else {
         alert(data.error || 'Failed to create tournament');

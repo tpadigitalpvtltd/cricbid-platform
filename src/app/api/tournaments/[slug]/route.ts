@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getTournamentBySlug, updateTournament } from '@/lib/tournamentStore';
+import { getTournamentBySlugAsync, updateTournament } from '@/lib/tournamentStore';
 
 export async function GET(
   request: Request,
@@ -7,7 +7,7 @@ export async function GET(
 ) {
   try {
     const { slug } = params;
-    const tournament = getTournamentBySlug(slug);
+    const tournament = await getTournamentBySlugAsync(slug);
 
     if (!tournament) {
       return NextResponse.json(
@@ -33,7 +33,7 @@ export async function PATCH(
     const { slug } = params;
     const body = await request.json();
 
-    const existing = getTournamentBySlug(slug);
+    const existing = await getTournamentBySlugAsync(slug);
     if (!existing) {
       return NextResponse.json(
         { success: false, error: 'Tournament not found' },

@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getAllTournaments, createTournament } from '@/lib/tournamentStore';
+import { getAllTournamentsAsync, createTournamentAsync } from '@/lib/tournamentStore';
 
 export async function GET() {
   try {
-    const tournaments = getAllTournaments();
+    const tournaments = await getAllTournamentsAsync();
     return NextResponse.json({ success: true, tournaments });
   } catch (error: any) {
     return NextResponse.json(
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
         : defaultBanners[Math.floor(Math.random() * defaultBanners.length)];
 
     // Public User constraint: Always Free Registration Mode
-    const newTournament = createTournament({
+    const newTournament = await createTournamentAsync({
       title: title.trim(),
       tagline: tagline?.trim() || `${city} Premier Cricket Draft 2026`,
       city: city.trim(),

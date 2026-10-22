@@ -95,10 +95,24 @@ export default function TournamentRegistrationPage() {
           const data = await res.json();
           if (data.tournament) {
             setTournament(data.tournament);
+            return;
           }
-        } else {
-          addToast('error', 'Not Found', 'Tournament details could not be found.');
         }
+
+        // Fallback: Check local storage for newly created tournament
+        try {
+          const stored = localStorage.getItem('cricbid_client_tournaments');
+          if (stored) {
+            const list = JSON.parse(stored);
+            const match = list.find((t: any) => t.slug?.toLowerCase() === slug.toLowerCase());
+            if (match) {
+              setTournament(match);
+              return;
+            }
+          }
+        } catch (e) {}
+
+        addToast('error', 'Not Found', 'Tournament details could not be found.');
       } catch (err) {
         console.error('Error fetching tournament:', err);
       } finally {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getPlayersByTournament, getTournamentBySlug } from '@/lib/tournamentStore';
+import { getPlayersByTournamentAsync, getTournamentBySlugAsync } from '@/lib/tournamentStore';
 
 export async function GET(
   request: Request,
@@ -7,7 +7,7 @@ export async function GET(
 ) {
   try {
     const { slug } = params;
-    const tournament = getTournamentBySlug(slug);
+    const tournament = await getTournamentBySlugAsync(slug);
 
     if (!tournament) {
       return NextResponse.json(
@@ -16,7 +16,7 @@ export async function GET(
       );
     }
 
-    const players = getPlayersByTournament(slug);
+    const players = await getPlayersByTournamentAsync(slug);
 
     return NextResponse.json({
       success: true,

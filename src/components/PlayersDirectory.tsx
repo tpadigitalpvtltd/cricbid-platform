@@ -95,7 +95,7 @@ export const PlayersDirectory: React.FC<PlayersDirectoryProps> = ({
             type="text"
             placeholder="Search by player name..."
             value={search}
-            onChange={(e) => setSearch}
+            onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs focus:outline-none focus:border-amber-400 placeholder:text-slate-600"
           />
         </div>
