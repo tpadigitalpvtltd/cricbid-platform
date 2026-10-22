@@ -5,19 +5,24 @@ import { getTournamentBySlugAsync } from '@/lib/tournamentStore';
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { tournamentSlug, fullName, phone } = body;
+    const { tournamentSlug, fullName, phone, amount } = body;
 
     let tournament = null;
     if (tournamentSlug) {
       tournament = await getTournamentBySlugAsync(tournamentSlug);
     }
 
-    const amountInINR =
-      tournament && tournament.entryFee !== undefined
-        ? tournament.entryFee
-        : (Number(process.env.NEXT_PUBLIC_REGISTRATION_FEE) || 499);
+    // Exact fee resolution: prioritize explicit client fee set by tournament / admin
+    let amountInINR = 499;
+    if (amount !== undefined && Number(amount) > 0) {
+      amountInINR = Number(amount);
+    } else if (tournament && tournament.entryFee !== undefined && tournament.entryFee > 0) {
+      amountInINR = tournament.entryFee;
+    } else {
+      amountInINR = Number(process.env.NEXT_PUBLIC_REGISTRATION_FEE) || 499;
+    }
 
-    const amountInPaise = amountInINR * 100;
+    const amountInPaise = Math.round(amountInINR * 100);
 
     const keyId =
       tournament?.razorpayKeyId ||

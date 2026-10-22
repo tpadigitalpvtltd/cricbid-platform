@@ -39,7 +39,12 @@ export async function POST(request: Request) {
     const tournament = tournamentSlug ? await getTournamentBySlugAsync(tournamentSlug) : null;
     const isPaidTournament = tournament ? tournament.isPaid : false;
     const tournamentTitle = tournament ? tournament.title : 'Cricket Tournament 2026';
-    const tournamentEntryFee = tournament ? tournament.entryFee : (Number(process.env.NEXT_PUBLIC_REGISTRATION_FEE) || 499);
+    const tournamentEntryFee =
+      (payload.amount !== undefined && Number(payload.amount) >= 0)
+        ? Number(payload.amount)
+        : (tournament && tournament.entryFee !== undefined
+            ? tournament.entryFee
+            : (Number(process.env.NEXT_PUBLIC_REGISTRATION_FEE) || 499));
 
     let finalPaymentStatus: 'PAID' | 'FREE' = 'FREE';
     let finalPaymentId = paymentId || 'FREE_REGISTRATION';

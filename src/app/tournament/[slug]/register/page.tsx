@@ -169,6 +169,7 @@ export default function TournamentRegistrationPage() {
           ...formData,
           ...paymentDetails,
           tournamentSlug: slug,
+          amount: tournament?.isPaid ? entryFee : 0,
         }),
       });
 
@@ -239,6 +240,7 @@ export default function TournamentRegistrationPage() {
           tournamentSlug: slug,
           fullName: formData.fullName,
           phone: formData.phone,
+          amount: entryFee,
         }),
       });
 

@@ -393,6 +393,19 @@ export function updateTournament(idOrSlug: string, updates: Partial<Tournament>)
   return tournaments[index];
 }
 
+export function deleteTournament(idOrSlug: string): boolean {
+  const tournaments = readTournamentsFromFile();
+  const initialLength = tournaments.length;
+  const filtered = tournaments.filter(
+    (t) => t.id !== idOrSlug && t.slug.toLowerCase() !== idOrSlug.toLowerCase()
+  );
+
+  if (filtered.length === initialLength) return false;
+
+  saveTournamentsToFile(filtered);
+  return true;
+}
+
 export function incrementRegistrationCount(slug: string): number {
   const tournaments = readTournamentsFromFile();
   const tournament = tournaments.find((t) => t.slug.toLowerCase() === slug.toLowerCase());
@@ -419,6 +432,50 @@ export function getPlayersByTournament(slug: string): RegistrationSubmission[] {
   return players.filter(
     (p) => p.tournamentSlug && p.tournamentSlug.toLowerCase() === slug.toLowerCase()
   );
+}
+
+export function getAllPlayers(): RegistrationSubmission[] {
+  return readPlayersFromFile();
+}
+
+export function updatePlayer(
+  registrationId: string,
+  updates: Partial<RegistrationSubmission>
+): RegistrationSubmission | null {
+  const players = readPlayersFromFile();
+  const index = players.findIndex((p) => p.registrationId === registrationId);
+  if (index === -1) return null;
+
+  players[index] = {
+    ...players[index],
+    ...updates,
+  };
+
+  savePlayersToFile([...players]);
+  return players[index];
+}
+
+export function deletePlayer(registrationId: string): boolean {
+  const players = readPlayersFromFile();
+  const target = players.find((p) => p.registrationId === registrationId);
+  if (!target) return false;
+
+  const filtered = players.filter((p) => p.registrationId !== registrationId);
+  savePlayersToFile(filtered);
+
+  // Decrement tournament registration count if applicable
+  if (target.tournamentSlug) {
+    const tournaments = readTournamentsFromFile();
+    const tourney = tournaments.find(
+      (t) => t.slug.toLowerCase() === target.tournamentSlug.toLowerCase()
+    );
+    if (tourney && tourney.registeredCount && tourney.registeredCount > 0) {
+      tourney.registeredCount = tourney.registeredCount - 1;
+      saveTournamentsToFile([...tournaments]);
+    }
+  }
+
+  return true;
 }
 
 export async function getPlayersByTournamentAsync(slug: string): Promise<RegistrationSubmission[]> {

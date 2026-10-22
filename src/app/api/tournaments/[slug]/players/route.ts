@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getPlayersByTournamentAsync, getTournamentBySlugAsync } from '@/lib/tournamentStore';
+import {
+  getPlayersByTournamentAsync,
+  getTournamentBySlugAsync,
+  updatePlayer,
+  deletePlayer,
+} from '@/lib/tournamentStore';
 
 export async function GET(
   request: Request,
@@ -34,6 +39,76 @@ export async function GET(
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error?.message || 'Error fetching players' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: { slug: string } }
+) {
+  try {
+    const body = await request.json();
+    const { registrationId, updates } = body;
+
+    if (!registrationId || !updates) {
+      return NextResponse.json(
+        { success: false, error: 'registrationId and updates are required' },
+        { status: 400 }
+      );
+    }
+
+    const updated = updatePlayer(registrationId, updates);
+    if (!updated) {
+      return NextResponse.json(
+        { success: false, error: 'Player entry not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Player entry updated successfully',
+      player: updated,
+    });
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: error?.message || 'Error updating player' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: { slug: string } }
+) {
+  try {
+    const { searchParams } = new URL(request.url);
+    let registrationId = searchParams.get('registrationId');
+
+    if (!registrationId) {
+      const body = await request.json().catch(() => ({}));
+      registrationId = body.registrationId;
+    }
+
+    if (!registrationId) {
+      return NextResponse.json(
+        { success: false, error: 'registrationId is required to delete' },
+        { status: 400 }
+      );
+    }
+
+    const deleted = deletePlayer(registrationId);
+
+    return NextResponse.json({
+      success: deleted,
+      message: deleted ? 'Player registration deleted successfully' : 'Player not found',
+    });
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: error?.message || 'Error deleting player' },
       { status: 500 }
     );
   }

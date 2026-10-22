@@ -50,7 +50,9 @@ export async function POST(request: Request) {
         ? bannerUrl.trim()
         : defaultBanners[Math.floor(Math.random() * defaultBanners.length)];
 
-    // Public User constraint: Always Free Registration Mode
+    const isPaidMode = Boolean(body.isPaid);
+    const tournamentFee = isPaidMode ? (Number(body.entryFee) || 0) : 0;
+
     const newTournament = await createTournamentAsync({
       title: title.trim(),
       tagline: tagline?.trim() || `${city} Premier Cricket Draft 2026`,
@@ -60,15 +62,17 @@ export async function POST(request: Request) {
       registrationDeadline: registrationDeadline || '2026-12-31',
       auctionDate: auctionDate || '2027-01-10',
       googleSheetUrl: googleSheetUrl?.trim() || '',
-      isPaid: false, // Locked to Free Mode for public host
-      entryFee: 0,
+      isPaid: isPaidMode,
+      entryFee: tournamentFee,
       organizerName: organizerName?.trim() || 'Tournament Host',
       organizerContact: organizerContact?.trim() || '',
     });
 
     return NextResponse.json({
       success: true,
-      message: 'Tournament created in Free Registration Mode',
+      message: isPaidMode
+        ? `Tournament created in Paid Mode (₹${tournamentFee})`
+        : 'Tournament created in Free Registration Mode',
       tournament: newTournament,
     });
   } catch (error: any) {

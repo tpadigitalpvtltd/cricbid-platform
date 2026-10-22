@@ -11,7 +11,7 @@
     "auctionDate": "2026-12-05",
     "googleSheetUrl": "",
     "isPaid": true,
-    "entryFee": 150,
+    "entryFee": 1,
     "organizerName": "Tournament Host",
     "organizerContact": "",
     "registeredCount": 0,
