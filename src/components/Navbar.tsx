@@ -4,13 +4,9 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Gavel,
   Trophy,
   PlusCircle,
   Lock,
-  Flame,
-  Radio,
-  Search,
   Menu,
   X,
   Zap,
@@ -28,26 +24,31 @@ export const Navbar: React.FC = () => {
       <div className="bg-gradient-to-r from-amber-600 via-yellow-500 to-emerald-500 text-slate-950 font-black text-[11px] tracking-widest uppercase py-1 px-4 text-center flex items-center justify-center gap-3 overflow-hidden select-none">
         <span className="flex items-center gap-1.5 animate-pulse">
           <span className="w-2 h-2 rounded-full bg-red-600"></span>
-          CRICBID 2026 LIVE AUCTION PLATFORM
+          CRICBID LIVE AUCTION PLATFORM
         </span>
         <span className="hidden md:inline">•</span>
         <span className="hidden md:inline">HOST FREE TOURNAMENTS WITH GOOGLE SHEETS</span>
         <span className="hidden md:inline">•</span>
         <span className="flex items-center gap-1 font-extrabold">
-          <Zap className="w-3 h-3 fill-current" /> MULTI-AUCTION DRAFT POOL
+          <Zap className="w-3 h-3 fill-current" /> OFFICIAL DRAFT POOL
         </span>
       </div>
 
       {/* Main Navbar */}
-      <header className="sticky top-0 z-40 w-full border-b border-slate-800/80 bg-[#080d1a]/90 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-4 py-3">
+      <header className="sticky top-0 z-40 w-full border-b border-slate-800/80 bg-[#080d1a]/95 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-4 py-2.5">
           
-          {/* Brand Logo */}
+          {/* Brand Logo with Official CricBid Logo Image */}
           <Link href="/" className="flex items-center gap-3 group">
             <div className="relative">
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-tr from-amber-400 via-yellow-400 to-emerald-400 p-[2px] shadow-[0_0_15px_rgba(245,158,11,0.4)]">
-                <div className="w-full h-full bg-[#080d1a] rounded-[10px] flex items-center justify-center group-hover:bg-slate-900 transition-colors">
-                  <Gavel className="w-5 h-5 text-amber-400 group-hover:rotate-12 transition-transform duration-300" />
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-tr from-amber-400 via-yellow-400 to-emerald-400 p-[2px] shadow-[0_0_15px_rgba(245,158,11,0.3)]">
+                <div className="w-full h-full bg-[#080d1a] rounded-[10px] flex items-center justify-center p-1 overflow-hidden group-hover:scale-105 transition-transform duration-300">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/logo.png"
+                    alt="CricBid Logo"
+                    className="w-full h-full object-contain"
+                  />
                 </div>
               </div>
               <span className="absolute -top-1 -right-1 flex h-3 w-3">

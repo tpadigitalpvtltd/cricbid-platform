@@ -10,22 +10,16 @@ import { SuccessModal } from '@/components/SuccessModal';
 import { RazorpayMockModal } from '@/components/RazorpayMockModal';
 import { LiveCounterWidget } from '@/components/LiveCounterWidget';
 import { PlayersDirectory } from '@/components/PlayersDirectory';
+import { TournamentShareBar } from '@/components/TournamentShareBar';
 import { Toast, ToastMessage, ToastType } from '@/components/Toast';
 import {
   Trophy,
   MapPin,
   Calendar,
-  ShieldCheck,
-  CheckCircle2,
   Users,
   Eye,
-  FileSpreadsheet,
-  Lock,
-  Sparkles,
-  Phone,
-  Zap,
-  ListFilter,
   UserPlus,
+  Phone,
 } from 'lucide-react';
 
 declare global {
@@ -154,7 +148,7 @@ export default function TournamentRegistrationPage() {
           amount: tournament?.isPaid ? tournament.entryFee : 0,
         });
 
-        // Re-fetch players list so the newly registered player appears instantly
+        // Re-fetch players list
         fetchRegisteredPlayers();
 
         if (result.sheetSync?.synced) {
@@ -397,6 +391,21 @@ export default function TournamentRegistrationPage() {
           </div>
         </div>
 
+        {/* Dedicated Tournament Share Bar (Players specific link) */}
+        {tournament && (
+          <div className="mb-6">
+            <TournamentShareBar
+              tournamentTitle={tournament.title}
+              city={tournament.city}
+              venue={tournament.venue}
+              auctionDate={tournament.auctionDate}
+              isFree={isFree}
+              entryFee={entryFee}
+              slug={tournament.slug}
+            />
+          </div>
+        )}
+
         {/* Live Registration Counter Widget */}
         <div className="mb-6">
           <LiveCounterWidget
@@ -450,7 +459,7 @@ export default function TournamentRegistrationPage() {
                 className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
                   activeMobileTab === 'form'
                     ? 'bg-amber-400 text-slate-950 shadow-md'
-                    : 'bg-slate-900 text-slate-400 hover:text-white'
+                    : 'bg-slate-950 text-slate-400 hover:text-white'
                 }`}
               >
                 <Users className="w-3.5 h-3.5" />
@@ -463,7 +472,7 @@ export default function TournamentRegistrationPage() {
                 className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
                   activeMobileTab === 'preview'
                     ? 'bg-emerald-400 text-slate-950 shadow-md'
-                    : 'bg-slate-900 text-slate-400 hover:text-white'
+                    : 'bg-slate-950 text-slate-400 hover:text-white'
                 }`}
               >
                 <Eye className="w-3.5 h-3.5" />

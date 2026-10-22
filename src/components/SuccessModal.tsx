@@ -7,8 +7,6 @@ import {
   CheckCircle,
   Share2,
   Printer,
-  Sparkles,
-  Trophy,
   ShieldCheck,
   User,
   ArrowRight,
@@ -24,7 +22,7 @@ interface SuccessModalProps {
 export const SuccessModal: React.FC<SuccessModalProps> = ({
   registration,
   onReset,
-  tournamentName = process.env.NEXT_PUBLIC_TOURNAMENT_NAME || 'Premier Cricket League 2026',
+  tournamentName = process.env.NEXT_PUBLIC_TOURNAMENT_NAME || 'CricBid Tournament 2026',
 }) => {
   useEffect(() => {
     // Fire celebratory confetti on mount
@@ -65,11 +63,11 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({
 
   // Construct WhatsApp share text
   const shareText = encodeURIComponent(
-    `🏏 *REGISTRATION CONFIRMED!*\n\nI have registered for the *${tournamentName}*!\n\n` +
+    `🏏 *REGISTRATION CONFIRMED!*\n\nI have registered for *${tournamentName}* on CricBid!\n\n` +
       `👤 *Player:* ${registration.fullName}\n` +
       `⚡ *Role:* ${registration.role}\n` +
-      `🎫 *Player ID:* ${registration.registrationId}\n` +
-      `✅ *Payment Status:* Verified (Ref: ${registration.paymentId})\n\n` +
+      `🎫 *Player Ticket ID:* ${registration.registrationId}\n` +
+      `✅ *Payment Status:* ${registration.paymentStatus === 'PAID' ? `Verified Paid (Ref: ${registration.paymentId})` : 'Free Entry Verified'}\n\n` +
       `See you at the Mega Player Auction! 🔥🏏`
   );
 
@@ -94,7 +92,7 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({
           </div>
 
           <div className="inline-block px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-black uppercase tracking-wider mb-1">
-            Payment Verified & Profile Logged
+            Registration Verified & Profile Logged
           </div>
 
           <h2 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight font-sans">
@@ -110,10 +108,11 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({
           id="printable-ticket"
           className="relative rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-700/80 p-5 shadow-2xl mb-6 overflow-hidden"
         >
-          {/* Card Top Strip */}
+          {/* Card Top Strip with CricBid Logo */}
           <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
             <div className="flex items-center gap-2">
-              <Trophy className="w-4 h-4 text-amber-400" />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="CricBid" className="w-5 h-5 object-contain" />
               <span className="text-xs font-black text-white uppercase tracking-wider">
                 {tournamentName}
               </span>
@@ -150,7 +149,7 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({
                 {registration.fullName}
               </h3>
               <p className="text-xs text-slate-400">
-                Age: {registration.age} • {registration.battingStyle}
+                Age: {registration.age} • {registration.battingStyle} • {registration.bowlingStyle}
               </p>
             </div>
           </div>
@@ -159,7 +158,7 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({
           <div className="grid grid-cols-2 gap-3 bg-slate-950/80 rounded-xl p-3 border border-slate-800/80 text-xs mb-3">
             <div>
               <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                Player ID / Ticket No
+                Player Ticket ID
               </span>
               <span className="font-mono font-black text-amber-400 text-sm tracking-wide">
                 {registration.registrationId}
@@ -186,7 +185,7 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({
                 Payment Status
               </span>
               <span className="text-emerald-400 font-bold flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5" /> PAID (₹{registration.amount || 499})
+                <ShieldCheck className="w-3.5 h-3.5" /> {registration.paymentStatus === 'PAID' ? `PAID (₹${registration.amount})` : 'FREE ENTRY'}
               </span>
             </div>
           </div>
@@ -208,7 +207,7 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({
             className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,232,123,0.3)] transition-all"
           >
             <Share2 className="w-4 h-4 fill-current" />
-            <span>Share on WhatsApp</span>
+            <span>Share My Pass on WhatsApp</span>
             <ExternalLink className="w-3.5 h-3.5" />
           </a>
 

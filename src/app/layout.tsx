@@ -3,9 +3,19 @@ import Script from 'next/script';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Cricket Tournament Player Registration & Auction Draft Pool',
-  description: 'Official player registration portal for Premier Cricket League 2026. Register now to enter the mega player auction.',
-  keywords: 'cricket tournament, player registration, cricket auction, player draft, razorpay payment',
+  title: 'CricBid - Cricket Tournament & Auction Draft Platform',
+  description: 'Official tournament player registration and mega cricket auction draft platform.',
+  keywords: 'cricket tournament, player registration, cricket auction, player draft, cricbid, razorpay payment',
+  icons: {
+    icon: '/logo.png',
+    shortcut: '/logo.png',
+    apple: '/logo.png',
+  },
+  openGraph: {
+    title: 'CricBid - Cricket Tournament & Player Auction Platform',
+    description: 'Register for upcoming tournaments and join the live auction pool.',
+    images: ['/logo.png'],
+  },
 };
 
 export default function RootLayout({
@@ -16,6 +26,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <link rel="icon" href="/logo.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/logo.png" />
         {/* Google Fonts: Rajdhani & Inter */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

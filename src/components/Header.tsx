@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Trophy, ShieldCheck, Flame, Radio, Zap } from 'lucide-react';
+import { ShieldCheck, Flame, Radio, Zap } from 'lucide-react';
 
 interface HeaderProps {
   tournamentName?: string;
@@ -10,7 +10,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  tournamentName = process.env.NEXT_PUBLIC_TOURNAMENT_NAME || 'PREMIER CRICKET LEAGUE 2026',
+  tournamentName = process.env.NEXT_PUBLIC_TOURNAMENT_NAME || 'CRICBID AUCTION DRAFT 2026',
   edition = process.env.NEXT_PUBLIC_TOURNAMENT_EDITION || 'SEASON 4 • MEGA PLAYER AUCTION',
   fee = Number(process.env.NEXT_PUBLIC_REGISTRATION_FEE) || 499,
 }) => {
@@ -20,7 +20,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="bg-gradient-to-r from-amber-600 via-yellow-500 to-emerald-500 text-slate-950 font-black text-[11px] tracking-widest uppercase py-1 px-4 text-center flex items-center justify-center gap-3 overflow-hidden">
         <span className="flex items-center gap-1.5 animate-pulse">
           <span className="w-2 h-2 rounded-full bg-red-600"></span>
-          OFFICIAL DRAFT WINDOW OPEN
+          CRICBID OFFICIAL DRAFT WINDOW OPEN
         </span>
         <span className="hidden sm:inline">•</span>
         <span className="hidden sm:inline">ALL CRICKET ROLES INVITED</span>
@@ -33,11 +33,15 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex flex-col md:flex-row items-center justify-between gap-4">
         {/* Left: Tournament Identity */}
         <div className="flex items-center gap-4 text-center sm:text-left">
-          <div className="relative group">
+          <div className="relative group shrink-0">
             <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-amber-400 via-amber-500 to-yellow-600 p-[2px] shadow-[0_0_20px_rgba(245,158,11,0.4)]">
-              <div className="w-full h-full bg-[#080d1a] rounded-[14px] flex items-center justify-center relative overflow-hidden">
-                <Trophy className="w-8 h-8 text-amber-400 group-hover:scale-110 transition-transform duration-300" />
-                <div className="absolute inset-0 bg-gradient-to-t from-amber-500/20 to-transparent pointer-events-none"></div>
+              <div className="w-full h-full bg-[#080d1a] rounded-[14px] flex items-center justify-center p-1.5 relative overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/logo.png"
+                  alt="CricBid Logo"
+                  className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300"
+                />
               </div>
             </div>
             {/* Live indicator dot */}
