@@ -95,35 +95,78 @@ export default function AdminPage() {
     googleSheetUrl: '',
   });
 
-  // Check auth
+  // Check auth via secure server session
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const auth = sessionStorage.getItem('cricbid_admin_auth');
-      if (auth === 'true') {
-        setIsAuthenticated(true);
-        fetchTournaments();
-        fetchAllPlayers();
+    const verifyAuth = async () => {
+      try {
+        const res = await fetch('/api/admin/auth');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.authenticated) {
+            setIsAuthenticated(true);
+            fetchTournaments();
+            fetchAllPlayers();
+            return;
+          }
+        }
+      } catch (err) {}
+
+      // Fallback check session storage
+      if (typeof window !== 'undefined') {
+        const auth = sessionStorage.getItem('cricbid_admin_auth');
+        if (auth === 'true') {
+          setIsAuthenticated(true);
+          fetchTournaments();
+          fetchAllPlayers();
+        }
       }
-    }
+    };
+
+    verifyAuth();
   }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const validPassword = process.env.NEXT_PUBLIC_ADMIN_PIN || 'Shoaib@55';
-    if (passwordInput.trim() === validPassword) {
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('cricbid_admin_auth', 'true');
-      }
-      setIsAuthenticated(true);
+    if (!passwordInput.trim()) {
+      setPasswordError('Please enter administrator password');
+      return;
+    }
+
+    try {
+      setLoading(true);
       setPasswordError('');
-      fetchTournaments();
-      fetchAllPlayers();
-    } else {
-      setPasswordError('Invalid administrator password. Access denied.');
+
+      const res = await fetch('/api/admin/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: passwordInput.trim() }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('cricbid_admin_auth', 'true');
+        }
+        setIsAuthenticated(true);
+        setPasswordError('');
+        fetchTournaments();
+        fetchAllPlayers();
+      } else {
+        setPasswordError(data.error || 'Invalid administrator password. Access denied.');
+      }
+    } catch (err: any) {
+      setPasswordError(err?.message || 'Authentication failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/admin/auth', { method: 'DELETE' });
+    } catch (e) {}
+
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('cricbid_admin_auth');
     }
@@ -427,6 +470,11 @@ export default function AdminPage() {
   const totalRegistered = tournaments.reduce((acc, t) => acc + (t.registeredCount || 0), 0);
   const paidCount = tournaments.filter((t) => t.isPaid).length;
   const freeCount = tournaments.filter((t) => !t.isPaid).length;
+  const verifiedPaidPlayers = players.filter((p) => p.paymentStatus === 'PAID');
+  const totalVerifiedRevenue = verifiedPaidPlayers.reduce(
+    (acc, p) => acc + (Number(p.amount) || 0),
+    0
+  );
 
   const filteredPlayers = players.filter((p) => {
     if (selectedTournamentFilter !== 'all') {
@@ -497,7 +545,7 @@ export default function AdminPage() {
         </div>
 
         {/* Metric Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800">
             <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Tournaments</span>
             <span className="text-2xl sm:text-3xl font-black text-white font-sans">{tournaments.length}</span>
@@ -516,6 +564,13 @@ export default function AdminPage() {
           <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800">
             <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Players Drafted</span>
             <span className="text-2xl sm:text-3xl font-black text-cyan-400 font-sans">{players.length || totalRegistered}</span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 col-span-2 sm:col-span-1">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">Verified Revenue</span>
+            <span className="text-2xl sm:text-3xl font-black text-emerald-400 font-sans">
+              ₹{totalVerifiedRevenue.toLocaleString('en-IN')}
+            </span>
           </div>
         </div>
 

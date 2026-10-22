@@ -228,7 +228,7 @@ export default function TournamentRegistrationPage() {
       urlParams.get('razorpay_payment_id') ||
       urlParams.get('razorpay_payment_link_id');
 
-    if (isPaymentSuccess || razorpayPaymentId) {
+    if (razorpayPaymentId) {
       try {
         const stored =
           sessionStorage.getItem('cricbid_pending_registration') ||
@@ -240,8 +240,9 @@ export default function TournamentRegistrationPage() {
             setFormData(parsed);
             handleFinalSubmission(
               {
-                paymentId: razorpayPaymentId || 'pay_online_verified',
-                orderId: urlParams.get('razorpay_order_id') || 'N/A',
+                paymentId: razorpayPaymentId,
+                orderId: urlParams.get('razorpay_order_id') || urlParams.get('razorpay_payment_link_id') || 'N/A',
+                signature: urlParams.get('razorpay_signature') || undefined,
               },
               parsed
             );
@@ -253,6 +254,13 @@ export default function TournamentRegistrationPage() {
       } catch (err) {
         console.error('Error handling payment return:', err);
       }
+    } else if (isPaymentSuccess) {
+      addToast(
+        'warning',
+        'Payment Verification Pending',
+        'Redirected from payment gateway. Waiting for payment reference.'
+      );
+      window.history.replaceState({}, '', window.location.pathname);
     }
   }, [slug, tournament]);
 

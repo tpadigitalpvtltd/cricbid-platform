@@ -1,9 +1,30 @@
 import { NextResponse } from 'next/server';
 import { getAllTournamentsAsync, createTournamentAsync } from '@/lib/tournamentStore';
+import { verifyAdminSession } from '@/lib/auth';
 
 export async function GET() {
   try {
-    const tournaments = await getAllTournamentsAsync();
+    const rawTournaments = await getAllTournamentsAsync();
+
+    // Sanitize tournaments for public display - never leak secret keys
+    const tournaments = rawTournaments.map((t) => ({
+      id: t.id,
+      title: t.title,
+      slug: t.slug,
+      tagline: t.tagline,
+      city: t.city,
+      venue: t.venue,
+      bannerUrl: t.bannerUrl,
+      registrationDeadline: t.registrationDeadline,
+      auctionDate: t.auctionDate,
+      isPaid: Boolean(t.isPaid),
+      entryFee: Number(t.entryFee) || 0,
+      organizerName: t.organizerName,
+      organizerContact: t.organizerContact,
+      registeredCount: t.registeredCount || 0,
+      createdAt: t.createdAt,
+    }));
+
     return NextResponse.json({ success: true, tournaments });
   } catch (error: any) {
     return NextResponse.json(
@@ -15,7 +36,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
 
     const {
       title,
@@ -37,6 +58,10 @@ export async function POST(request: Request) {
       );
     }
 
+    const cleanTitle = String(title).trim().slice(0, 100);
+    const cleanCity = String(city).trim().slice(0, 50);
+    const cleanVenue = String(venue).trim().slice(0, 100);
+
     // Default banners if not provided
     const defaultBanners = [
       'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?q=80&w=1200&auto=format&fit=crop',
@@ -46,26 +71,29 @@ export async function POST(request: Request) {
     ];
 
     const chosenBanner =
-      bannerUrl && bannerUrl.trim()
+      bannerUrl && typeof bannerUrl === 'string' && bannerUrl.trim().startsWith('http')
         ? bannerUrl.trim()
         : defaultBanners[Math.floor(Math.random() * defaultBanners.length)];
 
-    const isPaidMode = Boolean(body.isPaid);
+    // Abuse prevention: Public organizers can only create Free tournaments.
+    // Paid tournaments require Super Admin authorization.
+    const isAdmin = verifyAdminSession(request);
+    const isPaidMode = isAdmin ? Boolean(body.isPaid) : false;
     const tournamentFee = isPaidMode ? (Number(body.entryFee) || 0) : 0;
 
     const newTournament = await createTournamentAsync({
-      title: title.trim(),
-      tagline: tagline?.trim() || `${city} Premier Cricket Draft 2026`,
-      city: city.trim(),
-      venue: venue.trim(),
+      title: cleanTitle,
+      tagline: tagline?.trim()?.slice(0, 150) || `${cleanCity} Premier Cricket Draft 2026`,
+      city: cleanCity,
+      venue: cleanVenue,
       bannerUrl: chosenBanner,
       registrationDeadline: registrationDeadline || '2026-12-31',
       auctionDate: auctionDate || '2027-01-10',
       googleSheetUrl: googleSheetUrl?.trim() || '',
       isPaid: isPaidMode,
       entryFee: tournamentFee,
-      organizerName: organizerName?.trim() || 'Tournament Host',
-      organizerContact: organizerContact?.trim() || '',
+      organizerName: organizerName?.trim()?.slice(0, 80) || 'Tournament Host',
+      organizerContact: organizerContact?.trim()?.slice(0, 50) || '',
     });
 
     return NextResponse.json({

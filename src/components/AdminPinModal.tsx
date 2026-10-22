@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Lock, KeyRound, X, ArrowRight, ShieldAlert, Eye, EyeOff } from 'lucide-react';
+import { Lock, KeyRound, X, ArrowRight, ShieldAlert, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 interface AdminPinModalProps {
   isOpen: boolean;
@@ -14,22 +14,43 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ isOpen, onClose })
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const validPassword = process.env.NEXT_PUBLIC_ADMIN_PIN || 'Shoaib@55';
+    if (!password.trim()) {
+      setError('Please enter administrator password');
+      return;
+    }
 
-    if (password.trim() === validPassword) {
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('cricbid_admin_auth', 'true');
-      }
+    try {
+      setIsLoading(true);
       setError('');
-      onClose();
-      router.push('/admin');
-    } else {
-      setError('Invalid administrator password. Access denied.');
+
+      const res = await fetch('/api/admin/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: password.trim() }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('cricbid_admin_auth', 'true');
+        }
+        setError('');
+        onClose();
+        router.push('/admin');
+      } else {
+        setError(data.error || 'Invalid administrator password. Access denied.');
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Authentication error. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -40,6 +61,7 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ isOpen, onClose })
         {/* Close Button */}
         <button
           onClick={onClose}
+          disabled={isLoading}
           className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
         >
           <X className="w-5 h-5" />
@@ -67,6 +89,7 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ isOpen, onClose })
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Enter Admin Password"
                 value={password}
+                disabled={isLoading}
                 onChange={(e) => {
                   setPassword(e.target.value);
                   if (error) setError('');
@@ -76,6 +99,7 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ isOpen, onClose })
               />
               <button
                 type="button"
+                disabled={isLoading}
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition-colors"
               >
@@ -83,7 +107,7 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ isOpen, onClose })
               </button>
             </div>
             {error && (
-              <p className="text-xs text-rose-400 mt-2 flex items-center justify-center gap-1 font-medium">
+              <p className="text-xs text-rose-400 mt-2 flex items-center justify-center gap-1 font-medium text-center">
                 <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
                 <span>{error}</span>
               </p>
@@ -92,13 +116,22 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ isOpen, onClose })
 
           <button
             type="submit"
-            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95"
+            disabled={isLoading}
+            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 disabled:opacity-50 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95"
           >
-            <span>Unlock Admin Panel</span>
-            <ArrowRight className="w-4 h-4" />
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Verifying...</span>
+              </>
+            ) : (
+              <>
+                <span>Unlock Admin Panel</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </button>
         </form>
-
       </div>
     </div>
   );

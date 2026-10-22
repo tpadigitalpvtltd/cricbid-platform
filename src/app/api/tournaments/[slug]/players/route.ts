@@ -5,6 +5,7 @@ import {
   updatePlayer,
   deletePlayer,
 } from '@/lib/tournamentStore';
+import { verifyAdminSession } from '@/lib/auth';
 
 export async function GET(
   request: Request,
@@ -21,7 +22,31 @@ export async function GET(
       );
     }
 
-    const players = await getPlayersByTournamentAsync(slug);
+    const rawPlayers = await getPlayersByTournamentAsync(slug);
+
+    // Sanitize players for public view - protect privacy of personal contact and payment info
+    const publicPlayers = rawPlayers.map((player) => {
+      const cleanPhone = (player.phone || '').replace(/[^0-9]/g, '');
+      const maskedPhone =
+        cleanPhone.length >= 4
+          ? `******${cleanPhone.slice(-4)}`
+          : '******';
+
+      return {
+        registrationId: player.registrationId,
+        tournamentSlug: player.tournamentSlug,
+        fullName: player.fullName,
+        role: player.role,
+        battingStyle: player.battingStyle,
+        bowlingStyle: player.bowlingStyle,
+        age: player.age,
+        stats: player.stats,
+        photoUrl: player.photoUrl,
+        paymentStatus: player.paymentStatus,
+        maskedPhone,
+        timestamp: player.timestamp,
+      };
+    });
 
     return NextResponse.json({
       success: true,
@@ -33,8 +58,8 @@ export async function GET(
         auctionDate: tournament.auctionDate,
         registeredCount: tournament.registeredCount,
       },
-      total: players.length,
-      players,
+      total: publicPlayers.length,
+      players: publicPlayers,
     });
   } catch (error: any) {
     return NextResponse.json(
@@ -49,6 +74,13 @@ export async function PATCH(
   { params }: { params: { slug: string } }
 ) {
   try {
+    if (!verifyAdminSession(request)) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized: Admin authentication required' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { registrationId, updates } = body;
 
@@ -85,6 +117,13 @@ export async function DELETE(
   { params }: { params: { slug: string } }
 ) {
   try {
+    if (!verifyAdminSession(request)) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized: Admin authentication required' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     let registrationId = searchParams.get('registrationId');
 

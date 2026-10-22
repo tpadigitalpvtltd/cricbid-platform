@@ -145,7 +145,7 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({
               <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
                 {registration.role}
               </span>
-              <h3 className="text-lg sm:text-xl font-black text-white uppercase truncate">
+              <h3 className="text-base sm:text-lg font-black text-white uppercase break-words leading-tight">
                 {registration.fullName}
               </h3>
               <p className="text-xs text-slate-400">

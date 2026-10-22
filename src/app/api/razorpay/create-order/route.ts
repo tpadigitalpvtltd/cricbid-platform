@@ -5,41 +5,62 @@ import { getTournamentBySlugAsync } from '@/lib/tournamentStore';
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { tournamentSlug, fullName, phone, amount } = body;
+    const { tournamentSlug, fullName, phone } = body;
 
-    let tournament = null;
-    if (tournamentSlug) {
-      tournament = await getTournamentBySlugAsync(tournamentSlug);
+    if (!tournamentSlug) {
+      return NextResponse.json(
+        { success: false, error: 'tournamentSlug is required' },
+        { status: 400 }
+      );
     }
 
-    // Exact fee resolution: prioritize explicit client fee set by tournament / admin
-    let amountInINR = 499;
-    if (amount !== undefined && Number(amount) > 0) {
-      amountInINR = Number(amount);
-    } else if (tournament && tournament.entryFee !== undefined && tournament.entryFee > 0) {
-      amountInINR = tournament.entryFee;
-    } else {
-      amountInINR = Number(process.env.NEXT_PUBLIC_REGISTRATION_FEE) || 499;
+    const tournament = await getTournamentBySlugAsync(tournamentSlug);
+    if (!tournament) {
+      return NextResponse.json(
+        { success: false, error: 'Tournament not found' },
+        { status: 404 }
+      );
+    }
+
+    // Verify tournament payment requirement server-side
+    if (!tournament.isPaid) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'This tournament is configured for Free Registration. No payment is required.',
+        },
+        { status: 400 }
+      );
+    }
+
+    // Server-enforced amount integrity: Never allow client to dictate amount!
+    const amountInINR = Number(tournament.entryFee);
+    if (!amountInINR || amountInINR <= 0 || isNaN(amountInINR)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid tournament entry fee configured on server' },
+        { status: 400 }
+      );
     }
 
     const amountInPaise = Math.round(amountInINR * 100);
 
     const keyId =
       tournament?.razorpayKeyId ||
-      process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
-      'rzp_live_TlrysnDtv6awCC';
+      process.env.RAZORPAY_KEY_ID ||
+      process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+
     const keySecret =
       tournament?.razorpayKeySecret ||
-      process.env.RAZORPAY_KEY_SECRET ||
-      '0fkxySFC1Mqcw8WXwIyJzwST';
+      process.env.RAZORPAY_KEY_SECRET;
 
     // Check if real keys are configured
-    const isConfigured =
+    const isConfigured = Boolean(
       keyId &&
       keySecret &&
       !keyId.includes('placeholder') &&
       !keySecret.includes('placeholder') &&
-      keyId.startsWith('rzp_');
+      keyId.startsWith('rzp_')
+    );
 
     if (!isConfigured) {
       // Local demo / mock mode
@@ -55,10 +76,10 @@ export async function POST(request: Request) {
       });
     }
 
-    // Initialize real Razorpay instance
+    // Initialize real Razorpay instance with environment credentials
     const razorpay = new Razorpay({
-      key_id: keyId,
-      key_secret: keySecret,
+      key_id: keyId!,
+      key_secret: keySecret!,
     });
 
     const options = {
@@ -66,7 +87,8 @@ export async function POST(request: Request) {
       currency: 'INR',
       receipt: `rcpt_${Date.now()}`,
       notes: {
-        tournament: tournament?.title || process.env.NEXT_PUBLIC_TOURNAMENT_NAME || 'CricBid Tournament',
+        tournamentSlug: tournament.slug,
+        tournamentTitle: tournament.title,
         player_name: fullName || 'Player',
         phone: phone || '',
       },
@@ -74,30 +96,34 @@ export async function POST(request: Request) {
 
     const order = await razorpay.orders.create(options);
 
-    // Also generate Razorpay Hosted Payment Link (rzp.io) to avoid "website does not match" restrictions!
+    // Generate Razorpay Hosted Payment Link (rzp.io) to avoid domain restrictions
     let paymentLinkUrl: string | null = null;
     try {
-      const originHeader = request.headers.get('origin') || request.headers.get('referer') || 'https://cricbid-platform.vercel.app';
+      const originHeader =
+        request.headers.get('origin') ||
+        request.headers.get('referer') ||
+        'https://cricbid-platform.vercel.app';
       const cleanOrigin = originHeader.split('/tournament')[0].replace(/\/$/, '');
 
       const digitsOnly = (phone || '').replace(/[^0-9]/g, '');
-      const validPhone = digitsOnly.length >= 10 ? `+91${digitsOnly.slice(-10)}` : '+919876543210';
+      const validPhone =
+        digitsOnly.length >= 10 ? `+91${digitsOnly.slice(-10)}` : '+919876543210';
 
       const link = await razorpay.paymentLink.create({
         amount: amountInPaise,
         currency: 'INR',
         accept_partial: false,
-        description: `Player Pass: ${fullName || 'Player'} - ${tournament?.title || 'CricBid'}`,
+        description: `Player Pass: ${fullName || 'Player'} - ${tournament.title}`,
         customer: {
           name: fullName || 'Player',
           contact: validPhone,
         },
         notify: { sms: false, email: false },
         reminder_enable: false,
-        callback_url: `${cleanOrigin}/tournament/${tournamentSlug}/register?payment_success=true`,
+        callback_url: `${cleanOrigin}/tournament/${tournament.slug}/register?payment_success=true`,
         callback_method: 'get',
         notes: {
-          tournamentSlug: tournamentSlug || '',
+          tournamentSlug: tournament.slug,
           fullName: fullName || '',
           phone: phone || '',
         },
