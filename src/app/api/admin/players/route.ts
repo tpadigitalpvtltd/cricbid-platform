@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAllPlayers, updatePlayer, deletePlayer } from '@/lib/tournamentStore';
+import { getAllPlayersAsync, updatePlayer, deletePlayer } from '@/lib/tournamentStore';
 import { verifyAdminSession } from '@/lib/auth';
 
 export async function GET(request: Request) {
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const players = getAllPlayers();
+    const players = await getAllPlayersAsync();
     return NextResponse.json({ success: true, count: players.length, players });
   } catch (error: any) {
     return NextResponse.json(

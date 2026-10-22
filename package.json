@@ -10,9 +10,12 @@
     "test": "node tests/test-suite.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
+    "@types/pg": "^8.23.1",
     "canvas-confetti": "^1.9.4",
     "lucide-react": "^1.16.0",
     "next": "^14.2.23",
+    "pg": "^8.23.1",
     "razorpay": "^2.9.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

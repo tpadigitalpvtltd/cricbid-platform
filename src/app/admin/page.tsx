@@ -34,6 +34,8 @@ import {
   Phone,
   User,
   Filter,
+  FileSpreadsheet,
+  Download,
 } from 'lucide-react';
 
 const PRESET_BANNERS = [
@@ -494,6 +496,76 @@ export default function AdminPage() {
     return true;
   });
 
+  const handleExportToExcel = () => {
+    if (filteredPlayers.length === 0) {
+      alert('No player registrations found to export.');
+      return;
+    }
+
+    const headers = [
+      'Registration ID',
+      'Full Name',
+      'Mobile / WhatsApp',
+      'Age',
+      'Role',
+      'Batting Hand',
+      'Bowling Style',
+      'Tournament Title',
+      'Tournament Slug',
+      'Payment Status',
+      'Entry Fee (INR)',
+      'Payment ID',
+      'Order ID',
+      'Registration Timestamp',
+      'Player Stats / Achievements',
+    ];
+
+    const escapeCSV = (val: any) => {
+      if (val === undefined || val === null) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const csvRows = [
+      headers.join(','),
+      ...filteredPlayers.map((p) =>
+        [
+          escapeCSV(p.registrationId),
+          escapeCSV(p.fullName),
+          escapeCSV(p.phone),
+          escapeCSV(p.age),
+          escapeCSV(p.role),
+          escapeCSV(p.battingStyle),
+          escapeCSV(p.bowlingStyle),
+          escapeCSV(p.tournamentTitle || ''),
+          escapeCSV(p.tournamentSlug),
+          escapeCSV(p.paymentStatus),
+          escapeCSV(p.amount || 0),
+          escapeCSV(p.paymentId || ''),
+          escapeCSV(p.orderId || ''),
+          escapeCSV(p.timestamp),
+          escapeCSV(p.stats || ''),
+        ].join(',')
+      ),
+    ];
+
+    // UTF-8 BOM so Microsoft Excel renders Hindi, English, and accents perfectly
+    const csvContent = '\uFEFF' + csvRows.join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    const tourneyName =
+      selectedTournamentFilter === 'all' ? 'All_Tournaments' : selectedTournamentFilter;
+    const dateStr = new Date().toISOString().split('T')[0];
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', `CricBid_Players_${tourneyName}_${dateStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="min-h-screen stadium-bg flex flex-col text-slate-100">
       <Navbar />
@@ -795,16 +867,28 @@ export default function AdminPage() {
                 </select>
               </div>
 
-              {/* Search Player */}
-              <div className="relative w-full sm:w-72">
-                <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search player name, phone, ID..."
-                  value={playerSearchQuery}
-                  onChange={(e) => setPlayerSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs focus:outline-none focus:border-amber-400"
-                />
+              {/* Search Player & Export Buttons */}
+              <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto">
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search name, phone, ID..."
+                    value={playerSearchQuery}
+                    onChange={(e) => setPlayerSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleExportToExcel}
+                  className="w-full sm:w-auto px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 text-slate-950 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg transition-all transform active:scale-95 shrink-0"
+                  title="Download players list as an Excel CSV file"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-slate-950" />
+                  <span>Download Excel ({filteredPlayers.length})</span>
+                </button>
               </div>
 
             </div>
