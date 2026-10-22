@@ -154,11 +154,15 @@ export default function TournamentRegistrationPage() {
   };
 
   // Final submission to backend / Google Sheet
-  const handleFinalSubmission = async (paymentDetails: {
-    paymentId: string;
-    orderId?: string;
-    signature?: string;
-  }) => {
+  const handleFinalSubmission = async (
+    paymentDetails: {
+      paymentId: string;
+      orderId?: string;
+      signature?: string;
+    },
+    overrideData?: PlayerFormData
+  ) => {
+    const dataToSubmit = overrideData || formData;
     try {
       addToast('info', 'Submitting Registration', 'Logging player record into tournament pool...');
 
@@ -166,7 +170,7 @@ export default function TournamentRegistrationPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...formData,
+          ...dataToSubmit,
           ...paymentDetails,
           tournamentSlug: slug,
           amount: tournament?.isPaid ? entryFee : 0,
@@ -177,7 +181,7 @@ export default function TournamentRegistrationPage() {
 
       if (response.ok && result.success) {
         setRegisteredData({
-          ...formData,
+          ...dataToSubmit,
           registrationId: result.registration.registrationId,
           tournamentSlug: slug,
           tournamentTitle: tournament?.title || 'Cricket Tournament 2026',
@@ -214,6 +218,43 @@ export default function TournamentRegistrationPage() {
       setIsLoading(false);
     }
   };
+
+  // Check for Razorpay Payment Link return (after successful payment on rzp.io)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !slug || !tournament) return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const isPaymentSuccess = urlParams.get('payment_success') === 'true';
+    const razorpayPaymentId =
+      urlParams.get('razorpay_payment_id') ||
+      urlParams.get('razorpay_payment_link_id');
+
+    if (isPaymentSuccess || razorpayPaymentId) {
+      try {
+        const stored =
+          sessionStorage.getItem('cricbid_pending_registration') ||
+          localStorage.getItem(`cricbid_pending_reg_${slug}`);
+
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && parsed.fullName) {
+            setFormData(parsed);
+            handleFinalSubmission(
+              {
+                paymentId: razorpayPaymentId || 'pay_online_verified',
+                orderId: urlParams.get('razorpay_order_id') || 'N/A',
+              },
+              parsed
+            );
+            sessionStorage.removeItem('cricbid_pending_registration');
+            localStorage.removeItem(`cricbid_pending_reg_${slug}`);
+            window.history.replaceState({}, '', window.location.pathname);
+          }
+        }
+      } catch (err) {
+        console.error('Error handling payment return:', err);
+      }
+    }
+  }, [slug, tournament]);
 
   // Submit Action with Conditional Payment Logic
   const handleProceedToPayment = async () => {
@@ -258,7 +299,24 @@ export default function TournamentRegistrationPage() {
         return;
       }
 
-      // Real Razorpay Checkout
+      // If Razorpay Hosted Payment Link (rzp.io) is available, redirect directly to bypass domain block!
+      if (orderData.paymentLinkUrl && orderData.paymentLinkUrl.startsWith('http')) {
+        try {
+          const payloadToSave = JSON.stringify({
+            ...formData,
+            tournamentSlug: slug,
+            amount: entryFee,
+          });
+          sessionStorage.setItem('cricbid_pending_registration', payloadToSave);
+          localStorage.setItem(`cricbid_pending_reg_${slug}`, payloadToSave);
+        } catch (e) {}
+
+        addToast('info', 'Opening Payment Gateway', 'Redirecting to Razorpay secure checkout...');
+        window.location.href = orderData.paymentLinkUrl;
+        return;
+      }
+
+      // Real Razorpay Checkout Fallback
       if (typeof window === 'undefined' || !window.Razorpay) {
         throw new Error('Razorpay Checkout SDK is not loaded. Check internet connection.');
       }

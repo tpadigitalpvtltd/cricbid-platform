@@ -74,6 +74,42 @@ export async function POST(request: Request) {
 
     const order = await razorpay.orders.create(options);
 
+    // Also generate Razorpay Hosted Payment Link (rzp.io) to avoid "website does not match" restrictions!
+    let paymentLinkUrl: string | null = null;
+    try {
+      const originHeader = request.headers.get('origin') || request.headers.get('referer') || 'https://cricbid-platform.vercel.app';
+      const cleanOrigin = originHeader.split('/tournament')[0].replace(/\/$/, '');
+
+      const digitsOnly = (phone || '').replace(/[^0-9]/g, '');
+      const validPhone = digitsOnly.length >= 10 ? `+91${digitsOnly.slice(-10)}` : '+919876543210';
+
+      const link = await razorpay.paymentLink.create({
+        amount: amountInPaise,
+        currency: 'INR',
+        accept_partial: false,
+        description: `Player Pass: ${fullName || 'Player'} - ${tournament?.title || 'CricBid'}`,
+        customer: {
+          name: fullName || 'Player',
+          contact: validPhone,
+        },
+        notify: { sms: false, email: false },
+        reminder_enable: false,
+        callback_url: `${cleanOrigin}/tournament/${tournamentSlug}/register?payment_success=true`,
+        callback_method: 'get',
+        notes: {
+          tournamentSlug: tournamentSlug || '',
+          fullName: fullName || '',
+          phone: phone || '',
+        },
+      });
+
+      if (link && link.short_url) {
+        paymentLinkUrl = link.short_url;
+      }
+    } catch (linkError) {
+      console.warn('Payment link generation notice:', linkError);
+    }
+
     return NextResponse.json({
       success: true,
       orderId: order.id,
@@ -81,6 +117,7 @@ export async function POST(request: Request) {
       currency: order.currency,
       keyId: keyId,
       isMock: false,
+      paymentLinkUrl: paymentLinkUrl,
     });
   } catch (error: any) {
     console.error('Razorpay order creation error:', error);
