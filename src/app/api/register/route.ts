@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { getTournamentBySlug, incrementRegistrationCount } from '@/lib/tournamentStore';
+import {
+  getTournamentBySlug,
+  incrementRegistrationCount,
+  savePlayerRegistration,
+} from '@/lib/tournamentStore';
 
 export async function POST(request: Request) {
   try {
@@ -32,8 +36,8 @@ export async function POST(request: Request) {
 
     // Lookup tournament details if slug provided
     const tournament = tournamentSlug ? getTournamentBySlug(tournamentSlug) : null;
-    const isPaidTournament = tournament ? tournament.isPaid : true; // Default to paid if not found
-    const tournamentTitle = tournament ? tournament.title : 'Premier Cricket League 2026';
+    const isPaidTournament = tournament ? tournament.isPaid : false;
+    const tournamentTitle = tournament ? tournament.title : 'Cricket Tournament 2026';
     const tournamentEntryFee = tournament ? tournament.entryFee : (Number(process.env.NEXT_PUBLIC_REGISTRATION_FEE) || 499);
 
     let finalPaymentStatus: 'PAID' | 'FREE' = 'FREE';
@@ -87,15 +91,15 @@ export async function POST(request: Request) {
       registrationId ||
       `CRIC-2026-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
 
-    // Payload for Google Apps Script Web App
-    const sheetPayload = {
+    // Payload for Google Apps Script Web App and local database
+    const registrationRecord = {
       timestamp,
       registrationId: finalRegId,
       tournamentSlug: tournamentSlug || 'general',
       tournamentTitle,
       fullName: fullName.trim(),
       phone: phone.trim(),
-      age: Number(age),
+      age: String(age),
       role,
       battingStyle,
       bowlingStyle,
@@ -106,6 +110,9 @@ export async function POST(request: Request) {
       paymentStatus: finalPaymentStatus,
       amount: isPaidTournament ? tournamentEntryFee : 0,
     };
+
+    // Save to persistent players database
+    savePlayerRegistration(registrationRecord);
 
     // Increment count in tournament store
     if (tournamentSlug) {
@@ -128,7 +135,7 @@ export async function POST(request: Request) {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(sheetPayload),
+          body: JSON.stringify(registrationRecord),
           redirect: 'follow',
         });
 
@@ -153,7 +160,7 @@ export async function POST(request: Request) {
         ? 'Player registered & fee verified successfully!'
         : 'Free player registration completed successfully!',
       registration: {
-        ...sheetPayload,
+        ...registrationRecord,
       },
       sheetSync: {
         synced: sheetSyncSuccess,

@@ -9,6 +9,7 @@ import { PlayerPreviewCard } from '@/components/PlayerPreviewCard';
 import { SuccessModal } from '@/components/SuccessModal';
 import { RazorpayMockModal } from '@/components/RazorpayMockModal';
 import { LiveCounterWidget } from '@/components/LiveCounterWidget';
+import { PlayersDirectory } from '@/components/PlayersDirectory';
 import { Toast, ToastMessage, ToastType } from '@/components/Toast';
 import {
   Trophy,
@@ -23,6 +24,8 @@ import {
   Sparkles,
   Phone,
   Zap,
+  ListFilter,
+  UserPlus,
 } from 'lucide-react';
 
 declare global {
@@ -55,6 +58,10 @@ export default function TournamentRegistrationPage() {
   const [registeredData, setRegisteredData] = useState<RegistrationSubmission | null>(null);
   const [activeMobileTab, setActiveMobileTab] = useState<'form' | 'preview'>('form');
 
+  // View state: 'register' | 'players'
+  const [activeView, setActiveView] = useState<'register' | 'players'>('register');
+  const [registeredPlayers, setRegisteredPlayers] = useState<RegistrationSubmission[]>([]);
+
   // Test mode modal
   const [isMockModalOpen, setIsMockModalOpen] = useState(false);
   const [currentMockOrder, setCurrentMockOrder] = useState<{ orderId: string } | null>(null);
@@ -68,7 +75,22 @@ export default function TournamentRegistrationPage() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Fetch tournament info
+  const fetchRegisteredPlayers = async () => {
+    if (!slug) return;
+    try {
+      const res = await fetch(`/api/tournaments/${slug}/players`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.players) {
+          setRegisteredPlayers(data.players);
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching registered players:', e);
+    }
+  };
+
+  // Fetch tournament info & players
   useEffect(() => {
     if (!slug) return;
     const fetchTournament = async () => {
@@ -89,7 +111,9 @@ export default function TournamentRegistrationPage() {
         setLoadingTournament(false);
       }
     };
+
     fetchTournament();
+    fetchRegisteredPlayers();
   }, [slug]);
 
   const handleFormChange = (updated: Partial<PlayerFormData>) => {
@@ -130,6 +154,9 @@ export default function TournamentRegistrationPage() {
           amount: tournament?.isPaid ? tournament.entryFee : 0,
         });
 
+        // Re-fetch players list so the newly registered player appears instantly
+        fetchRegisteredPlayers();
+
         if (result.sheetSync?.synced) {
           addToast('success', 'Google Sheet Synced', 'Player record successfully added to Google Sheet!');
         }
@@ -159,7 +186,6 @@ export default function TournamentRegistrationPage() {
     if (!tournament) return;
 
     // CONDITIONAL LOGIC 1: FREE REGISTRATION
-    // If the tournament is marked "Free", skip Razorpay checkout completely and directly append data to Google Sheet
     if (!tournament.isPaid) {
       setIsLoading(true);
       await handleFinalSubmission({
@@ -169,7 +195,6 @@ export default function TournamentRegistrationPage() {
     }
 
     // CONDITIONAL LOGIC 2: PAID TOURNAMENT
-    // Enforce Razorpay payment popup first. Only on successful payment ID generation, append data to Google Sheet
     setIsLoading(true);
 
     try {
@@ -211,7 +236,6 @@ export default function TournamentRegistrationPage() {
         description: `Player Registration Fee - ${formData.fullName}`,
         order_id: orderData.orderId,
         handler: async function (response: any) {
-          // Strictly upon verified payment success (receiving razorpay_payment_id)
           await handleFinalSubmission({
             paymentId: response.razorpay_payment_id,
             orderId: response.razorpay_order_id,
@@ -374,77 +398,124 @@ export default function TournamentRegistrationPage() {
         </div>
 
         {/* Live Registration Counter Widget */}
-        <div className="mb-8">
+        <div className="mb-6">
           <LiveCounterWidget
             tournamentSlug={slug}
             initialCount={tournament?.registeredCount || 0}
           />
         </div>
 
-        {/* Mobile Tab Switcher */}
-        <div className="lg:hidden sticky top-16 z-30 bg-[#080d1a]/95 backdrop-blur-md border-b border-slate-800 px-4 py-2 flex items-center justify-center gap-2 mb-6">
-          <button
-            type="button"
-            onClick={() => setActiveMobileTab('form')}
-            className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
-              activeMobileTab === 'form'
-                ? 'bg-amber-400 text-slate-950 shadow-md'
-                : 'bg-slate-900 text-slate-400 hover:text-white'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Registration Form</span>
-          </button>
+        {/* View Toggle Bar (Register Form vs Registered Players Pool) */}
+        <div className="flex items-center justify-between gap-3 mb-6 bg-slate-900/80 p-2 rounded-2xl border border-slate-800">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveView('register')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
+                activeView === 'register'
+                  ? 'bg-amber-400 text-slate-950 shadow-md'
+                  : 'bg-slate-950/60 text-slate-300 hover:text-white'
+              }`}
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Register as Player</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveMobileTab('preview')}
-            className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
-              activeMobileTab === 'preview'
-                ? 'bg-emerald-400 text-slate-950 shadow-md'
-                : 'bg-slate-900 text-slate-400 hover:text-white'
-            }`}
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span>Live Card Preview</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveView('players');
+                fetchRegisteredPlayers();
+              }}
+              className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
+                activeView === 'players'
+                  ? 'bg-emerald-400 text-slate-950 shadow-md'
+                  : 'bg-slate-950/60 text-slate-300 hover:text-white'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>View All Added Players ({registeredPlayers.length})</span>
+            </button>
+          </div>
         </div>
 
-        {/* Desktop Split Layout (Form 60% : Preview 40%) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
-          {/* Form Column */}
-          <div
-            className={`lg:col-span-7 ${
-              activeMobileTab === 'form' ? 'block' : 'hidden lg:block'
-            }`}
-          >
-            <RegistrationForm
-              formData={formData}
-              onChange={handleFormChange}
-              onSubmit={handleProceedToPayment}
-              isLoading={isLoading}
-              registrationFee={entryFee}
+        {/* View 1: Registration Form + Live Card Preview */}
+        {activeView === 'register' && (
+          <>
+            {/* Mobile Tab Switcher */}
+            <div className="lg:hidden sticky top-16 z-30 bg-[#080d1a]/95 backdrop-blur-md border-b border-slate-800 px-4 py-2 flex items-center justify-center gap-2 mb-6">
+              <button
+                type="button"
+                onClick={() => setActiveMobileTab('form')}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                  activeMobileTab === 'form'
+                    ? 'bg-amber-400 text-slate-950 shadow-md'
+                    : 'bg-slate-900 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Registration Form</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveMobileTab('preview')}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                  activeMobileTab === 'preview'
+                    ? 'bg-emerald-400 text-slate-950 shadow-md'
+                    : 'bg-slate-900 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Live Card Preview</span>
+              </button>
+            </div>
+
+            {/* Desktop Split Layout (Form 60% : Preview 40%) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start mb-12">
+              {/* Form Column */}
+              <div
+                className={`lg:col-span-7 ${
+                  activeMobileTab === 'form' ? 'block' : 'hidden lg:block'
+                }`}
+              >
+                <RegistrationForm
+                  formData={formData}
+                  onChange={handleFormChange}
+                  onSubmit={handleProceedToPayment}
+                  isLoading={isLoading}
+                  registrationFee={entryFee}
+                />
+              </div>
+
+              {/* Live Preview Card Column */}
+              <div
+                className={`lg:col-span-5 ${
+                  activeMobileTab === 'preview' ? 'block' : 'hidden lg:block'
+                }`}
+              >
+                <PlayerPreviewCard
+                  formData={formData}
+                  registrationFee={entryFee}
+                />
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* View 2: All Added Players Directory */}
+        {(activeView === 'players' || registeredPlayers.length > 0) && (
+          <div className="mt-8">
+            <PlayersDirectory
+              players={registeredPlayers}
+              tournamentTitle={tournament?.title || 'Cricket Tournament'}
             />
           </div>
-
-          {/* Live Preview Card Column */}
-          <div
-            className={`lg:col-span-5 ${
-              activeMobileTab === 'preview' ? 'block' : 'hidden lg:block'
-            }`}
-          >
-            <PlayerPreviewCard
-              formData={formData}
-              registrationFee={entryFee}
-            />
-          </div>
-
-        </div>
+        )}
 
       </main>
 
-      {/* Razorpay Mock Test Mode Modal (For paid tournaments without live keys) */}
+      {/* Razorpay Mock Test Mode Modal */}
       <RazorpayMockModal
         isOpen={isMockModalOpen}
         amount={entryFee}

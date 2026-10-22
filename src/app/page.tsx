@@ -13,12 +13,9 @@ import {
   ArrowRight,
   PlusCircle,
   Search,
-  Filter,
   Sparkles,
-  ShieldCheck,
-  CheckCircle2,
-  Lock,
   Zap,
+  Lock,
 } from 'lucide-react';
 
 export default function HomePage() {
@@ -85,21 +82,21 @@ export default function HomePage() {
 
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 mt-8">
-          <a
-            href="#explore"
-            className="w-full sm:w-auto px-7 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-[0_0_25px_rgba(245,158,11,0.4)] transition-all flex items-center justify-center gap-2 transform active:scale-95"
-          >
-            <Trophy className="w-4 h-4 text-slate-950" />
-            <span>Explore Live Tournaments</span>
-          </a>
-
           <Link
             href="/host"
-            className="w-full sm:w-auto px-7 py-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 text-emerald-400 hover:text-emerald-300 font-black text-xs uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2"
+            className="w-full sm:w-auto px-7 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-green-400 hover:from-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-[0_0_25px_rgba(16,232,123,0.4)] transition-all flex items-center justify-center gap-2 transform active:scale-95"
           >
-            <PlusCircle className="w-4 h-4" />
+            <PlusCircle className="w-4 h-4 text-slate-950" />
             <span>+ Host Free Auction</span>
           </Link>
+
+          <a
+            href="#explore"
+            className="w-full sm:w-auto px-7 py-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 text-amber-400 hover:text-amber-300 font-black text-xs uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2"
+          >
+            <Trophy className="w-4 h-4 text-amber-400" />
+            <span>Explore Live Tournaments</span>
+          </a>
         </div>
 
         {/* Live Metrics Row */}
@@ -109,16 +106,16 @@ export default function HomePage() {
             <span className="text-xl sm:text-2xl font-black text-white">{tournaments.length}</span>
           </div>
           <div className="p-3 bg-slate-900/40 rounded-xl border border-slate-800">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">Players Drafted</span>
-            <span className="text-xl sm:text-2xl font-black text-amber-400">🔥 {totalRegistered}+</span>
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Registrations</span>
+            <span className="text-xl sm:text-2xl font-black text-amber-400">{totalRegistered}</span>
           </div>
           <div className="p-3 bg-slate-900/40 rounded-xl border border-slate-800">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">Host Tier</span>
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">Organizer Tier</span>
             <span className="text-xl sm:text-2xl font-black text-emerald-400">100% FREE</span>
           </div>
           <div className="p-3 bg-slate-900/40 rounded-xl border border-slate-800">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">Payment Security</span>
-            <span className="text-xl sm:text-2xl font-black text-cyan-400">Razorpay SSL</span>
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">Razorpay Live</span>
+            <span className="text-xl sm:text-2xl font-black text-cyan-400">Active</span>
           </div>
         </div>
       </section>
@@ -185,17 +182,22 @@ export default function HomePage() {
             <p className="text-xs uppercase font-bold text-slate-400">Loading Tournaments...</p>
           </div>
         ) : filteredTournaments.length === 0 ? (
-          <div className="py-16 text-center bg-slate-900/30 rounded-3xl border border-slate-800/80 p-8">
-            <Trophy className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-            <h3 className="text-base font-bold text-white uppercase">No Tournaments Match Your Search</h3>
-            <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-              Try adjusting your search query or filter, or be the first to host one!
+          <div className="py-16 text-center bg-slate-900/30 rounded-3xl border border-slate-800/80 p-8 sm:p-12">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto mb-4 shadow-[0_0_20px_rgba(245,158,11,0.2)]">
+              <Trophy className="w-8 h-8" />
+            </div>
+            <h3 className="text-lg font-black text-white uppercase tracking-tight font-sans">
+              No Tournaments Hosted Yet
+            </h3>
+            <p className="text-xs text-slate-400 mt-1.5 max-w-md mx-auto leading-relaxed">
+              All demo data has been cleared. Be the very first organizer to launch a cricket tournament and auction pool on CricBid!
             </p>
             <Link
               href="/host"
-              className="inline-flex items-center gap-2 mt-4 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase"
+              className="inline-flex items-center gap-2 mt-5 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg transform active:scale-95 transition-all"
             >
-              <PlusCircle className="w-4 h-4" /> Host Free Auction Now
+              <PlusCircle className="w-4 h-4 text-slate-950" />
+              <span>+ Host Free Tournament Now</span>
             </Link>
           </div>
         ) : (
