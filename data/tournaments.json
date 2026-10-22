@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "title": "Pune Super Sixes Championship 2026",
+    "tagline": "Season 1 Official Auction Draft",
+    "city": "Pune",
+    "venue": "MCA Stadium Ground",
+    "bannerUrl": "https://images.unsplash.com/photo-1587280501635-68a0e82cd5ff?q=80&w=1200&auto=format&fit=crop",
+    "registrationDeadline": "2026-11-20",
+    "auctionDate": "2026-11-25",
+    "googleSheetUrl": "",
+    "isPaid": true,
+    "entryFee": 299,
+    "organizerName": "Pune Cricket Association",
+    "organizerContact": "+919876543210",
+    "id": "tourn_mvjih8l4_9a0o",
+    "slug": "pune-super-sixes-championship-2026-jih8",
+    "registeredCount": 1,
+    "createdAt": "2026-10-22T12:22:37.240Z"
+  }
+]

@@ -1,1 +1,38 @@
-[]
+[
+  {
+    "timestamp": "22 Oct 2026, 5:53:10 pm",
+    "registrationId": "CRIC-2026-SKN6W",
+    "tournamentSlug": "pune-super-sixes-championship-2026-jih8",
+    "tournamentTitle": "Pune Super Sixes Championship 2026",
+    "fullName": "Hardik Pandya",
+    "phone": "9812345678",
+    "age": "30",
+    "role": "Batting All-Rounder",
+    "battingStyle": "Right-hand",
+    "bowlingStyle": "Right-arm Fast",
+    "stats": "Hard-hitting finisher and reliable 4-over strike bowler",
+    "photoUrl": "",
+    "paymentId": "pay_live_verified_2002",
+    "orderId": "order_Tqx7OdKeUl8qbs",
+    "paymentStatus": "PAID",
+    "amount": 299
+  },
+  {
+    "timestamp": "22 Oct 2026, 5:52:39 pm",
+    "registrationId": "CRIC-2026-Y4XQF",
+    "tournamentSlug": "pune-super-sixes-championship-2026-jih8",
+    "tournamentTitle": "Pune Super Sixes Championship 2026",
+    "fullName": "Rohit Sharma",
+    "phone": "9876543210",
+    "age": "28",
+    "role": "Pure Batsman",
+    "battingStyle": "Right-hand",
+    "bowlingStyle": "Right-arm Spin",
+    "stats": "Top order captain, strike rate 148, highest score 137*",
+    "photoUrl": "",
+    "paymentId": "FREE_ENTRY",
+    "orderId": "N/A",
+    "paymentStatus": "FREE",
+    "amount": 0
+  }
+]
