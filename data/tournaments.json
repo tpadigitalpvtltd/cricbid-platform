@@ -1,5 +1,23 @@
 [
   {
+    "title": "Mumbai T20 Super Blast 2026",
+    "tagline": "Mumbai Premier Cricket Draft 2026",
+    "city": "Mumbai",
+    "venue": "Wankhede Stadium",
+    "bannerUrl": "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?q=80&w=1200&auto=format&fit=crop",
+    "registrationDeadline": "2026-12-15",
+    "auctionDate": "2026-12-20",
+    "googleSheetUrl": "",
+    "isPaid": false,
+    "entryFee": 0,
+    "organizerName": "Tournament Host",
+    "organizerContact": "",
+    "id": "tourn_mvjkwtgq_5dgp",
+    "slug": "mumbai-t20-super-blast-2026-jkwt",
+    "registeredCount": 1,
+    "createdAt": "2026-10-22T13:30:43.370Z"
+  },
+  {
     "title": "Pune Super Sixes Championship 2026",
     "tagline": "Season 1 Official Auction Draft",
     "city": "Pune",

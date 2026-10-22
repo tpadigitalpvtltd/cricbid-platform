@@ -1,5 +1,23 @@
 [
   {
+    "timestamp": "22 Oct 2026, 7:03:18 pm",
+    "registrationId": "CRIC-2026-OPGYO",
+    "tournamentSlug": "mumbai-t20-super-blast-2026-jkwt",
+    "tournamentTitle": "Mumbai T20 Super Blast 2026",
+    "fullName": "Irfan Pathan Jr",
+    "phone": "9820098200",
+    "age": "23",
+    "role": "Bowling All-Rounder",
+    "battingStyle": "Left-hand",
+    "bowlingStyle": "Left-arm Fast",
+    "stats": "5 wickets in District Final 2025",
+    "photoUrl": "",
+    "paymentId": "FREE_ENTRY",
+    "orderId": "N/A",
+    "paymentStatus": "FREE",
+    "amount": 0
+  },
+  {
     "timestamp": "22 Oct 2026, 5:53:10 pm",
     "registrationId": "CRIC-2026-SKN6W",
     "tournamentSlug": "pune-super-sixes-championship-2026-jih8",
