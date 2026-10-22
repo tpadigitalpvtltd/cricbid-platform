@@ -209,9 +209,25 @@ async function runTests() {
     logTest('TC-09', 'Authenticated Admin Players Access Allowed', false, e.message);
   }
 
+  // Create a paid test tournament with admin session for testing paid flows
+  let testPaidSlug = '';
+  try {
+    const createPaidRes = await apiFetch('/api/tournaments', {
+      method: 'POST',
+      body: {
+        title: `QA Paid Tournament ${Date.now()}`,
+        city: 'Nagpur',
+        venue: 'VCA Stadium',
+        isPaid: true,
+        entryFee: 1,
+      },
+    });
+    testPaidSlug = createPaidRes.json?.tournament?.slug || '';
+  } catch (e) {}
+
   // TEST 10: Public Players List Privacy (Masked Phone Numbers)
   try {
-    const res = await apiFetch('/api/tournaments/ympl-2026-season-2-jlhb/players');
+    const res = await apiFetch(`/api/tournaments/${testPaidSlug || 'ympl-2026-season-2-jlhb'}/players`);
     const players = res.json?.players || [];
     let noUnmaskedPhone = true;
     players.forEach((p) => {
@@ -263,7 +279,7 @@ async function runTests() {
         role: 'Pure Batsman',
         battingStyle: 'Right-hand',
         bowlingStyle: 'Right-arm Fast',
-        tournamentSlug: 'ympl-2026-season-2-jlhb',
+        tournamentSlug: testPaidSlug || 'ympl-2026-season-2-jlhb',
       },
     });
     const pass = res.status === 400 && res.json?.error?.includes('mobile number');
@@ -289,7 +305,7 @@ async function runTests() {
         role: 'Pure Batsman',
         battingStyle: 'Right-hand',
         bowlingStyle: 'Right-arm Fast',
-        tournamentSlug: 'ympl-2026-season-2-jlhb',
+        tournamentSlug: testPaidSlug || 'ympl-2026-season-2-jlhb',
       },
     });
     const pass = res.status === 400 && res.json?.error?.includes('age');
@@ -315,7 +331,7 @@ async function runTests() {
         role: 'Pure Batsman',
         battingStyle: 'Right-hand',
         bowlingStyle: 'Right-arm Fast',
-        tournamentSlug: 'ympl-2026-season-2-jlhb',
+        tournamentSlug: testPaidSlug || 'ympl-2026-season-2-jlhb',
         photoUrl: 'data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoMSk+',
       },
     });
@@ -336,7 +352,7 @@ async function runTests() {
     const res = await apiFetch('/api/razorpay/create-order', {
       method: 'POST',
       body: {
-        tournamentSlug: 'ympl-2026-season-2-jlhb',
+        tournamentSlug: testPaidSlug || 'ympl-2026-season-2-jlhb',
         fullName: 'Fee Tamperer',
         phone: '9876543210',
         amount: 0.01, // Attempted client-side fee override
@@ -366,7 +382,7 @@ async function runTests() {
         role: 'Pure Batsman',
         battingStyle: 'Right-hand',
         bowlingStyle: 'Right-arm Fast',
-        tournamentSlug: 'ympl-2026-season-2-jlhb',
+        tournamentSlug: testPaidSlug || 'ympl-2026-season-2-jlhb',
         paymentId: 'pay_fake_unverified_hacker_id',
       },
     });
@@ -534,6 +550,11 @@ async function runTests() {
 
   // TEST 22: Clean Up Test Tournament
   try {
+    if (testPaidSlug) {
+      try {
+        await apiFetch(`/api/tournaments/${testPaidSlug}`, { method: 'DELETE' });
+      } catch (e) {}
+    }
     if (testFreeSlug) {
       const delTournRes = await apiFetch(`/api/tournaments/${testFreeSlug}`, {
         method: 'DELETE',

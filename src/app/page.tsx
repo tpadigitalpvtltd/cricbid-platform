@@ -28,37 +28,25 @@ export default function HomePage() {
     const fetchTournaments = async () => {
       try {
         setLoading(true);
-        const res = await fetch('/api/tournaments');
-        let serverTournaments: Tournament[] = [];
+        // Clear any old stale client tournaments from localStorage
+        try {
+          localStorage.removeItem('cricbid_client_tournaments');
+        } catch (e) {}
 
+        const res = await fetch('/api/tournaments');
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data.tournaments)) {
-            serverTournaments = data.tournaments;
+            setTournaments(data.tournaments);
+          } else {
+            setTournaments([]);
           }
+        } else {
+          setTournaments([]);
         }
-
-        // Merge with client-side tournaments from localStorage
-        let clientTournaments: Tournament[] = [];
-        try {
-          const raw = localStorage.getItem('cricbid_client_tournaments');
-          if (raw) {
-            clientTournaments = JSON.parse(raw);
-          }
-        } catch (e) {}
-
-        const mergedMap = new Map<string, Tournament>();
-        serverTournaments.forEach((t) => mergedMap.set(t.slug.toLowerCase(), t));
-        clientTournaments.forEach((t) => {
-          if (!mergedMap.has(t.slug.toLowerCase())) {
-            mergedMap.set(t.slug.toLowerCase(), t);
-          }
-        });
-
-        const finalList = Array.from(mergedMap.values());
-        setTournaments(finalList);
       } catch (e) {
         console.error('Error fetching tournaments:', e);
+        setTournaments([]);
       } finally {
         setLoading(false);
       }

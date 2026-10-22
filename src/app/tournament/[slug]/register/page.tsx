@@ -118,20 +118,7 @@ export default function TournamentRegistrationPage() {
           }
         } catch (e) {}
 
-        // 3. Fallback: Check local storage for newly created tournament
-        try {
-          const stored = localStorage.getItem('cricbid_client_tournaments');
-          if (stored) {
-            const list = JSON.parse(stored);
-            const match = list.find((t: any) => t.slug?.toLowerCase() === slug.toLowerCase());
-            if (match) {
-              setTournament(match);
-              return;
-            }
-          }
-        } catch (e) {}
-
-        // 4. Retry once after delay if first attempt missed cold lambda
+        // 3. Retry once after delay if first attempt missed cold lambda
         if (retryCount < 1) {
           setTimeout(() => fetchTournament(retryCount + 1), 1200);
           return;

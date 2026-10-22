@@ -343,8 +343,15 @@ export default function AdminPage() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        setTournaments((prev) => prev.filter((t) => t.id !== deletingTournament.id));
+        setTournaments((prev) =>
+          prev.filter((t) => t.id !== deletingTournament.id && t.slug !== deletingTournament.slug)
+        );
         setDeletingTournament(null);
+        try {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('cricbid_client_tournaments');
+          }
+        } catch (e) {}
         alert('Tournament deleted successfully');
       } else {
         alert(data.error || 'Failed to delete tournament');

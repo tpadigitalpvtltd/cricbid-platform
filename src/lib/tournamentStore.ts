@@ -213,7 +213,7 @@ export async function getAllTournamentsAsync(): Promise<Tournament[]> {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (!error && Array.isArray(data) && data.length > 0) {
+    if (!error && Array.isArray(data)) {
       const mapped = data.map(mapDbTournamentToModel);
       saveTournamentsToFile(mapped);
       return mapped;
@@ -238,12 +238,17 @@ export async function getTournamentBySlugAsync(slug: string): Promise<Tournament
       .ilike('slug', slug)
       .maybeSingle();
 
-    if (!error && data) {
-      return mapDbTournamentToModel(data);
+    if (!error) {
+      if (data) {
+        return mapDbTournamentToModel(data);
+      }
+      return null;
     }
-  } catch (err) {}
+  } catch (err) {
+    console.warn('Supabase getTournamentBySlug notice:', err);
+  }
 
-  const all = await getAllTournamentsAsync();
+  const all = readTournamentsFromFile();
   return all.find((t) => t.slug.toLowerCase() === slug.toLowerCase()) || null;
 }
 
@@ -372,20 +377,20 @@ export function updateTournament(idOrSlug: string, updates: Partial<Tournament>)
 
 export async function deleteTournamentAsync(idOrSlug: string): Promise<boolean> {
   const tournaments = readTournamentsFromFile();
-  const initialLength = tournaments.length;
   const filtered = tournaments.filter(
     (t) => t.id !== idOrSlug && t.slug.toLowerCase() !== idOrSlug.toLowerCase()
   );
-
-  if (filtered.length === initialLength) return false;
-
   saveTournamentsToFile(filtered);
 
   try {
-    await supabase
+    const { error } = await supabase
       .from('tournaments')
       .delete()
-      .or(`id.eq.${idOrSlug},slug.eq.${idOrSlug}`);
+      .or(`id.eq.${idOrSlug},slug.ilike.${idOrSlug}`);
+
+    if (error) {
+      console.error('Supabase delete tournament error:', error);
+    }
   } catch (err) {
     console.error('Supabase delete tournament error:', err);
   }
@@ -395,20 +400,16 @@ export async function deleteTournamentAsync(idOrSlug: string): Promise<boolean> 
 
 export function deleteTournament(idOrSlug: string): boolean {
   const tournaments = readTournamentsFromFile();
-  const initialLength = tournaments.length;
   const filtered = tournaments.filter(
     (t) => t.id !== idOrSlug && t.slug.toLowerCase() !== idOrSlug.toLowerCase()
   );
-
-  if (filtered.length === initialLength) return false;
-
   saveTournamentsToFile(filtered);
 
   fireAndForget(
     supabase
       .from('tournaments')
       .delete()
-      .or(`id.eq.${idOrSlug},slug.eq.${idOrSlug}`)
+      .or(`id.eq.${idOrSlug},slug.ilike.${idOrSlug}`)
   );
 
   return true;
