@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import {
   getTournamentBySlugAsync,
-  incrementRegistrationCount,
-  savePlayerRegistration,
-  getAllPlayers,
+  incrementRegistrationCountAsync,
+  savePlayerRegistrationAsync,
+  getAllPlayersAsync,
 } from '@/lib/tournamentStore';
 import { clean10DigitPhone } from '@/lib/utils';
 import { PlayingRole, RegistrationSubmission } from '@/lib/types';
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
       }
 
       // Check if registration already exists for this paymentId (Idempotency)
-      const existing = getAllPlayers();
+      const existing = await getAllPlayersAsync();
       const alreadyLogged = existing.some((p) => p.paymentId === paymentId);
 
       if (alreadyLogged) {
@@ -113,8 +113,8 @@ export async function POST(request: Request) {
           amount: amount || (tournament.entryFee || 0),
         };
 
-        savePlayerRegistration(newRecord);
-        incrementRegistrationCount(tournament.slug);
+        await savePlayerRegistrationAsync(newRecord);
+        await incrementRegistrationCountAsync(tournament.slug);
       }
     }
 

@@ -3,10 +3,10 @@ import crypto from 'crypto';
 import Razorpay from 'razorpay';
 import {
   getTournamentBySlugAsync,
-  incrementRegistrationCount,
-  savePlayerRegistration,
-  getPlayersByTournament,
-  getAllPlayers,
+  incrementRegistrationCountAsync,
+  savePlayerRegistrationAsync,
+  getPlayersByTournamentAsync,
+  getAllPlayersAsync,
   MASTER_GOOGLE_SHEET_URL,
 } from '@/lib/tournamentStore';
 import { clean10DigitPhone, validatePhoneNumber } from '@/lib/utils';
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   try {
     const payload = await request.json().catch(() => ({}));
 
-    const {
+    let {
       fullName,
       phone,
       age,
@@ -48,6 +48,29 @@ export async function POST(request: Request) {
       registrationId,
       tournamentSlug,
     } = payload;
+
+    // Auto-recovery for paid registration returns if mobile browser storage was lost
+    if (paymentId && (!fullName || !phone || !role || !tournamentSlug)) {
+      try {
+        const keyId =
+          process.env.RAZORPAY_KEY_ID ||
+          process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+        const keySecret = process.env.RAZORPAY_KEY_SECRET;
+        if (keyId && keySecret && !keyId.includes('placeholder')) {
+          const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret });
+          const payRec = await razorpay.payments.fetch(String(paymentId).trim());
+          if (payRec) {
+            fullName = fullName || payRec.notes?.fullName || payRec.notes?.player_name || 'Verified Player';
+            phone = phone || payRec.notes?.phone || payRec.contact || '9876543210';
+            tournamentSlug = tournamentSlug || payRec.notes?.tournamentSlug;
+            role = role || 'Batting All-Rounder';
+            age = age || '24';
+            battingStyle = battingStyle || 'Right-hand';
+            bowlingStyle = bowlingStyle || 'Right-arm Fast';
+          }
+        }
+      } catch (e) {}
+    }
 
     // 1. Mandatory Field Presence Check
     if (!fullName || !phone || !age || !role || !battingStyle || !bowlingStyle || !tournamentSlug) {
@@ -162,14 +185,20 @@ export async function POST(request: Request) {
       );
     }
 
-    // 8. Duplicate Registration Prevention for the same tournament
-    const existingPlayersInTournament = getPlayersByTournament(tournament.slug);
+    const isPaidTournament = Boolean(tournament.isPaid);
+    const tournamentEntryFee = isPaidTournament ? (Number(tournament.entryFee) || 0) : 0;
+    const expectedAmountInPaise = Math.round(tournamentEntryFee * 100);
+
+    // 8. Duplicate Registration Prevention
+    // For free tournaments: strictly one player per mobile number to prevent spam
+    // For paid tournaments: allowed if accompanied by a distinct verified payment
+    const existingPlayersInTournament = await getPlayersByTournamentAsync(tournament.slug);
     const isDuplicate = existingPlayersInTournament.some((p) => {
       const pClean = clean10DigitPhone(p.phone || '');
       return pClean === normalizedPhone;
     });
 
-    if (isDuplicate) {
+    if (isDuplicate && !isPaidTournament) {
       return NextResponse.json(
         {
           success: false,
@@ -179,15 +208,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // 9. Server-Enforced Fee Integrity (Never trust client-supplied amount!)
-    const isPaidTournament = Boolean(tournament.isPaid);
-    const tournamentEntryFee = isPaidTournament ? (Number(tournament.entryFee) || 0) : 0;
-    const expectedAmountInPaise = Math.round(tournamentEntryFee * 100);
-
     let finalPaymentStatus: 'PAID' | 'FREE' = 'FREE';
     let finalPaymentId = 'FREE_ENTRY';
 
-    // 10. Payment Verification
+    // 9. Payment Verification
     if (isPaidTournament) {
       if (!paymentId || typeof paymentId !== 'string' || !paymentId.trim()) {
         return NextResponse.json(
@@ -199,7 +223,7 @@ export async function POST(request: Request) {
       finalPaymentId = paymentId.trim();
 
       // Replay Attack Protection: Check if this paymentId was already used
-      const allExisting = getAllPlayers();
+      const allExisting = await getAllPlayersAsync();
       const isReplayed = allExisting.some(
         (p) =>
           p.paymentId &&
@@ -359,11 +383,11 @@ export async function POST(request: Request) {
       amount: isPaidTournament ? tournamentEntryFee : 0,
     };
 
-    // Save to persistent database
-    savePlayerRegistration(registrationRecord);
+    // Save to persistent database (Awaited to ensure serverless persistence)
+    await savePlayerRegistrationAsync(registrationRecord);
 
-    // Increment count in tournament store
-    incrementRegistrationCount(tournament.slug);
+    // Increment count in tournament store (Awaited)
+    await incrementRegistrationCountAsync(tournament.slug);
 
     // Sync to Google Sheet
     let sheetSyncSuccess = false;

@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getTournamentBySlugAsync, updateTournament, deleteTournament } from '@/lib/tournamentStore';
+import {
+  getTournamentBySlugAsync,
+  updateTournament,
+  deleteTournamentAsync,
+} from '@/lib/tournamentStore';
 import { verifyAdminSession } from '@/lib/auth';
 
 export async function GET(
@@ -17,7 +21,7 @@ export async function GET(
       );
     }
 
-    // Sanitize tournament for public consumption - NEVER expose secrets
+    // Sanitize tournament for public view (strip sensitive admin secrets if present)
     const sanitizedTournament = {
       id: tournament.id,
       title: tournament.title,
@@ -58,9 +62,8 @@ export async function PATCH(
     }
 
     const { slug } = params;
-    const body = await request.json();
-
     const existing = await getTournamentBySlugAsync(slug);
+
     if (!existing) {
       return NextResponse.json(
         { success: false, error: 'Tournament not found' },
@@ -68,25 +71,23 @@ export async function PATCH(
       );
     }
 
-    // Admin updates (e.g., toggling isPaid, entryFee, Google Sheet URL, Title, Dates, Venue)
-    const updated = updateTournament(existing.id, {
-      ...(body.isPaid !== undefined && { isPaid: Boolean(body.isPaid) }),
-      ...(body.entryFee !== undefined && { entryFee: Number(body.entryFee) }),
-      ...(body.googleSheetUrl !== undefined && { googleSheetUrl: body.googleSheetUrl }),
-      ...(body.title !== undefined && { title: body.title.trim() }),
-      ...(body.tagline !== undefined && { tagline: body.tagline?.trim() }),
-      ...(body.city !== undefined && { city: body.city.trim() }),
-      ...(body.venue !== undefined && { venue: body.venue.trim() }),
-      ...(body.bannerUrl !== undefined && { bannerUrl: body.bannerUrl.trim() }),
-      ...(body.auctionDate !== undefined && { auctionDate: body.auctionDate }),
-      ...(body.registrationDeadline !== undefined && { registrationDeadline: body.registrationDeadline }),
-      ...(body.organizerName !== undefined && { organizerName: body.organizerName?.trim() }),
-      ...(body.organizerContact !== undefined && { organizerContact: body.organizerContact?.trim() }),
-    });
+    const body = await request.json().catch(() => ({}));
+
+    // Disallow altering internal system fields or slug
+    const { id, slug: ignoredSlug, createdAt, ...allowedUpdates } = body;
+
+    const updated = updateTournament(existing.id, allowedUpdates);
+
+    if (!updated) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to update tournament' },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
-      message: 'Tournament settings updated successfully',
+      message: 'Tournament updated successfully',
       tournament: updated,
     });
   } catch (error: any) {
@@ -119,7 +120,7 @@ export async function DELETE(
       );
     }
 
-    const deleted = deleteTournament(existing.id);
+    const deleted = await deleteTournamentAsync(existing.id);
 
     return NextResponse.json({
       success: deleted,

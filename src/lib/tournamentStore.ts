@@ -370,6 +370,29 @@ export function updateTournament(idOrSlug: string, updates: Partial<Tournament>)
   return tournaments[index];
 }
 
+export async function deleteTournamentAsync(idOrSlug: string): Promise<boolean> {
+  const tournaments = readTournamentsFromFile();
+  const initialLength = tournaments.length;
+  const filtered = tournaments.filter(
+    (t) => t.id !== idOrSlug && t.slug.toLowerCase() !== idOrSlug.toLowerCase()
+  );
+
+  if (filtered.length === initialLength) return false;
+
+  saveTournamentsToFile(filtered);
+
+  try {
+    await supabase
+      .from('tournaments')
+      .delete()
+      .or(`id.eq.${idOrSlug},slug.eq.${idOrSlug}`);
+  } catch (err) {
+    console.error('Supabase delete tournament error:', err);
+  }
+
+  return true;
+}
+
 export function deleteTournament(idOrSlug: string): boolean {
   const tournaments = readTournamentsFromFile();
   const initialLength = tournaments.length;
@@ -381,7 +404,6 @@ export function deleteTournament(idOrSlug: string): boolean {
 
   saveTournamentsToFile(filtered);
 
-  // Delete from Supabase
   fireAndForget(
     supabase
       .from('tournaments')
@@ -392,21 +414,34 @@ export function deleteTournament(idOrSlug: string): boolean {
   return true;
 }
 
-export function incrementRegistrationCount(slug: string): number {
+export async function incrementRegistrationCountAsync(slug: string): Promise<number> {
   const tournaments = readTournamentsFromFile();
   const tournament = tournaments.find((t) => t.slug.toLowerCase() === slug.toLowerCase());
   if (tournament) {
     tournament.registeredCount = (tournament.registeredCount || 0) + 1;
     saveTournamentsToFile([...tournaments]);
 
-    // Update in Supabase
-    fireAndForget(
-      supabase
+    try {
+      await supabase
         .from('tournaments')
         .update({ registered_count: tournament.registeredCount })
-        .ilike('slug', slug)
-    );
+        .ilike('slug', slug);
+    } catch (err) {
+      console.error('Supabase increment count error:', err);
+    }
 
+    return tournament.registeredCount;
+  }
+  return 0;
+}
+
+export function incrementRegistrationCount(slug: string): number {
+  fireAndForget(incrementRegistrationCountAsync(slug));
+  const tournaments = readTournamentsFromFile();
+  const tournament = tournaments.find((t) => t.slug.toLowerCase() === slug.toLowerCase());
+  if (tournament) {
+    tournament.registeredCount = (tournament.registeredCount || 0) + 1;
+    saveTournamentsToFile([...tournaments]);
     return tournament.registeredCount;
   }
   return 0;
@@ -416,14 +451,18 @@ export function incrementRegistrationCount(slug: string): number {
 // PLAYER REGISTRATIONS APIS (Supabase Cloud + Local Fallback)
 // =============================================================================
 
-export function savePlayerRegistration(player: RegistrationSubmission): void {
+export async function savePlayerRegistrationAsync(player: RegistrationSubmission): Promise<void> {
   const players = readPlayersFromFile();
-  players.unshift(player);
+  const existingIdx = players.findIndex((p) => p.registrationId === player.registrationId);
+  if (existingIdx >= 0) {
+    players[existingIdx] = player;
+  } else {
+    players.unshift(player);
+  }
   savePlayersToFile(players);
 
-  // Save to Supabase
-  fireAndForget(
-    supabase
+  try {
+    const { error } = await supabase
       .from('players')
       .upsert({
         registration_id: player.registrationId,
@@ -442,8 +481,17 @@ export function savePlayerRegistration(player: RegistrationSubmission): void {
         payment_status: player.paymentStatus || 'FREE',
         amount: Number(player.amount) || 0,
         timestamp: player.timestamp || new Date().toISOString(),
-      })
-  );
+      });
+    if (error) {
+      console.error('Supabase player save error:', error);
+    }
+  } catch (err) {
+    console.error('Supabase player save exception:', err);
+  }
+}
+
+export function savePlayerRegistration(player: RegistrationSubmission): void {
+  fireAndForget(savePlayerRegistrationAsync(player));
 }
 
 export function getPlayersByTournament(slug: string): RegistrationSubmission[] {
@@ -491,10 +539,10 @@ export async function getAllPlayersAsync(): Promise<RegistrationSubmission[]> {
   return readPlayersFromFile();
 }
 
-export function updatePlayer(
+export async function updatePlayerAsync(
   registrationId: string,
   updates: Partial<RegistrationSubmission>
-): RegistrationSubmission | null {
+): Promise<RegistrationSubmission | null> {
   const players = readPlayersFromFile();
   const index = players.findIndex((p) => p.registrationId === registrationId);
   if (index === -1) return null;
@@ -506,7 +554,6 @@ export function updatePlayer(
 
   savePlayersToFile([...players]);
 
-  // Update in Supabase
   const dbUpdates: any = {};
   if (updates.fullName !== undefined) dbUpdates.full_name = updates.fullName;
   if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
@@ -519,15 +566,69 @@ export function updatePlayer(
   if (updates.amount !== undefined) dbUpdates.amount = Number(updates.amount);
 
   if (Object.keys(dbUpdates).length > 0) {
-    fireAndForget(
-      supabase
+    try {
+      await supabase
         .from('players')
         .update(dbUpdates)
-        .eq('registration_id', registrationId)
-    );
+        .eq('registration_id', registrationId);
+    } catch (err) {
+      console.error('Supabase player update error:', err);
+    }
   }
 
   return players[index];
+}
+
+export function updatePlayer(
+  registrationId: string,
+  updates: Partial<RegistrationSubmission>
+): RegistrationSubmission | null {
+  fireAndForget(updatePlayerAsync(registrationId, updates));
+  const players = readPlayersFromFile();
+  const index = players.findIndex((p) => p.registrationId === registrationId);
+  if (index === -1) return null;
+  players[index] = { ...players[index], ...updates };
+  savePlayersToFile([...players]);
+  return players[index];
+}
+
+export async function deletePlayerAsync(registrationId: string): Promise<boolean> {
+  const players = readPlayersFromFile();
+  const target = players.find((p) => p.registrationId === registrationId);
+  if (!target) return false;
+
+  const filtered = players.filter((p) => p.registrationId !== registrationId);
+  savePlayersToFile(filtered);
+
+  try {
+    await supabase
+      .from('players')
+      .delete()
+      .eq('registration_id', registrationId);
+  } catch (err) {
+    console.error('Supabase player delete error:', err);
+  }
+
+  // Decrement tournament registration count if applicable
+  if (target.tournamentSlug) {
+    const tournaments = readTournamentsFromFile();
+    const tourney = tournaments.find(
+      (t) => t.slug.toLowerCase() === target.tournamentSlug.toLowerCase()
+    );
+    if (tourney && tourney.registeredCount && tourney.registeredCount > 0) {
+      tourney.registeredCount = tourney.registeredCount - 1;
+      saveTournamentsToFile([...tournaments]);
+
+      try {
+        await supabase
+          .from('tournaments')
+          .update({ registered_count: tourney.registeredCount })
+          .ilike('slug', target.tournamentSlug);
+      } catch (err) {}
+    }
+  }
+
+  return true;
 }
 
 export function deletePlayer(registrationId: string): boolean {
@@ -538,7 +639,6 @@ export function deletePlayer(registrationId: string): boolean {
   const filtered = players.filter((p) => p.registrationId !== registrationId);
   savePlayersToFile(filtered);
 
-  // Delete from Supabase
   fireAndForget(
     supabase
       .from('players')
@@ -546,7 +646,6 @@ export function deletePlayer(registrationId: string): boolean {
       .eq('registration_id', registrationId)
   );
 
-  // Decrement tournament registration count if applicable
   if (target.tournamentSlug) {
     const tournaments = readTournamentsFromFile();
     const tourney = tournaments.find(

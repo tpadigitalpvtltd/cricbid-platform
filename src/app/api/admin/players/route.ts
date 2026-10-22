@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getAllPlayersAsync, updatePlayer, deletePlayer } from '@/lib/tournamentStore';
+import {
+  getAllPlayersAsync,
+  updatePlayerAsync,
+  deletePlayerAsync,
+} from '@/lib/tournamentStore';
 import { verifyAdminSession } from '@/lib/auth';
 
 export async function GET(request: Request) {
@@ -15,7 +19,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, count: players.length, players });
   } catch (error: any) {
     return NextResponse.json(
-      { success: false, error: error?.message || 'Failed to fetch players' },
+      { success: false, error: error?.message || 'Failed to fetch player registrations' },
       { status: 500 }
     );
   }
@@ -30,7 +34,7 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const { registrationId, updates } = body;
 
     if (!registrationId || !updates) {
@@ -53,7 +57,7 @@ export async function PATCH(request: Request) {
       ...(updates.amount !== undefined && { amount: Number(updates.amount) }),
     };
 
-    const updated = updatePlayer(registrationId, allowedUpdates);
+    const updated = await updatePlayerAsync(registrationId, allowedUpdates);
     if (!updated) {
       return NextResponse.json(
         { success: false, error: 'Player entry not found' },
@@ -98,7 +102,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const deleted = deletePlayer(registrationId);
+    const deleted = await deletePlayerAsync(registrationId);
 
     return NextResponse.json({
       success: deleted,

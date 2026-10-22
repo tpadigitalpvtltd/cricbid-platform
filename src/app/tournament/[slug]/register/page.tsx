@@ -249,8 +249,18 @@ export default function TournamentRegistrationPage() {
             sessionStorage.removeItem('cricbid_pending_registration');
             localStorage.removeItem(`cricbid_pending_reg_${slug}`);
             window.history.replaceState({}, '', window.location.pathname);
+            return;
           }
         }
+
+        // Fallback if browser wiped storage during UPI app switch:
+        // Submit with paymentId and tournamentSlug, server will recover details from Razorpay notes!
+        handleFinalSubmission({
+          paymentId: razorpayPaymentId,
+          orderId: urlParams.get('razorpay_order_id') || urlParams.get('razorpay_payment_link_id') || 'N/A',
+          signature: urlParams.get('razorpay_signature') || undefined,
+        });
+        window.history.replaceState({}, '', window.location.pathname);
       } catch (err) {
         console.error('Error handling payment return:', err);
       }
