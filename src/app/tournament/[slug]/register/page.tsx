@@ -87,9 +87,11 @@ export default function TournamentRegistrationPage() {
   // Fetch tournament info & players
   useEffect(() => {
     if (!slug) return;
-    const fetchTournament = async () => {
+    const fetchTournament = async (retryCount = 0) => {
       try {
         setLoadingTournament(true);
+
+        // 1. Fetch individual slug
         const res = await fetch(`/api/tournaments/${slug}`);
         if (res.ok) {
           const data = await res.json();
@@ -99,7 +101,24 @@ export default function TournamentRegistrationPage() {
           }
         }
 
-        // Fallback: Check local storage for newly created tournament
+        // 2. Fallback: Search in all tournaments
+        try {
+          const allRes = await fetch('/api/tournaments');
+          if (allRes.ok) {
+            const allData = await allRes.json();
+            if (Array.isArray(allData.tournaments)) {
+              const found = allData.tournaments.find(
+                (t: any) => t.slug?.toLowerCase() === slug.toLowerCase()
+              );
+              if (found) {
+                setTournament(found);
+                return;
+              }
+            }
+          }
+        } catch (e) {}
+
+        // 3. Fallback: Check local storage for newly created tournament
         try {
           const stored = localStorage.getItem('cricbid_client_tournaments');
           if (stored) {
@@ -111,6 +130,12 @@ export default function TournamentRegistrationPage() {
             }
           }
         } catch (e) {}
+
+        // 4. Retry once after delay if first attempt missed cold lambda
+        if (retryCount < 1) {
+          setTimeout(() => fetchTournament(retryCount + 1), 1200);
+          return;
+        }
 
         addToast('error', 'Not Found', 'Tournament details could not be found.');
       } catch (err) {
@@ -324,6 +349,44 @@ export default function TournamentRegistrationPage() {
         <p className="text-xs uppercase font-bold tracking-wider text-slate-400">
           Loading CricBid Tournament Details...
         </p>
+      </div>
+    );
+  }
+
+  if (!tournament) {
+    return (
+      <div className="min-h-screen stadium-bg flex flex-col text-slate-100">
+        <Toast toasts={toasts} onDismiss={removeToast} />
+        <Navbar />
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-[#090f1e]/90 border border-slate-800 rounded-3xl p-6 sm:p-8 text-center shadow-2xl backdrop-blur-md">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto mb-4">
+              <Trophy className="w-8 h-8" />
+            </div>
+            <h2 className="text-xl font-black uppercase text-white font-sans">
+              Tournament Not Found
+            </h2>
+            <p className="text-xs text-slate-400 mt-2 mb-6">
+              Could not load tournament details for &quot;{slug}&quot;. The link might be expired or still syncing.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="w-full py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg"
+              >
+                Retry Loading
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push('/')}
+                className="w-full py-3 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:text-white text-xs font-bold uppercase tracking-wider"
+              >
+                Explore All Tournaments
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
