@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Lock, KeyRound, X, ArrowRight, ShieldAlert } from 'lucide-react';
+import { Lock, KeyRound, X, ArrowRight, ShieldAlert, Eye, EyeOff } from 'lucide-react';
 
 interface AdminPinModalProps {
   isOpen: boolean;
@@ -11,17 +11,17 @@ interface AdminPinModalProps {
 
 export const AdminPinModal: React.FC<AdminPinModalProps> = ({ isOpen, onClose }) => {
   const router = useRouter();
-  const [pin, setPin] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Default PIN: admin123
-    const validPin = process.env.NEXT_PUBLIC_ADMIN_PIN || 'admin123';
+    const validPassword = process.env.NEXT_PUBLIC_ADMIN_PIN || 'Shoaib@55';
 
-    if (pin.trim() === validPin) {
+    if (password.trim() === validPassword) {
       if (typeof window !== 'undefined') {
         sessionStorage.setItem('cricbid_admin_auth', 'true');
       }
@@ -29,7 +29,7 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ isOpen, onClose })
       onClose();
       router.push('/admin');
     } else {
-      setError('Invalid Admin Security PIN. (Default: admin123)');
+      setError('Invalid administrator password. Access denied.');
     }
   };
 
@@ -53,7 +53,7 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ isOpen, onClose })
             Super Admin Access
           </h3>
           <p className="text-xs text-slate-400 mt-1">
-            Enter authorized security PIN to manage tournaments & Razorpay gateways
+            Enter master administrator credentials to access platform controls
           </p>
         </div>
 
@@ -64,16 +64,23 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ isOpen, onClose })
                 <KeyRound className="w-4 h-4 text-amber-400" />
               </div>
               <input
-                type="password"
-                placeholder="Enter PIN (Default: admin123)"
-                value={pin}
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Enter Admin Password"
+                value={password}
                 onChange={(e) => {
-                  setPin(e.target.value);
+                  setPassword(e.target.value);
                   if (error) setError('');
                 }}
                 autoFocus
-                className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 font-mono tracking-widest placeholder:tracking-normal placeholder:text-slate-600 transition-all text-center"
+                className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40 font-mono tracking-wider placeholder:tracking-normal placeholder:text-slate-600 transition-all text-center"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
             {error && (
               <p className="text-xs text-rose-400 mt-2 flex items-center justify-center gap-1 font-medium">
@@ -90,10 +97,6 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ isOpen, onClose })
             <span>Unlock Admin Panel</span>
             <ArrowRight className="w-4 h-4" />
           </button>
-
-          <p className="text-[11px] text-center text-slate-500">
-            Default sandbox PIN is <code className="text-amber-300 bg-slate-900 px-1 py-0.5 rounded">admin123</code>
-          </p>
         </form>
 
       </div>

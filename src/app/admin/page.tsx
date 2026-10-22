@@ -19,13 +19,15 @@ import {
   Sliders,
   Users,
   Eye,
+  EyeOff,
   Settings2,
 } from 'lucide-react';
 
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [pinInput, setPinInput] = useState('');
-  const [pinError, setPinError] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -43,16 +45,16 @@ export default function AdminPage() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const validPin = process.env.NEXT_PUBLIC_ADMIN_PIN || 'admin123';
-    if (pinInput.trim() === validPin) {
+    const validPassword = process.env.NEXT_PUBLIC_ADMIN_PIN || 'Shoaib@55';
+    if (passwordInput.trim() === validPassword) {
       if (typeof window !== 'undefined') {
         sessionStorage.setItem('cricbid_admin_auth', 'true');
       }
       setIsAuthenticated(true);
-      setPinError('');
+      setPasswordError('');
       fetchTournaments();
     } else {
-      setPinError('Invalid Admin PIN. (Default: admin123)');
+      setPasswordError('Invalid administrator password. Access denied.');
     }
   };
 
@@ -142,19 +144,35 @@ export default function AdminPage() {
               Super Admin Authentication
             </h2>
             <p className="text-xs text-slate-400 mt-1 mb-6">
-              Enter authorized administrator PIN to access tournament gateway controls.
+              Enter master administrator password to access tournament gateway controls.
             </p>
 
             <form onSubmit={handleLogin} className="space-y-4">
-              <input
-                type="password"
-                placeholder="Enter PIN (Default: admin123)"
-                value={pinInput}
-                onChange={(e) => setPinInput(e.target.value)}
-                autoFocus
-                className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-white text-center font-mono tracking-widest text-sm focus:outline-none focus:border-amber-400"
-              />
-              {pinError && <p className="text-xs text-rose-400 font-medium">{pinError}</p>}
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Enter Admin Password"
+                  value={passwordInput}
+                  onChange={(e) => {
+                    setPasswordInput(e.target.value);
+                    if (passwordError) setPasswordError('');
+                  }}
+                  autoFocus
+                  className="w-full px-4 pr-10 py-3 rounded-xl bg-slate-950 border border-slate-800 text-white text-center font-mono tracking-wider text-sm focus:outline-none focus:border-amber-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-slate-300"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+
+              {passwordError && (
+                <p className="text-xs text-rose-400 font-medium">{passwordError}</p>
+              )}
+
               <button
                 type="submit"
                 className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg"
@@ -185,7 +203,7 @@ export default function AdminPage() {
               <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-rose-500/20 text-rose-400 border border-rose-500/30">
                 Authorized Super Admin
               </span>
-              <span className="text-xs text-slate-400 font-mono">PIN Session Active</span>
+              <span className="text-xs text-slate-400 font-mono">Secure Session Active</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black uppercase text-white font-sans mt-1">
               Tournament Gateway & Razorpay Controls
