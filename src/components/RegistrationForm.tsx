@@ -24,6 +24,9 @@ import {
   Flame,
   Check,
   CreditCard,
+  Gavel,
+  AlertTriangle,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface RegistrationFormProps {
@@ -43,6 +46,7 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
 }) => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isCompressing, setIsCompressing] = useState(false);
+  const [agreedToRules, setAgreedToRules] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const battingStyles: BattingStyle[] = ['Right-hand', 'Left-hand'];
@@ -93,6 +97,10 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
 
     if (!formData.role) {
       newErrors.role = 'Please select your primary playing role';
+    }
+
+    if (!agreedToRules) {
+      newErrors.rules = 'Please agree to tournament rules to proceed';
     }
 
     setErrors(newErrors);
@@ -657,6 +665,81 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
                 {isFree ? '₹0 (FREE)' : `₹${registrationFee}`}
               </span>
             </div>
+          </div>
+
+          {/* TOURNAMENT RULES & TERMS & CONDITIONS (नियम व शर्तें) */}
+          <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-slate-950/90 border border-amber-500/30 shadow-[0_0_25px_rgba(245,158,11,0.08)]">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                  <Gavel className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 block">
+                    Mandatory Player Guidelines
+                  </span>
+                  <h4 className="text-sm sm:text-base font-black uppercase text-white tracking-tight">
+                    Tournament Rules & Terms (नियम व शर्तें)
+                  </h4>
+                </div>
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-rose-400 bg-rose-500/10 px-2.5 py-0.5 rounded-full border border-rose-500/25 shrink-0">
+                Strict Rules
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-400 mb-3.5">
+              Registration karne se pehle sabhi niyam dhyan se padhein aur sehmat hone par hi submit karein:
+            </p>
+
+            <div className="space-y-2.5 text-xs">
+              {/* Rule 1 */}
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-900/80 border border-slate-800/90">
+                <div className="w-6 h-6 rounded-lg bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0 mt-0.5">
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                </div>
+                <div className="flex-1 text-slate-300 leading-relaxed">
+                  <strong className="text-white block sm:inline font-bold">1. Sold hone ke baad Matches me Available rehna zaroori: </strong>
+                  Agar aap auction me kisi team dwara khareede (sold) jaate hain aur matches ke waqt available nahi rehte, toh aapko committee dwara aage ke tournaments ke liye <span className="text-rose-400 font-bold uppercase underline">AUTOMATICALLY BANNED</span> kar diya jayega.
+                </div>
+              </div>
+
+              {/* Rule 2 */}
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-900/80 border border-slate-800/90">
+                <div className="w-6 h-6 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                </div>
+                <div className="flex-1 text-slate-300 leading-relaxed">
+                  <strong className="text-white block sm:inline font-bold">2. Available hon tabhi form bharein: </strong>
+                  Agar aap auction date aur sabhi matches par physically present aur available ho sakte hain, tabhi registration form bharein.
+                </div>
+              </div>
+
+              {/* Rule 3 */}
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-900/80 border border-slate-800/90">
+                <div className="w-6 h-6 rounded-lg bg-cyan-500/15 text-cyan-400 flex items-center justify-center shrink-0 mt-0.5">
+                  <Camera className="w-3.5 h-3.5" />
+                </div>
+                <div className="flex-1 text-slate-300 leading-relaxed">
+                  <strong className="text-white block sm:inline font-bold">3. Genuine Photo & Real Details Mandatory: </strong>
+                  Player ki asli passport/selfie photo aur sahi naam/details hona anivarya hai. Photo na dalne par ya galat naam hone par organizer ke paas player ko auction list se <span className="text-amber-400 font-bold">Hataane (Disqualify karne)</span> ka poora adhikaar hai.
+                </div>
+              </div>
+            </div>
+
+            {/* Rules Acceptance Checkbox */}
+            <label className="flex items-center gap-3 mt-3.5 pt-3 border-t border-slate-800/80 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={agreedToRules}
+                onChange={(e) => setAgreedToRules(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-amber-400"
+              />
+              <span className="text-xs text-slate-200 font-bold">
+                Main sabhi niyam aur sharto se sehmat hoon (I agree to all tournament terms & conditions)
+              </span>
+            </label>
+            {errors.rules && <p className="text-xs text-rose-400 font-bold mt-1.5">{errors.rules}</p>}
           </div>
 
           {/* Big Glowing Action Button */}
