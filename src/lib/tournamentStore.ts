@@ -565,6 +565,7 @@ export async function updatePlayerAsync(
   if (updates.stats !== undefined) dbUpdates.stats = updates.stats;
   if (updates.paymentStatus !== undefined) dbUpdates.payment_status = updates.paymentStatus;
   if (updates.amount !== undefined) dbUpdates.amount = Number(updates.amount);
+  if (updates.photoUrl !== undefined) dbUpdates.photo_url = updates.photoUrl;
 
   if (Object.keys(dbUpdates).length > 0) {
     try {

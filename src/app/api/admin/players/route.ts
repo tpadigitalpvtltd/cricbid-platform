@@ -55,6 +55,7 @@ export async function PATCH(request: Request) {
       ...(updates.stats !== undefined && { stats: updates.stats }),
       ...(updates.paymentStatus && { paymentStatus: updates.paymentStatus }),
       ...(updates.amount !== undefined && { amount: Number(updates.amount) }),
+      ...(updates.photoUrl !== undefined && { photoUrl: updates.photoUrl }),
     };
 
     const updated = await updatePlayerAsync(registrationId, allowedUpdates);

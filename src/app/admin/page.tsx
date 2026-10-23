@@ -945,8 +945,19 @@ export default function AdminPage() {
                     className="p-4 sm:p-5 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all"
                   >
                     <div className="flex items-start gap-3 min-w-0">
-                      <div className="w-12 h-12 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center text-amber-400 font-bold shrink-0">
-                        {player.fullName ? player.fullName.charAt(0).toUpperCase() : 'P'}
+                      <div className="w-12 h-12 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center text-amber-400 font-bold shrink-0 overflow-hidden">
+                        {player.photoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={player.photoUrl}
+                            alt={player.fullName}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : player.fullName ? (
+                          player.fullName.charAt(0).toUpperCase()
+                        ) : (
+                          'P'
+                        )}
                       </div>
 
                       <div className="min-w-0">
@@ -1605,6 +1616,60 @@ export default function AdminPage() {
                     onChange={(e) => setEditingPlayer({ ...editingPlayer, phone: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs focus:outline-none focus:border-cyan-400"
                   />
+                </div>
+              </div>
+
+              {/* Player Photo Upload */}
+              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800">
+                <label className="text-xs text-slate-400 font-bold block mb-2">Player Passport / Profile Photo</label>
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-xl bg-slate-900 border border-slate-700 overflow-hidden flex items-center justify-center shrink-0">
+                    {editingPlayer.photoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={editingPlayer.photoUrl} alt="Player" className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-7 h-7 text-slate-600" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <input
+                      type="file"
+                      id="admin-player-photo-input"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const compressed = await compressImage(file, 600, 600, 0.85);
+                          setEditingPlayer({ ...editingPlayer, photoUrl: compressed });
+                        } catch (err) {
+                          alert('Failed to process image');
+                        }
+                      }}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label
+                        htmlFor="admin-player-photo-input"
+                        className="px-3.5 py-1.5 rounded-xl bg-cyan-500/20 border border-cyan-500/40 hover:bg-cyan-500/30 text-cyan-300 text-xs font-bold cursor-pointer inline-flex items-center gap-1.5 transition-colors"
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>{editingPlayer.photoUrl ? 'Change Photo from Gallery' : 'Upload from Gallery'}</span>
+                      </label>
+                      {editingPlayer.photoUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingPlayer({ ...editingPlayer, photoUrl: '' })}
+                          className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1.5">
+                      Select photo from phone gallery or PC. Displays on pass and tournament player card.
+                    </p>
+                  </div>
                 </div>
               </div>
 
