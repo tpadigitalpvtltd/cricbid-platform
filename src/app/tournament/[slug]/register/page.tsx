@@ -603,32 +603,34 @@ export default function TournamentRegistrationPage() {
         {activeView === 'register' && (
           <>
             {/* Mobile Tab Switcher */}
-            <div className="lg:hidden sticky top-16 z-30 bg-[#080d1a]/95 backdrop-blur-md border-b border-slate-800 px-4 py-2 flex items-center justify-center gap-2 mb-6">
-              <button
-                type="button"
-                onClick={() => setActiveMobileTab('form')}
-                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
-                  activeMobileTab === 'form'
-                    ? 'bg-amber-400 text-slate-950 shadow-md'
-                    : 'bg-slate-950 text-slate-400 hover:text-white'
-                }`}
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span>Registration Form</span>
-              </button>
+            <div className="lg:hidden sticky top-16 z-30 bg-[#080d1a]/95 backdrop-blur-xl border-b border-slate-800/80 px-4 py-2.5 mb-6">
+              <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 shadow-xl max-w-md mx-auto">
+                <button
+                  type="button"
+                  onClick={() => setActiveMobileTab('form')}
+                  className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                    activeMobileTab === 'form'
+                      ? 'bg-amber-400 text-slate-950 shadow-md font-black'
+                      : 'text-slate-400 hover:text-white font-bold'
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Registration Form</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveMobileTab('preview')}
-                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
-                  activeMobileTab === 'preview'
-                    ? 'bg-emerald-400 text-slate-950 shadow-md'
-                    : 'bg-slate-950 text-slate-400 hover:text-white'
-                }`}
-              >
-                <Eye className="w-3.5 h-3.5" />
-                <span>Live Card Preview</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveMobileTab('preview')}
+                  className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                    activeMobileTab === 'preview'
+                      ? 'bg-emerald-400 text-slate-950 shadow-md font-black'
+                      : 'text-slate-400 hover:text-white font-bold'
+                  }`}
+                >
+                  <Eye className="w-4 h-4" />
+                  <span>Live Card Preview</span>
+                </button>
+              </div>
             </div>
 
             {/* Desktop Split Layout (Form 60% : Preview 40%) */}

@@ -238,10 +238,8 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
       </div>
 
       {/* SECTION 1: Player Identity & Photo */}
-      <div className="relative rounded-3xl p-[1px] bg-gradient-to-b from-amber-400/30 via-slate-800 to-slate-900 shadow-2xl">
-        <div className="bg-[#090f1e]/95 backdrop-blur-xl rounded-[23px] p-5 sm:p-7">
-          
-          <div className="flex items-center justify-between pb-4 mb-6 border-b border-slate-800">
+      <div className="relative rounded-3xl bg-[#0c1222] border border-slate-800 shadow-xl p-5 sm:p-7">
+        <div className="flex items-center justify-between pb-4 mb-6 border-b border-slate-800">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center text-slate-950 font-black shadow-lg">
                 1
@@ -461,15 +459,11 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
             </div>
 
           </div>
-
         </div>
-      </div>
 
       {/* SECTION 2: Cricket Role & Playing Specialization */}
-      <div className="relative rounded-3xl p-[1px] bg-gradient-to-b from-emerald-500/30 via-slate-800 to-slate-900 shadow-2xl">
-        <div className="bg-[#090f1e]/95 backdrop-blur-xl rounded-[23px] p-5 sm:p-7">
-          
-          <div className="flex items-center justify-between pb-4 mb-6 border-b border-slate-800">
+      <div className="relative rounded-3xl bg-[#0c1222] border border-slate-800 shadow-xl p-5 sm:p-7">
+        <div className="flex items-center justify-between pb-4 mb-6 border-b border-slate-800">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-slate-950 font-black shadow-lg">
                 2
@@ -558,17 +552,12 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
                 })}
               </div>
             </div>
-
           </div>
-
         </div>
-      </div>
 
       {/* SECTION 3: Career Achievements & Quick Tags */}
-      <div className="relative rounded-3xl p-[1px] bg-gradient-to-b from-cyan-500/30 via-slate-800 to-slate-900 shadow-2xl">
-        <div className="bg-[#090f1e]/95 backdrop-blur-xl rounded-[23px] p-5 sm:p-7">
-          
-          <div className="flex items-center gap-3 pb-4 mb-4 border-b border-slate-800">
+      <div className="relative rounded-3xl bg-[#0c1222] border border-slate-800 shadow-xl p-5 sm:p-7">
+        <div className="flex items-center gap-3 pb-4 mb-4 border-b border-slate-800">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-400 flex items-center justify-center text-slate-950 font-black shadow-lg">
               3
             </div>
@@ -615,212 +604,205 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
               <span>{formData.stats.length}/400</span>
             </div>
           </div>
-
         </div>
-      </div>
 
       {/* SECTION 4: Final Payment & Instant Pass Issuance */}
-      <div
-        className={`relative rounded-3xl p-[1px] shadow-2xl transition-all ${
-          isFree
-            ? 'bg-gradient-to-r from-emerald-500 via-green-400 to-teal-500 shadow-[0_0_35px_rgba(16,232,123,0.2)]'
-            : 'bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 shadow-[0_0_35px_rgba(245,158,11,0.25)]'
-        }`}
-      >
-        <div className="bg-[#090f1e]/98 backdrop-blur-2xl rounded-[23px] p-5 sm:p-7">
-          
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span
-                  className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full ${
-                    isFree
-                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                  }`}
-                >
-                  {isFree ? '⚡ 100% Free Entry' : '🔒 Verified Payment'}
-                </span>
-                <span className="text-[10px] text-slate-400">• Official Player Pass</span>
-              </div>
-              <h4 className="text-xl font-black text-white uppercase tracking-tight font-sans">
-                {isFree ? 'Claim Free Auction Pass' : 'Complete Registration & Issue Ticket'}
-              </h4>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {isFree
-                  ? 'Zero registration charges. Instant player pass generated with WhatsApp share link.'
-                  : 'Pay official entry fee via Razorpay UPI / Cards. Pass instantly generated upon verification.'}
-              </p>
-            </div>
-
-            <div className="px-5 py-3 rounded-2xl bg-slate-950 border border-slate-800 text-center sm:text-right shrink-0">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
-                Registration Fee
-              </span>
+      <div className="relative rounded-3xl bg-[#0c1222] border border-slate-800 shadow-2xl p-5 sm:p-7">
+        
+        {/* Header row with Badge and Pass Type */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-5 mb-5 border-b border-slate-800/80">
+          <div>
+            <div className="flex items-center gap-2 mb-1.5">
               <span
-                className={`text-3xl font-black font-sans ${
-                  isFree ? 'text-emerald-400' : 'text-amber-400'
+                className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full flex items-center gap-1.5 ${
+                  isFree
+                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-amber-400/15 text-amber-400 border border-amber-400/30'
                 }`}
               >
-                {isFree ? '₹0 (FREE)' : `₹${registrationFee}`}
+                <span className={`w-1.5 h-1.5 rounded-full ${isFree ? 'bg-emerald-400' : 'bg-amber-400'} animate-ping`} />
+                {isFree ? 'Free Registration' : 'Verified Auction Pass'}
               </span>
+              <span className="text-[11px] text-slate-400 font-medium">• Official Player Pass</span>
             </div>
-          </div>
-
-          {/* TOURNAMENT RULES & TERMS & CONDITIONS (नियम व शर्तें) */}
-          <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-slate-950/90 border border-amber-500/30 shadow-[0_0_25px_rgba(245,158,11,0.08)]">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-                  <Gavel className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 block">
-                    Mandatory Player Guidelines
-                  </span>
-                  <h4 className="text-sm sm:text-base font-black uppercase text-white tracking-tight">
-                    Tournament Rules & Terms (नियम व शर्तें)
-                  </h4>
-                </div>
-              </div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-rose-400 bg-rose-500/10 px-2.5 py-0.5 rounded-full border border-rose-500/25 shrink-0">
-                Strict Rules
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-400 mb-3.5">
-              Registration karne se pehle sabhi niyam dhyan se padhein aur sehmat hone par hi submit karein:
+            <h4 className="text-xl sm:text-2xl font-black text-white uppercase tracking-tight font-sans">
+              {isFree ? 'Claim Free Auction Pass' : 'Complete Registration & Issue Ticket'}
+            </h4>
+            <p className="text-xs text-slate-400 mt-1">
+              {isFree
+                ? 'Zero registration charges. Instant player pass generated with WhatsApp share link.'
+                : 'Pay official entry fee via Razorpay UPI / Cards. Pass instantly generated upon verification.'}
             </p>
+          </div>
 
-            <div className="space-y-2.5 text-xs">
-              {/* Rule 1 */}
-              <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-900/80 border border-slate-800/90">
-                <div className="w-6 h-6 rounded-lg bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0 mt-0.5">
-                  <ShieldAlert className="w-3.5 h-3.5" />
-                </div>
-                <div className="flex-1 text-slate-300 leading-relaxed">
-                  <strong className="text-white block sm:inline font-bold">1. Sold hone ke baad Matches me Available rehna zaroori: </strong>
-                  Agar aap auction me kisi team dwara khareede (sold) jaate hain aur matches ke waqt available nahi rehte, toh aapko committee dwara aage ke tournaments ke liye <span className="text-rose-400 font-bold uppercase underline">AUTOMATICALLY BANNED</span> kar diya jayega.
-                </div>
+          {/* Fee Callout Box */}
+          <div className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-950 border border-slate-800 text-center sm:text-right shrink-0">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+              Registration Fee
+            </span>
+            <span
+              className={`text-2xl sm:text-3xl font-black font-sans ${
+                isFree ? 'text-emerald-400' : 'text-amber-400'
+              }`}
+            >
+              {isFree ? 'FREE (₹0)' : `₹${registrationFee}`}
+            </span>
+          </div>
+        </div>
+
+        {/* TOURNAMENT RULES & TERMS & CONDITIONS (नियम व शर्तें) */}
+        <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800/90 shadow-inner">
+          <div className="flex items-center justify-between mb-3.5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                <Gavel className="w-4 h-4" />
               </div>
-
-              {/* Rule 2 */}
-              <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-900/80 border border-slate-800/90">
-                <div className="w-6 h-6 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                </div>
-                <div className="flex-1 text-slate-300 leading-relaxed">
-                  <strong className="text-white block sm:inline font-bold">2. Available hon tabhi form bharein: </strong>
-                  Agar aap auction date aur sabhi matches par physically present aur available ho sakte hain, tabhi registration form bharein.
-                </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 block">
+                  Mandatory Player Guidelines
+                </span>
+                <h4 className="text-sm sm:text-base font-black uppercase text-white tracking-tight">
+                  Tournament Rules & Terms (नियम व शर्तें)
+                </h4>
               </div>
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-rose-400 bg-rose-500/10 px-2.5 py-0.5 rounded-full border border-rose-500/25 shrink-0">
+              Strict Rules
+            </span>
+          </div>
 
-              {/* Rule 3 */}
-              <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-900/80 border border-slate-800/90">
-                <div className="w-6 h-6 rounded-lg bg-cyan-500/15 text-cyan-400 flex items-center justify-center shrink-0 mt-0.5">
-                  <Camera className="w-3.5 h-3.5" />
-                </div>
-                <div className="flex-1 text-slate-300 leading-relaxed">
-                  <strong className="text-white block sm:inline font-bold">3. Genuine Photo & Real Details Mandatory: </strong>
-                  Player ki asli passport/selfie photo aur sahi naam/details hona anivarya hai. Photo na dalne par ya galat naam hone par organizer ke paas player ko auction list se <span className="text-amber-400 font-bold">Hataane (Disqualify karne)</span> ka poora adhikaar hai.
-                </div>
+          <p className="text-xs text-slate-400 mb-3.5">
+            Registration karne se pehle sabhi niyam dhyan se padhein aur sehmat hone par hi submit karein:
+          </p>
+
+          <div className="space-y-2.5 text-xs">
+            {/* Rule 1 */}
+            <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-900/90 border border-slate-800">
+              <div className="w-6 h-6 rounded-lg bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0 mt-0.5">
+                <ShieldAlert className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex-1 text-slate-300 leading-relaxed">
+                <strong className="text-white block sm:inline font-bold">1. Sold hone ke baad Matches me Available rehna zaroori: </strong>
+                Agar aap auction me kisi team dwara khareede (sold) jaate hain aur matches ke waqt available nahi rehte, toh aapko committee dwara aage ke tournaments ke liye <span className="text-rose-400 font-bold uppercase underline">AUTOMATICALLY BANNED</span> kar diya jayega.
               </div>
             </div>
 
-            {/* Rules Acceptance Checkbox */}
-            <label className="flex items-center gap-3 mt-3.5 pt-3 border-t border-slate-800/80 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={agreedToRules}
-                onChange={(e) => setAgreedToRules(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-amber-400"
-              />
-              <span className="text-xs text-slate-200 font-bold">
-                Main sabhi niyam aur sharto se sehmat hoon (I agree to all tournament terms & conditions)
-              </span>
-            </label>
-            {errors.rules && <p className="text-xs text-rose-400 font-bold mt-1.5">{errors.rules}</p>}
+            {/* Rule 2 */}
+            <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-900/90 border border-slate-800">
+              <div className="w-6 h-6 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+                <AlertTriangle className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex-1 text-slate-300 leading-relaxed">
+                <strong className="text-white block sm:inline font-bold">2. Available hon tabhi form bharein: </strong>
+                Agar aap auction date aur sabhi matches par physically present aur available ho sakte hain, tabhi registration form bharein.
+              </div>
+            </div>
+
+            {/* Rule 3 */}
+            <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-900/90 border border-slate-800">
+              <div className="w-6 h-6 rounded-lg bg-cyan-500/15 text-cyan-400 flex items-center justify-center shrink-0 mt-0.5">
+                <Camera className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex-1 text-slate-300 leading-relaxed">
+                <strong className="text-white block sm:inline font-bold">3. Genuine Photo & Real Details Mandatory: </strong>
+                Player ki asli passport/selfie photo aur sahi naam/details hona anivarya hai. Photo na dalne par ya galat naam hone par organizer ke paas player ko auction list se <span className="text-amber-400 font-bold">Hataane (Disqualify karne)</span> ka poora adhikaar hai.
+              </div>
+            </div>
           </div>
 
-          {/* Big Glowing Action Button */}
-          {isFree ? (
+          {/* Rules Acceptance Checkbox */}
+          <label className="flex items-center gap-3 mt-3.5 pt-3 border-t border-slate-800/80 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={agreedToRules}
+              onChange={(e) => setAgreedToRules(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-amber-400"
+            />
+            <span className="text-xs text-slate-200 font-bold">
+              Main sabhi niyam aur sharto se sehmat hoon (I agree to all tournament terms & conditions)
+            </span>
+          </label>
+          {errors.rules && <p className="text-xs text-rose-400 font-bold mt-1.5">{errors.rules}</p>}
+        </div>
+
+        {/* Big Glowing Action Button */}
+        {isFree ? (
+          <button
+            type="submit"
+            disabled={isLoading || isCompressing}
+            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 via-green-400 to-emerald-500 hover:from-emerald-400 hover:to-green-400 text-slate-950 font-black text-base uppercase tracking-wider shadow-[0_0_25px_rgba(16,232,123,0.35)] transition-all transform active:scale-[0.99] flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed group cursor-pointer"
+          >
+            {isLoading ? (
+              <div className="flex items-center gap-2.5">
+                <div className="w-5 h-5 border-3 border-slate-950 border-t-transparent rounded-full animate-spin"></div>
+                <span>Generating Official Player Pass...</span>
+              </div>
+            ) : (
+              <>
+                <CheckCircle2 className="w-5 h-5 text-slate-950" />
+                <span>Confirm Free Registration & Get Pass (₹0)</span>
+                <ArrowRight className="w-5 h-5 text-slate-950 group-hover:translate-x-1 transition-transform" />
+              </>
+            )}
+          </button>
+        ) : (
+          <div className="space-y-3">
             <button
               type="submit"
               disabled={isLoading || isCompressing}
-              className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 via-green-400 to-emerald-500 hover:from-emerald-400 hover:to-green-400 text-slate-950 font-black text-base uppercase tracking-wider shadow-[0_0_25px_rgba(16,232,123,0.4)] transition-all transform active:scale-[0.99] flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed group"
+              className="w-full py-4 sm:py-5 px-6 rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-base sm:text-lg uppercase tracking-wider shadow-[0_0_35px_rgba(245,158,11,0.35)] border border-yellow-200/60 transition-all transform active:scale-[0.99] flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed group cursor-pointer"
             >
               {isLoading ? (
                 <div className="flex items-center gap-2.5">
-                  <div className="w-5 h-5 border-3 border-slate-950 border-t-transparent rounded-full animate-spin"></div>
-                  <span>Generating Official Player Pass...</span>
+                  <div className="w-6 h-6 border-3 border-slate-950 border-t-transparent rounded-full animate-spin"></div>
+                  <span>Connecting Razorpay Gateway...</span>
                 </div>
               ) : (
                 <>
-                  <CheckCircle2 className="w-5 h-5 text-slate-950" />
-                  <span>Confirm Free Registration & Get Pass (₹0)</span>
-                  <ArrowRight className="w-5 h-5 text-slate-950 group-hover:translate-x-1 transition-transform" />
+                  <CreditCard className="w-6 h-6 text-slate-950 stroke-[2.5]" />
+                  <span>PAY ₹{registrationFee} & ISSUE OFFICIAL PASS</span>
+                  <ArrowRight className="w-6 h-6 text-slate-950 stroke-[2.5] group-hover:translate-x-1.5 transition-transform" />
                 </>
               )}
             </button>
-          ) : (
-            <div className="space-y-3">
-              <button
-                type="submit"
-                disabled={isLoading || isCompressing}
-                className="w-full py-5 px-6 rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-300 to-emerald-400 hover:from-amber-300 hover:to-emerald-300 text-slate-950 font-black text-base sm:text-lg uppercase tracking-wider shadow-[0_0_35px_rgba(245,158,11,0.5)] border-2 border-yellow-200 transition-all transform active:scale-[0.99] flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed group cursor-pointer"
-              >
-                {isLoading ? (
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-6 h-6 border-3 border-slate-950 border-t-transparent rounded-full animate-spin"></div>
-                    <span>Connecting Razorpay Gateway...</span>
-                  </div>
-                ) : (
-                  <>
-                    <CreditCard className="w-6 h-6 text-slate-950 stroke-[2.5]" />
-                    <span>PAY ₹{registrationFee} & ISSUE OFFICIAL PASS</span>
-                    <ArrowRight className="w-6 h-6 text-slate-950 stroke-[2.5] group-hover:translate-x-1.5 transition-transform" />
-                  </>
-                )}
-              </button>
 
-              {/* Supported Payment Gateways / UPI Bar */}
-              <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-300">
-                <span className="font-bold text-amber-400">Supported:</span>
-                <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200 font-mono">Google Pay</span>
-                <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200 font-mono">PhonePe</span>
-                <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200 font-mono">Paytm</span>
-                <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200 font-mono">BHIM / UPI</span>
-                <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200 font-mono">Cards / NetBanking</span>
-              </div>
+            {/* Supported Payment Gateways / UPI Bar */}
+            <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-300">
+              <span className="font-bold text-amber-400">Supported:</span>
+              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200 font-mono">Google Pay</span>
+              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200 font-mono">PhonePe</span>
+              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200 font-mono">Paytm</span>
+              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200 font-mono">BHIM / UPI</span>
+              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200 font-mono">Cards / NetBanking</span>
             </div>
-          )}
-
-          {/* Trust & Guarantee Badges */}
-          <div className="flex flex-wrap items-center justify-center gap-4 mt-4 pt-3 border-t border-slate-800/80 text-[11px] text-slate-400">
-            {isFree ? (
-              <>
-                <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                  <Zap className="w-3.5 h-3.5" /> Instant Confirmation
-                </span>
-                <span>•</span>
-                <span>Cloud PostgreSQL Secured</span>
-                <span>•</span>
-                <span>Official Digital Pass Included</span>
-              </>
-            ) : (
-              <>
-                <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                  <ShieldCheck className="w-3.5 h-3.5" /> Razorpay 256-Bit SSL Encrypted
-                </span>
-                <span>•</span>
-                <span>UPI (GPay / PhonePe / Paytm)</span>
-                <span>•</span>
-                <span>Auto-Reconciled Cloud Storage</span>
-              </>
-            )}
           </div>
+        )}
 
+        {/* Trust & Guarantee Badges */}
+        <div className="flex flex-wrap items-center justify-center gap-4 mt-4 pt-4 border-t border-slate-800/80 text-[11px] text-slate-400">
+          {isFree ? (
+            <>
+              <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                <Zap className="w-3.5 h-3.5" /> Instant Confirmation
+              </span>
+              <span>•</span>
+              <span>Cloud PostgreSQL Secured</span>
+              <span>•</span>
+              <span>Official Digital Pass Included</span>
+            </>
+          ) : (
+            <>
+              <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                <ShieldCheck className="w-3.5 h-3.5" /> Razorpay 256-Bit SSL Encrypted
+              </span>
+              <span>•</span>
+              <span>UPI (GPay / PhonePe / Paytm)</span>
+              <span>•</span>
+              <span>Instant Pass Generation</span>
+            </>
+          )}
         </div>
+
       </div>
 
     </form>
