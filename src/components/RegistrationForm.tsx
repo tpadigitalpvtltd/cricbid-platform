@@ -23,6 +23,7 @@ import {
   Swords,
   Flame,
   Check,
+  CreditCard,
 } from 'lucide-react';
 
 interface RegistrationFormProps {
@@ -679,24 +680,36 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
               )}
             </button>
           ) : (
-            <button
-              type="submit"
-              disabled={isLoading || isCompressing}
-              className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-base uppercase tracking-wider shadow-[0_0_30px_rgba(245,158,11,0.4)] transition-all transform active:scale-[0.99] flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed group"
-            >
-              {isLoading ? (
-                <div className="flex items-center gap-2.5">
-                  <div className="w-5 h-5 border-3 border-slate-950 border-t-transparent rounded-full animate-spin"></div>
-                  <span>Launching Razorpay Secure Gateway...</span>
-                </div>
-              ) : (
-                <>
-                  <Lock className="w-5 h-5 text-slate-950" />
-                  <span>Proceed to Pay ₹{registrationFee} & Get Pass</span>
-                  <ArrowRight className="w-5 h-5 text-slate-950 group-hover:translate-x-1 transition-transform" />
-                </>
-              )}
-            </button>
+            <div className="space-y-3">
+              <button
+                type="submit"
+                disabled={isLoading || isCompressing}
+                className="w-full py-5 px-6 rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-300 to-emerald-400 hover:from-amber-300 hover:to-emerald-300 text-slate-950 font-black text-base sm:text-lg uppercase tracking-wider shadow-[0_0_35px_rgba(245,158,11,0.5)] border-2 border-yellow-200 transition-all transform active:scale-[0.99] flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed group cursor-pointer"
+              >
+                {isLoading ? (
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-6 h-6 border-3 border-slate-950 border-t-transparent rounded-full animate-spin"></div>
+                    <span>Connecting Razorpay Gateway...</span>
+                  </div>
+                ) : (
+                  <>
+                    <CreditCard className="w-6 h-6 text-slate-950 stroke-[2.5]" />
+                    <span>PAY ₹{registrationFee} & ISSUE OFFICIAL PASS</span>
+                    <ArrowRight className="w-6 h-6 text-slate-950 stroke-[2.5] group-hover:translate-x-1.5 transition-transform" />
+                  </>
+                )}
+              </button>
+
+              {/* Supported Payment Gateways / UPI Bar */}
+              <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-300">
+                <span className="font-bold text-amber-400">Supported:</span>
+                <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200 font-mono">Google Pay</span>
+                <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200 font-mono">PhonePe</span>
+                <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200 font-mono">Paytm</span>
+                <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200 font-mono">BHIM / UPI</span>
+                <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200 font-mono">Cards / NetBanking</span>
+              </div>
+            </div>
           )}
 
           {/* Trust & Guarantee Badges */}

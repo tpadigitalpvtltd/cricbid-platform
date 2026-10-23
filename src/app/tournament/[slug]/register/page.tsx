@@ -20,6 +20,10 @@ import {
   Eye,
   UserPlus,
   Phone,
+  CreditCard,
+  Lock,
+  ArrowRight,
+  ShieldCheck,
 } from 'lucide-react';
 
 declare global {
@@ -515,13 +519,40 @@ export default function TournamentRegistrationPage() {
                   </>
                 )}
               </div>
+
+              {/* High-Impact Hero Action Button */}
+              <div className="mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveView('register');
+                    setActiveMobileTab('form');
+                    const formEl = document.getElementById('registration-section');
+                    if (formEl) formEl.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className={`w-full sm:w-auto px-6 py-3.5 rounded-2xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2.5 shadow-2xl transition-all transform active:scale-95 cursor-pointer ${
+                    isFree
+                      ? 'bg-gradient-to-r from-emerald-400 to-green-500 hover:from-emerald-300 hover:to-green-400 text-slate-950 shadow-[0_0_25px_rgba(16,185,129,0.5)]'
+                      : 'bg-gradient-to-r from-amber-400 via-yellow-300 to-emerald-400 hover:from-amber-300 hover:to-emerald-300 text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.6)] border-2 border-yellow-200'
+                  }`}
+                >
+                  <CreditCard className="w-5 h-5 text-slate-950 stroke-[2.5]" />
+                  <span>{isFree ? '⚡ FILL FREE REGISTRATION FORM' : `💳 PAY ₹${entryFee} & GET OFFICIAL PASS`}</span>
+                  <ArrowRight className="w-5 h-5 text-slate-950 stroke-[2.5]" />
+                </button>
+
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span>{isFree ? '100% Free Entry • Official Pass Included' : 'Razorpay 256-Bit SSL • Instant Pass Generation'}</span>
+                </div>
+              </div>
             </div>
 
             {/* Quick Status Pill */}
-            <div className="shrink-0">
-              <div className="px-4 py-2 rounded-2xl bg-slate-900/90 border border-slate-800 text-right">
+            <div className="shrink-0 hidden sm:block">
+              <div className="px-5 py-3 rounded-2xl bg-slate-900/90 border border-slate-800 text-right shadow-lg">
                 <span className="text-[10px] font-bold uppercase text-slate-400 block">Registration Fee</span>
-                <span className={`text-xl sm:text-2xl font-black ${isFree ? 'text-emerald-400' : 'text-amber-400'}`}>
+                <span className={`text-2xl lg:text-3xl font-black ${isFree ? 'text-emerald-400' : 'text-amber-400'}`}>
                   {isFree ? 'FREE (₹0)' : `₹${entryFee}`}
                 </span>
               </div>
@@ -553,19 +584,24 @@ export default function TournamentRegistrationPage() {
         </div>
 
         {/* View Toggle Bar (Register Form vs Registered Players Pool) */}
-        <div className="flex items-center justify-between gap-3 mb-6 bg-slate-900/80 p-2 rounded-2xl border border-slate-800">
-          <div className="flex items-center gap-2">
+        <div id="registration-section" className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6 bg-slate-900/90 p-2.5 rounded-2xl border border-slate-800 shadow-xl">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
             <button
               type="button"
-              onClick={() => setActiveView('register')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
+              onClick={() => {
+                setActiveView('register');
+                setActiveMobileTab('form');
+              }}
+              className={`px-5 py-3 rounded-xl text-xs sm:text-sm font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2.5 shadow-lg ${
                 activeView === 'register'
-                  ? 'bg-amber-400 text-slate-950 shadow-md'
-                  : 'bg-slate-950/60 text-slate-300 hover:text-white'
+                  ? isFree
+                    ? 'bg-gradient-to-r from-emerald-400 to-green-500 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)] ring-2 ring-emerald-300'
+                    : 'bg-gradient-to-r from-amber-400 via-yellow-300 to-emerald-400 text-slate-950 shadow-[0_0_30px_rgba(245,158,11,0.6)] border-2 border-yellow-200 ring-4 ring-yellow-400/30'
+                  : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
               }`}
             >
-              <UserPlus className="w-4 h-4" />
-              <span>Register as Player</span>
+              <CreditCard className="w-4 h-4 text-slate-950 stroke-[2.5]" />
+              <span>{isFree ? '⚡ FREE REGISTRATION FORM' : `💳 PAY ₹${entryFee} & REGISTER AS PLAYER`}</span>
             </button>
 
             <button
@@ -574,10 +610,10 @@ export default function TournamentRegistrationPage() {
                 setActiveView('players');
                 fetchRegisteredPlayers();
               }}
-              className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
+              className={`px-5 py-3 rounded-xl text-xs sm:text-sm font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg ${
                 activeView === 'players'
-                  ? 'bg-emerald-400 text-slate-950 shadow-md'
-                  : 'bg-slate-950/60 text-slate-300 hover:text-white'
+                  ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-[0_0_20px_rgba(6,182,212,0.4)] ring-2 ring-cyan-300'
+                  : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
               }`}
             >
               <Users className="w-4 h-4" />
@@ -652,11 +688,43 @@ export default function TournamentRegistrationPage() {
 
         {/* View 2: All Added Players Directory */}
         {(activeView === 'players' || registeredPlayers.length > 0) && (
-          <div className="mt-8">
+          <div className="mt-8 pb-16 lg:pb-0">
             <PlayersDirectory
               players={registeredPlayers}
               tournamentTitle={tournament?.title || 'Cricket Tournament'}
             />
+          </div>
+        )}
+
+        {/* Mobile Sticky Floating Bottom Payment Bar */}
+        {!registeredData && activeView === 'register' && (
+          <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#080d1a]/98 backdrop-blur-2xl border-t border-amber-500/40 p-3 shadow-[0_-10px_30px_rgba(0,0,0,0.85)] animate-in slide-in-from-bottom">
+            <div className="flex items-center justify-between gap-3 max-w-md mx-auto">
+              <div className="leading-tight shrink-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Entry Fee</span>
+                <span className={`text-xl font-black ${isFree ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {isFree ? 'FREE (₹0)' : `₹${entryFee}`}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveView('register');
+                  setActiveMobileTab('form');
+                  const formEl = document.getElementById('registration-section');
+                  if (formEl) formEl.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className={`flex-1 py-3 px-4 rounded-xl font-black text-xs uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 transform active:scale-95 transition-all ${
+                  isFree
+                    ? 'bg-gradient-to-r from-emerald-400 to-green-500 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.5)]'
+                    : 'bg-gradient-to-r from-amber-400 via-yellow-300 to-emerald-400 text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.5)] border border-yellow-200'
+                }`}
+              >
+                <CreditCard className="w-4 h-4 text-slate-950 stroke-[2.5]" />
+                <span>{isFree ? 'FILL FORM & GET PASS' : `PAY ₹${entryFee} & REGISTER`}</span>
+                <ArrowRight className="w-4 h-4 text-slate-950 stroke-[2.5]" />
+              </button>
+            </div>
           </div>
         )}
 
