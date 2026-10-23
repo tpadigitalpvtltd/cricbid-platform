@@ -539,21 +539,6 @@ export default function TournamentRegistrationPage() {
           </div>
         </div>
 
-        {/* Dedicated Tournament Share Bar (Players specific link) */}
-        {tournament && (
-          <div className="mb-6">
-            <TournamentShareBar
-              tournamentTitle={tournament.title}
-              city={tournament.city}
-              venue={tournament.venue}
-              auctionDate={tournament.auctionDate}
-              isFree={isFree}
-              entryFee={entryFee}
-              slug={tournament.slug}
-            />
-          </div>
-        )}
-
         {/* Live Registration Counter Widget */}
         <div className="mb-6">
           <LiveCounterWidget
@@ -667,7 +652,7 @@ export default function TournamentRegistrationPage() {
 
         {/* View 2: All Added Players Directory */}
         {(activeView === 'players' || registeredPlayers.length > 0) && (
-          <div className="mt-8 pb-16 lg:pb-0">
+          <div className="mt-8 pb-10">
             <PlayersDirectory
               players={registeredPlayers}
               tournamentTitle={tournament?.title || 'Cricket Tournament'}
@@ -675,7 +660,20 @@ export default function TournamentRegistrationPage() {
           </div>
         )}
 
-
+        {/* Dedicated Tournament Share Bar (Players specific link) - Placed at the bottom */}
+        {tournament && (
+          <div className="mt-8 mb-10">
+            <TournamentShareBar
+              tournamentTitle={tournament.title}
+              city={tournament.city}
+              venue={tournament.venue}
+              auctionDate={tournament.auctionDate}
+              isFree={isFree}
+              entryFee={entryFee}
+              slug={tournament.slug}
+            />
+          </div>
+        )}
 
       </main>
 
