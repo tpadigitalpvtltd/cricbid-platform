@@ -334,8 +334,8 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
                   )}
                 </div>
 
-                <p className="text-xs text-slate-400 mt-2.5">
-                  Tap to upload selfie or passport photo. Auto-compressed for instant pass generation.
+                <p className="text-xs text-slate-400 mt-2">
+                  Upload a clear selfie or passport photo for your pass.
                 </p>
                 {errors.photo && <p className="text-xs text-rose-400 font-bold mt-1.5">{errors.photo}</p>}
               </div>
@@ -621,17 +621,16 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
                 }`}
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${isFree ? 'bg-emerald-400' : 'bg-amber-400'} animate-ping`} />
-                {isFree ? 'Free Registration' : 'Verified Auction Pass'}
+                {isFree ? 'Free Registration' : 'Official Entry'}
               </span>
-              <span className="text-[11px] text-slate-400 font-medium">• Official Player Pass</span>
             </div>
             <h4 className="text-xl sm:text-2xl font-black text-white uppercase tracking-tight font-sans">
-              {isFree ? 'Claim Free Auction Pass' : 'Complete Registration & Issue Ticket'}
+              {isFree ? 'Claim Free Auction Pass' : 'Complete Registration & Issue Pass'}
             </h4>
             <p className="text-xs text-slate-400 mt-1">
               {isFree
-                ? 'Zero registration charges. Instant player pass generated with WhatsApp share link.'
-                : 'Pay official entry fee via Razorpay UPI / Cards. Pass instantly generated upon verification.'}
+                ? 'Zero registration charges. Instant player pass will be generated.'
+                : `Pay ₹${registrationFee} entry fee to confirm your player registration.`}
             </p>
           </div>
 
@@ -779,28 +778,14 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
         )}
 
         {/* Trust & Guarantee Badges */}
-        <div className="flex flex-wrap items-center justify-center gap-4 mt-4 pt-4 border-t border-slate-800/80 text-[11px] text-slate-400">
-          {isFree ? (
-            <>
-              <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                <Zap className="w-3.5 h-3.5" /> Instant Confirmation
-              </span>
-              <span>•</span>
-              <span>Cloud PostgreSQL Secured</span>
-              <span>•</span>
-              <span>Official Digital Pass Included</span>
-            </>
-          ) : (
-            <>
-              <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                <ShieldCheck className="w-3.5 h-3.5" /> Razorpay 256-Bit SSL Encrypted
-              </span>
-              <span>•</span>
-              <span>UPI (GPay / PhonePe / Paytm)</span>
-              <span>•</span>
-              <span>Instant Pass Generation</span>
-            </>
-          )}
+        <div className="flex flex-wrap items-center justify-center gap-3 mt-4 pt-4 border-t border-slate-800/80 text-[11px] text-slate-400">
+          <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+            <ShieldCheck className="w-3.5 h-3.5" /> 100% Secure & Verified
+          </span>
+          <span>•</span>
+          <span>Instant Digital Pass</span>
+          <span>•</span>
+          <span>Official Auction Entry</span>
         </div>
 
       </div>

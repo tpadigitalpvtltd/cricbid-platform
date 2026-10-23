@@ -35,18 +35,17 @@ export const PlayerPreviewCard: React.FC<PlayerPreviewCardProps> = ({
     phone,
   } = formData;
 
-  const displayName = fullName.trim() || 'YOUR NAME HERE';
-  const displayAge = age ? `${age} YRS` : 'AGE --';
+  const displayName = fullName.trim() || 'Player Name';
+  const displayAge = age ? `${age} YRS` : 'Age --';
   const displayRole = role || 'Pure Batsman';
-  const displayStats =
-    stats.trim() ||
-    'Aggressive match-winner ready for the auction pool with high tactical awareness and solid technique.';
 
   // Mask phone for privacy in live preview
   const maskedPhone =
     phone.length >= 10
       ? `+91 ${phone.slice(0, 3)}•••••${phone.slice(-2)}`
-      : '+91 80••••••80';
+      : phone.length > 0
+      ? `+91 ${phone}`
+      : '+91 ••••• •••••';
 
   const isFree = registrationFee === 0;
 
@@ -173,9 +172,15 @@ export const PlayerPreviewCard: React.FC<PlayerPreviewCardProps> = ({
               </span>
               <span className="text-slate-500 font-mono">AUCTION PROFILE</span>
             </div>
-            <p className="text-xs text-slate-200 line-clamp-3 leading-relaxed italic">
-              &ldquo;{displayStats}&rdquo;
-            </p>
+            {stats.trim() ? (
+              <p className="text-xs text-slate-200 line-clamp-3 leading-relaxed">
+                &ldquo;{stats.trim()}&rdquo;
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500 italic">
+                Your stats and achievements will appear here.
+              </p>
+            )}
           </div>
 
           {/* Auction Financials Matrix */}

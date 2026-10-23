@@ -74,7 +74,7 @@ export const LiveCounterWidget: React.FC<LiveCounterWidgetProps> = ({
 
       {/* Right: Refresh button and status */}
       <div className="flex items-center gap-2 text-xs text-slate-400">
-        <span className="hidden md:inline font-mono text-[11px]">Auto-refreshing</span>
+
         <button
           type="button"
           onClick={fetchLiveCount}

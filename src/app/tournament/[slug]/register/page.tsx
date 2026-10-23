@@ -489,7 +489,7 @@ export default function TournamentRegistrationPage() {
                       : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                   }`}
                 >
-                  {isFree ? '⚡ Free Registration Mode' : `🎟️ Entry Fee: ₹${entryFee}`}
+                  {isFree ? '⚡ Free Registration' : '🏏 Official Auction'}
                 </span>
 
                 <span className="px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-slate-300 text-[10px] font-bold flex items-center gap-1">
@@ -520,10 +520,10 @@ export default function TournamentRegistrationPage() {
                 )}
               </div>
 
-              {/* Trust Badge */}
+              {/* Verified Badge */}
               <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center gap-2 text-xs text-slate-400">
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>{isFree ? '100% Free Entry • Official Player Pass Included' : `Official Player Registration • ₹${entryFee} Entry Fee • Verified Pass`}</span>
+                <span>Verified Tournament • Official Digital Player Pass</span>
               </div>
             </div>
 
