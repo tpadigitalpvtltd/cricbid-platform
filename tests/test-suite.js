@@ -548,6 +548,29 @@ async function runTests() {
     logTest('TC-21', 'Authorized Admin Player Deletion', false, e.message);
   }
 
+  // TEST 23: Authorized Admin Tournament Mutation & Instant Fee Sync
+  try {
+    if (testPaidSlug) {
+      const patchRes = await apiFetch(`/api/tournaments/${testPaidSlug}`, {
+        method: 'PATCH',
+        body: { entryFee: 150, title: 'Updated QA Paid Tournament' },
+      });
+      const patchPass =
+        patchRes.status === 200 &&
+        patchRes.json?.success === true &&
+        patchRes.json?.tournament?.entryFee === 150;
+      logTest(
+        'TC-23',
+        'Authorized Admin Tournament Mutation & Instant Fee Sync',
+        patchPass,
+        `Status ${patchRes.status}, Fee updated to: ₹${patchRes.json?.tournament?.entryFee}`,
+        patchRes.text
+      );
+    }
+  } catch (e) {
+    logTest('TC-23', 'Authorized Admin Tournament Mutation & Instant Fee Sync', false, e.message);
+  }
+
   // TEST 22: Clean Up Test Tournament
   try {
     if (testPaidSlug) {

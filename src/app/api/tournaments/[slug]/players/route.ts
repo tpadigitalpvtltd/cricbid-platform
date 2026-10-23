@@ -50,19 +50,26 @@ export async function GET(
       };
     });
 
-    return NextResponse.json({
-      success: true,
-      tournament: {
-        title: tournament.title,
-        slug: tournament.slug,
-        city: tournament.city,
-        venue: tournament.venue,
-        auctionDate: tournament.auctionDate,
-        registeredCount: tournament.registeredCount,
+    return NextResponse.json(
+      {
+        success: true,
+        tournament: {
+          title: tournament.title,
+          slug: tournament.slug,
+          city: tournament.city,
+          venue: tournament.venue,
+          auctionDate: tournament.auctionDate,
+          registeredCount: publicPlayers.length,
+        },
+        total: publicPlayers.length,
+        players: publicPlayers,
       },
-      total: publicPlayers.length,
-      players: publicPlayers,
-    });
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        },
+      }
+    );
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error?.message || 'Error fetching players' },

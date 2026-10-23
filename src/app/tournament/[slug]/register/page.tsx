@@ -76,7 +76,7 @@ export default function TournamentRegistrationPage() {
   const fetchRegisteredPlayers = async () => {
     if (!slug) return;
     try {
-      const res = await fetch(`/api/tournaments/${slug}/players`);
+      const res = await fetch(`/api/tournaments/${slug}/players`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         if (data.players) {
@@ -96,7 +96,7 @@ export default function TournamentRegistrationPage() {
         setLoadingTournament(true);
 
         // 1. Fetch individual slug
-        const res = await fetch(`/api/tournaments/${slug}`);
+        const res = await fetch(`/api/tournaments/${slug}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           if (data.tournament) {
@@ -107,7 +107,7 @@ export default function TournamentRegistrationPage() {
 
         // 2. Fallback: Search in all tournaments
         try {
-          const allRes = await fetch('/api/tournaments');
+          const allRes = await fetch('/api/tournaments', { cache: 'no-store' });
           if (allRes.ok) {
             const allData = await allRes.json();
             if (Array.isArray(allData.tournaments)) {

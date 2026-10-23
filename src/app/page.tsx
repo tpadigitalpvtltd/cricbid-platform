@@ -33,7 +33,7 @@ export default function HomePage() {
           localStorage.removeItem('cricbid_client_tournaments');
         } catch (e) {}
 
-        const res = await fetch('/api/tournaments');
+        const res = await fetch('/api/tournaments', { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data.tournaments)) {

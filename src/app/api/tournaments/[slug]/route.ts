@@ -1,10 +1,17 @@
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 import { NextResponse } from 'next/server';
 import {
   getTournamentBySlugAsync,
-  updateTournament,
+  updateTournamentAsync,
   deleteTournamentAsync,
 } from '@/lib/tournamentStore';
 import { verifyAdminSession } from '@/lib/auth';
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+};
 
 export async function GET(
   request: Request,
@@ -17,7 +24,7 @@ export async function GET(
     if (!tournament) {
       return NextResponse.json(
         { success: false, error: 'Tournament not found' },
-        { status: 404 }
+        { status: 404, headers: NO_CACHE_HEADERS }
       );
     }
 
@@ -40,11 +47,14 @@ export async function GET(
       createdAt: tournament.createdAt,
     };
 
-    return NextResponse.json({ success: true, tournament: sanitizedTournament });
+    return NextResponse.json(
+      { success: true, tournament: sanitizedTournament },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error?.message || 'Error fetching tournament' },
-      { status: 500 }
+      { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
 }
@@ -57,7 +67,7 @@ export async function PATCH(
     if (!verifyAdminSession(request)) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized: Admin authentication required' },
-        { status: 401 }
+        { status: 401, headers: NO_CACHE_HEADERS }
       );
     }
 
@@ -67,33 +77,41 @@ export async function PATCH(
     if (!existing) {
       return NextResponse.json(
         { success: false, error: 'Tournament not found' },
-        { status: 404 }
+        { status: 404, headers: NO_CACHE_HEADERS }
       );
     }
 
     const body = await request.json().catch(() => ({}));
 
     // Disallow altering internal system fields or slug
-    const { id, slug: ignoredSlug, createdAt, ...allowedUpdates } = body;
+    const { id, slug: ignoredSlug, createdAt, registeredCount, ...allowedUpdates } = body;
 
-    const updated = updateTournament(existing.id, allowedUpdates);
+    // Direct asynchronous cloud database update
+    let updated = await updateTournamentAsync(slug, allowedUpdates);
+    if (!updated && existing.id) {
+      updated = await updateTournamentAsync(existing.id, allowedUpdates);
+    }
 
     if (!updated) {
       return NextResponse.json(
-        { success: false, error: 'Failed to update tournament' },
-        { status: 500 }
+        { success: false, error: 'Failed to update tournament in cloud database' },
+        { status: 500, headers: NO_CACHE_HEADERS }
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Tournament updated successfully',
-      tournament: updated,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        message: 'Tournament updated successfully',
+        tournament: updated,
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (error: any) {
+    console.error('PATCH tournament error:', error);
     return NextResponse.json(
       { success: false, error: error?.message || 'Error updating tournament' },
-      { status: 500 }
+      { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
 }
@@ -106,7 +124,7 @@ export async function DELETE(
     if (!verifyAdminSession(request)) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized: Admin authentication required' },
-        { status: 401 }
+        { status: 401, headers: NO_CACHE_HEADERS }
       );
     }
 
@@ -116,20 +134,26 @@ export async function DELETE(
     if (!existing) {
       return NextResponse.json(
         { success: false, error: 'Tournament not found' },
-        { status: 404 }
+        { status: 404, headers: NO_CACHE_HEADERS }
       );
     }
 
-    const deleted = await deleteTournamentAsync(existing.id);
+    const deleted = await deleteTournamentAsync(existing.slug);
+    if (existing.id && existing.id !== existing.slug) {
+      await deleteTournamentAsync(existing.id);
+    }
 
-    return NextResponse.json({
-      success: deleted,
-      message: deleted ? 'Tournament deleted successfully' : 'Failed to delete tournament',
-    });
+    return NextResponse.json(
+      {
+        success: deleted,
+        message: deleted ? 'Tournament deleted successfully' : 'Failed to delete tournament',
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error?.message || 'Error deleting tournament' },
-      { status: 500 }
+      { status: 500, headers: NO_CACHE_HEADERS }
     );
   }
 }

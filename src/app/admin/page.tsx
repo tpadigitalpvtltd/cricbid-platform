@@ -114,7 +114,7 @@ export default function AdminPage() {
 
     try {
       setIsUploadingAdminBanner(true);
-      const base64 = await compressImage(file, 1200, 630, 0.82);
+      const base64 = await compressImage(file, 1000, 560, 0.75);
       if (isEditMode && editingTournament) {
         setEditingTournament((prev) => prev ? ({ ...prev, bannerUrl: base64 }) : null);
       } else {
@@ -209,7 +209,7 @@ export default function AdminPage() {
   const fetchTournaments = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/tournaments');
+      const res = await fetch('/api/tournaments', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.tournaments)) {
@@ -225,7 +225,10 @@ export default function AdminPage() {
 
   const fetchAllPlayers = async () => {
     try {
-      const res = await fetch('/api/admin/players');
+      const res = await fetch('/api/admin/players', {
+        cache: 'no-store',
+        credentials: 'include',
+      });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.players)) {
@@ -247,6 +250,7 @@ export default function AdminPage() {
       const res = await fetch(`/api/tournaments/${tournament.slug}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           isPaid: newIsPaid,
           entryFee: newFee,
@@ -257,6 +261,7 @@ export default function AdminPage() {
         setTournaments((prev) =>
           prev.map((t) => (t.id === tournament.id ? { ...t, isPaid: newIsPaid, entryFee: newFee } : t))
         );
+        fetchTournaments();
       }
     } catch (err) {
       console.error('Error toggling payment:', err);
@@ -272,12 +277,14 @@ export default function AdminPage() {
       const res = await fetch(`/api/tournaments/${tournament.slug}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ entryFee: newFee }),
       });
       if (res.ok) {
         setTournaments((prev) =>
           prev.map((t) => (t.id === tournament.id ? { ...t, entryFee: newFee } : t))
         );
+        fetchTournaments();
       }
     } catch (err) {
       console.error('Error updating fee:', err);
@@ -299,6 +306,7 @@ export default function AdminPage() {
       const res = await fetch('/api/tournaments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(createForm),
       });
 
@@ -341,18 +349,21 @@ export default function AdminPage() {
       const res = await fetch(`/api/tournaments/${editingTournament.slug}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(editingTournament),
       });
 
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        const updated = data.tournament || editingTournament;
         setTournaments((prev) =>
-          prev.map((t) => (t.id === editingTournament.id ? editingTournament : t))
+          prev.map((t) => (t.id === updated.id || t.slug === updated.slug ? updated : t))
         );
         setEditingTournament(null);
         alert('Tournament updated successfully!');
+        await fetchTournaments();
       } else {
-        alert(data.error || 'Failed to update tournament');
+        alert(data?.error || `Failed to update tournament (Status: ${res.status})`);
       }
     } catch (err: any) {
       alert(err.message || 'Error updating tournament');
@@ -369,6 +380,7 @@ export default function AdminPage() {
       setLoading(true);
       const res = await fetch(`/api/tournaments/${deletingTournament.slug}`, {
         method: 'DELETE',
+        credentials: 'include',
       });
 
       const data = await res.json();

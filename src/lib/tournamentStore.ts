@@ -332,47 +332,101 @@ export async function createTournamentAsync(
   return tournament;
 }
 
-export function updateTournament(idOrSlug: string, updates: Partial<Tournament>): Tournament | null {
+export async function updateTournamentAsync(
+  idOrSlug: string,
+  updates: Partial<Tournament>
+): Promise<Tournament | null> {
+  const dbUpdates: any = {};
+  if (updates.title !== undefined) dbUpdates.title = updates.title.trim();
+  if (updates.tagline !== undefined) dbUpdates.tagline = updates.tagline;
+  if (updates.city !== undefined) dbUpdates.city = updates.city.trim();
+  if (updates.venue !== undefined) dbUpdates.venue = updates.venue.trim();
+  if (updates.bannerUrl !== undefined) dbUpdates.banner_url = updates.bannerUrl;
+  if (updates.registrationDeadline !== undefined) dbUpdates.registration_deadline = updates.registrationDeadline;
+  if (updates.auctionDate !== undefined) dbUpdates.auction_date = updates.auctionDate;
+  if (updates.isPaid !== undefined) dbUpdates.is_paid = Boolean(updates.isPaid);
+  if (updates.entryFee !== undefined) dbUpdates.entry_fee = Number(updates.entryFee) || 0;
+  if (updates.googleSheetUrl !== undefined) dbUpdates.google_sheet_url = updates.googleSheetUrl;
+  if (updates.organizerName !== undefined) dbUpdates.organizer_name = updates.organizerName;
+  if (updates.organizerContact !== undefined) dbUpdates.organizer_contact = updates.organizerContact;
+  if (updates.registeredCount !== undefined) dbUpdates.registered_count = Number(updates.registeredCount) || 0;
+
+  let updatedRecord: Tournament | null = null;
+
+  if (Object.keys(dbUpdates).length > 0) {
+    try {
+      // 1. Try updating by slug first
+      let { data, error } = await supabase
+        .from('tournaments')
+        .update(dbUpdates)
+        .ilike('slug', idOrSlug)
+        .select()
+        .maybeSingle();
+
+      // 2. If not matched by slug, try by ID
+      if (!data && !error) {
+        const byId = await supabase
+          .from('tournaments')
+          .update(dbUpdates)
+          .eq('id', idOrSlug)
+          .select()
+          .maybeSingle();
+        data = byId.data;
+        error = byId.error;
+      }
+
+      if (!error && data) {
+        updatedRecord = mapDbTournamentToModel(data);
+      } else if (error) {
+        console.error('Supabase updateTournamentAsync error:', error);
+      }
+    } catch (err) {
+      console.error('Supabase updateTournamentAsync exception:', err);
+    }
+  }
+
+  // Also update memory & local file cache
   const tournaments = readTournamentsFromFile();
   const index = tournaments.findIndex(
     (t) => t.id === idOrSlug || t.slug.toLowerCase() === idOrSlug.toLowerCase()
   );
 
-  if (index === -1) return null;
-
-  tournaments[index] = {
-    ...tournaments[index],
-    ...updates,
-  };
-
-  saveTournamentsToFile([...tournaments]);
-
-  // Update in Supabase
-  const dbUpdates: any = {};
-  if (updates.title !== undefined) dbUpdates.title = updates.title;
-  if (updates.tagline !== undefined) dbUpdates.tagline = updates.tagline;
-  if (updates.city !== undefined) dbUpdates.city = updates.city;
-  if (updates.venue !== undefined) dbUpdates.venue = updates.venue;
-  if (updates.bannerUrl !== undefined) dbUpdates.banner_url = updates.bannerUrl;
-  if (updates.registrationDeadline !== undefined) dbUpdates.registration_deadline = updates.registrationDeadline;
-  if (updates.auctionDate !== undefined) dbUpdates.auction_date = updates.auctionDate;
-  if (updates.isPaid !== undefined) dbUpdates.is_paid = updates.isPaid;
-  if (updates.entryFee !== undefined) dbUpdates.entry_fee = updates.entryFee;
-  if (updates.googleSheetUrl !== undefined) dbUpdates.google_sheet_url = updates.googleSheetUrl;
-  if (updates.organizerName !== undefined) dbUpdates.organizer_name = updates.organizerName;
-  if (updates.organizerContact !== undefined) dbUpdates.organizer_contact = updates.organizerContact;
-  if (updates.registeredCount !== undefined) dbUpdates.registered_count = updates.registeredCount;
-
-  if (Object.keys(dbUpdates).length > 0) {
-    fireAndForget(
-      supabase
-        .from('tournaments')
-        .update(dbUpdates)
-        .or(`id.eq.${idOrSlug},slug.eq.${idOrSlug}`)
-    );
+  if (index !== -1) {
+    tournaments[index] = {
+      ...tournaments[index],
+      ...updates,
+      ...(updatedRecord || {}),
+    };
+    saveTournamentsToFile([...tournaments]);
+    if (!updatedRecord) {
+      updatedRecord = tournaments[index];
+    }
+  } else if (updatedRecord) {
+    tournaments.unshift(updatedRecord);
+    saveTournamentsToFile([...tournaments]);
   }
 
-  return tournaments[index];
+  return updatedRecord;
+}
+
+export function updateTournament(idOrSlug: string, updates: Partial<Tournament>): Tournament | null {
+  fireAndForget(updateTournamentAsync(idOrSlug, updates));
+
+  const tournaments = readTournamentsFromFile();
+  const index = tournaments.findIndex(
+    (t) => t.id === idOrSlug || t.slug.toLowerCase() === idOrSlug.toLowerCase()
+  );
+
+  if (index !== -1) {
+    tournaments[index] = {
+      ...tournaments[index],
+      ...updates,
+    };
+    saveTournamentsToFile([...tournaments]);
+    return tournaments[index];
+  }
+
+  return null;
 }
 
 export async function deleteTournamentAsync(idOrSlug: string): Promise<boolean> {
@@ -383,14 +437,8 @@ export async function deleteTournamentAsync(idOrSlug: string): Promise<boolean> 
   saveTournamentsToFile(filtered);
 
   try {
-    const { error } = await supabase
-      .from('tournaments')
-      .delete()
-      .or(`id.eq.${idOrSlug},slug.ilike.${idOrSlug}`);
-
-    if (error) {
-      console.error('Supabase delete tournament error:', error);
-    }
+    await supabase.from('tournaments').delete().ilike('slug', idOrSlug);
+    await supabase.from('tournaments').delete().eq('id', idOrSlug);
   } catch (err) {
     console.error('Supabase delete tournament error:', err);
   }

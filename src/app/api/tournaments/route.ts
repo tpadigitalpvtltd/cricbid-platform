@@ -27,7 +27,14 @@ export async function GET() {
       createdAt: t.createdAt,
     }));
 
-    return NextResponse.json({ success: true, tournaments });
+    return NextResponse.json(
+      { success: true, tournaments },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        },
+      }
+    );
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error?.message || 'Failed to fetch tournaments' },
