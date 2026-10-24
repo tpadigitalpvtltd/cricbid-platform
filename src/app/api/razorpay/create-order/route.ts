@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import Razorpay from 'razorpay';
-import { getTournamentBySlugAsync } from '@/lib/tournamentStore';
+import { getTournamentBySlugAsync, savePendingOrder } from '@/lib/tournamentStore';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { tournamentSlug, fullName, phone } = body;
+    const { tournamentSlug, fullName, phone, age, role, battingStyle, bowlingStyle, stats, photoUrl } = body;
 
     if (!tournamentSlug) {
       return NextResponse.json(
@@ -95,6 +95,28 @@ export async function POST(request: Request) {
     };
 
     const order = await razorpay.orders.create(options);
+
+    const pendingData = {
+      fullName: fullName || '',
+      phone: phone || '',
+      age: age || '24',
+      role: role || 'Batting All-Rounder',
+      battingStyle: battingStyle || 'Right-hand',
+      bowlingStyle: bowlingStyle || 'Right-arm Fast',
+      stats: stats || '',
+      photoUrl: photoUrl || '',
+      tournamentSlug: tournament.slug,
+      tournamentTitle: tournament.title,
+      amount: amountInINR,
+    };
+
+    savePendingOrder(order.id, pendingData);
+    if (phone) {
+      const cleanDigits = String(phone).replace(/[^0-9]/g, '').slice(-10);
+      if (cleanDigits) {
+        savePendingOrder(`${cleanDigits}_${tournament.slug}`, pendingData);
+      }
+    }
 
     // Generate Razorpay Hosted Payment Link (rzp.io) to avoid domain restrictions
     let paymentLinkUrl: string | null = null;

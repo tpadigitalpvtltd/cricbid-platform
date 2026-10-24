@@ -22,6 +22,7 @@ const STORAGE_DIR = isServerless
 
 const TOURNAMENTS_FILE = path.join(STORAGE_DIR, 'tournaments.json');
 const PLAYERS_FILE = path.join(STORAGE_DIR, 'players.json');
+const PENDING_ORDERS_FILE = path.join(STORAGE_DIR, 'pending_orders.json');
 
 const SEED_DIR = path.join(process.cwd(), 'data');
 const SEED_TOURNAMENTS_FILE = path.join(SEED_DIR, 'tournaments.json');
@@ -32,6 +33,7 @@ declare global {
   var __CRICBID_TOURNAMENTS__: Tournament[] | undefined;
   var __CRICBID_PLAYERS__: RegistrationSubmission[] | undefined;
   var __CRICBID_LAST_SYNC__: number | undefined;
+  var __CRICBID_PENDING_ORDERS__: Record<string, any> | undefined;
 }
 
 if (!globalThis.__CRICBID_TOURNAMENTS__) {
@@ -39,6 +41,9 @@ if (!globalThis.__CRICBID_TOURNAMENTS__) {
 }
 if (!globalThis.__CRICBID_PLAYERS__) {
   globalThis.__CRICBID_PLAYERS__ = [];
+}
+if (!globalThis.__CRICBID_PENDING_ORDERS__) {
+  globalThis.__CRICBID_PENDING_ORDERS__ = {};
 }
 
 /**
@@ -715,4 +720,59 @@ export function deletePlayer(registrationId: string): boolean {
   }
 
   return true;
+}
+
+// =============================================================================
+// PENDING PAYMENT ORDERS CACHE (Auto-Recovery Image & Metadata Protection)
+// =============================================================================
+
+export function savePendingOrder(key: string, data: any): void {
+  if (!key) return;
+  const cleanKey = String(key).toLowerCase().trim();
+  if (!globalThis.__CRICBID_PENDING_ORDERS__) {
+    globalThis.__CRICBID_PENDING_ORDERS__ = {};
+  }
+  const payload = {
+    ...data,
+    _savedAt: Date.now(),
+  };
+  globalThis.__CRICBID_PENDING_ORDERS__[cleanKey] = payload;
+
+  try {
+    ensureStorageDir();
+    let fileData: Record<string, any> = {};
+    if (fs.existsSync(PENDING_ORDERS_FILE)) {
+      try {
+        fileData = JSON.parse(fs.readFileSync(PENDING_ORDERS_FILE, 'utf8') || '{}');
+      } catch (e) {
+        fileData = {};
+      }
+    }
+    fileData[cleanKey] = payload;
+    fs.writeFileSync(PENDING_ORDERS_FILE, JSON.stringify(fileData));
+  } catch (err) {}
+}
+
+export function getPendingOrder(key: string): any | null {
+  if (!key) return null;
+  const cleanKey = String(key).toLowerCase().trim();
+
+  if (globalThis.__CRICBID_PENDING_ORDERS__ && globalThis.__CRICBID_PENDING_ORDERS__[cleanKey]) {
+    return globalThis.__CRICBID_PENDING_ORDERS__[cleanKey];
+  }
+
+  try {
+    if (fs.existsSync(PENDING_ORDERS_FILE)) {
+      const fileData = JSON.parse(fs.readFileSync(PENDING_ORDERS_FILE, 'utf8') || '{}');
+      if (fileData[cleanKey]) {
+        if (!globalThis.__CRICBID_PENDING_ORDERS__) {
+          globalThis.__CRICBID_PENDING_ORDERS__ = {};
+        }
+        globalThis.__CRICBID_PENDING_ORDERS__[cleanKey] = fileData[cleanKey];
+        return fileData[cleanKey];
+      }
+    }
+  } catch (err) {}
+
+  return null;
 }

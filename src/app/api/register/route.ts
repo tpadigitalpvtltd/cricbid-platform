@@ -7,6 +7,7 @@ import {
   savePlayerRegistrationAsync,
   getPlayersByTournamentAsync,
   getAllPlayersAsync,
+  getPendingOrder,
   MASTER_GOOGLE_SHEET_URL,
 } from '@/lib/tournamentStore';
 import { clean10DigitPhone, validatePhoneNumber } from '@/lib/utils';
@@ -48,6 +49,24 @@ export async function POST(request: Request) {
       registrationId,
       tournamentSlug,
     } = payload;
+
+    // Auto-recovery: Retrieve cached form data & photo if available
+    const pendingData =
+      (orderId ? getPendingOrder(orderId) : null) ||
+      (paymentId ? getPendingOrder(paymentId) : null) ||
+      (phone && tournamentSlug ? getPendingOrder(`${clean10DigitPhone(phone)}_${tournamentSlug}`) : null);
+
+    if (pendingData) {
+      fullName = fullName || pendingData.fullName;
+      phone = phone || pendingData.phone;
+      age = age || pendingData.age;
+      role = role || pendingData.role;
+      battingStyle = battingStyle || pendingData.battingStyle;
+      bowlingStyle = bowlingStyle || pendingData.bowlingStyle;
+      stats = stats || pendingData.stats;
+      photoUrl = photoUrl || pendingData.photoUrl;
+      tournamentSlug = tournamentSlug || pendingData.tournamentSlug;
+    }
 
     // Auto-recovery for paid registration returns if mobile browser storage was lost
     if (paymentId && (!fullName || !phone || !role || !tournamentSlug)) {

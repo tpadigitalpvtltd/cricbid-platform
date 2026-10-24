@@ -22,12 +22,22 @@ interface PlayersDirectoryProps {
   tournamentTitle: string;
 }
 
+function getInitials(name: string): string {
+  if (!name) return 'PL';
+  const clean = name.replace(/[()[\]{}]/g, ' ').trim();
+  const parts = clean.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'PL';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 export const PlayersDirectory: React.FC<PlayersDirectoryProps> = ({
   players,
   tournamentTitle,
 }) => {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('All');
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
   const filteredPlayers = players.filter((p) => {
     const matchesSearch =
@@ -171,16 +181,26 @@ export const PlayersDirectory: React.FC<PlayersDirectoryProps> = ({
                 <div className="flex items-center gap-3.5 mb-3">
                   {/* Photo Avatar */}
                   <div className="w-14 h-14 rounded-xl p-[2px] bg-gradient-to-tr from-amber-400 via-amber-500 to-emerald-400 shrink-0">
-                    <div className="w-full h-full rounded-[10px] bg-slate-900 overflow-hidden flex items-center justify-center">
-                      {player.photoUrl ? (
+                    <div className="w-full h-full rounded-[10px] bg-slate-900 overflow-hidden flex items-center justify-center relative">
+                      {player.photoUrl && !failedImages[player.registrationId] ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={player.photoUrl}
                           alt={player.fullName}
+                          onError={() =>
+                            setFailedImages((prev) => ({
+                              ...prev,
+                              [player.registrationId]: true,
+                            }))
+                          }
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <User className="w-6 h-6 text-slate-500" />
+                        <div className="w-full h-full bg-gradient-to-br from-slate-900 via-slate-950 to-amber-950/70 flex flex-col items-center justify-center select-none">
+                          <span className="font-black text-amber-400 text-sm tracking-wider">
+                            {getInitials(player.fullName)}
+                          </span>
+                        </div>
                       )}
                     </div>
                   </div>

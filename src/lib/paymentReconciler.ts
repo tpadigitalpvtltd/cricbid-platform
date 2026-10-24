@@ -6,6 +6,7 @@ import {
   getTournamentBySlugAsync,
   savePlayerRegistrationAsync,
   incrementRegistrationCountAsync,
+  getPendingOrder,
 } from './tournamentStore';
 
 // In-memory debounce map to prevent calling Razorpay API on every sub-second request
@@ -91,19 +92,25 @@ export async function reconcileMissingTournamentPayments(slug: string): Promise<
         timeStyle: 'medium',
       });
 
+      const pending =
+        (pay.order_id ? getPendingOrder(pay.order_id) : null) ||
+        (pay.description ? getPendingOrder(pay.description.replace(/^#/, '')) : null) ||
+        (playerPhone ? getPendingOrder(`${playerPhone}_${slug}`) : null) ||
+        (playerPhone ? getPendingOrder(`${playerPhone}_${tournament.slug}`) : null);
+
       const newRecord: RegistrationSubmission = {
         timestamp,
         registrationId: `CRIC-2026-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
         tournamentSlug: tournament.slug,
         tournamentTitle: tournament.title,
-        fullName: String(playerName).trim(),
-        phone: playerPhone || '9876543210',
-        age: '24',
-        role: 'Batting All-Rounder' as PlayingRole,
-        battingStyle: 'Right-hand',
-        bowlingStyle: 'Right-arm Fast',
-        stats: 'Auto-reconciled via Razorpay Gateway',
-        photoUrl: '',
+        fullName: pending?.fullName || String(playerName).trim(),
+        phone: pending?.phone || playerPhone || '9876543210',
+        age: pending?.age || '24',
+        role: (pending?.role as PlayingRole) || ('Batting All-Rounder' as PlayingRole),
+        battingStyle: pending?.battingStyle || 'Right-hand',
+        bowlingStyle: pending?.bowlingStyle || 'Right-arm Fast',
+        stats: pending?.stats || 'Auto-reconciled via Razorpay Gateway',
+        photoUrl: pending?.photoUrl || '',
         paymentId: pay.id,
         orderId: pay.order_id || 'AUTO_RECONCILED',
         paymentStatus: 'PAID',

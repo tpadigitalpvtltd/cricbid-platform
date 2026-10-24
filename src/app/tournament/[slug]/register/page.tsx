@@ -286,6 +286,12 @@ export default function TournamentRegistrationPage() {
           tournamentSlug: slug,
           fullName: formData.fullName,
           phone: formData.phone,
+          age: formData.age,
+          role: formData.role,
+          battingStyle: formData.battingStyle,
+          bowlingStyle: formData.bowlingStyle,
+          stats: formData.stats,
+          photoUrl: formData.photoUrl || '',
           amount: entryFee,
         }),
       });
