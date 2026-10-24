@@ -55,17 +55,30 @@ export async function POST(request: Request) {
     const event = JSON.parse(rawBody);
     const eventType = event.event;
 
-    // Handle payment.captured or payment_link.paid
-    if (eventType === 'payment.captured' || eventType === 'payment_link.paid') {
-      const payment = event.payload?.payment?.entity;
+    // Handle payment.captured, payment_link.paid, or order.paid
+    if (
+      eventType === 'payment.captured' ||
+      eventType === 'payment_link.paid' ||
+      eventType === 'order.paid'
+    ) {
+      const payment =
+        event.payload?.payment?.entity ||
+        event.payload?.payment_link?.entity;
+
       if (!payment) {
         return NextResponse.json({ success: true, message: 'No payment entity found' });
       }
 
       const paymentId = payment.id;
-      const tournamentSlug = payment.notes?.tournamentSlug;
-      const playerName = payment.notes?.fullName || payment.notes?.player_name || 'Verified Player';
-      const playerPhone = payment.notes?.phone || payment.contact || '';
+      const tournamentSlug =
+        payment.notes?.tournamentSlug || payment.notes?.tournament_slug;
+      const playerName =
+        payment.notes?.fullName ||
+        payment.notes?.player_name ||
+        payment.customer?.name ||
+        'Verified Player';
+      const playerPhone =
+        payment.notes?.phone || payment.contact || payment.customer?.contact || '';
       const amount = payment.amount ? payment.amount / 100 : 0;
 
       if (!tournamentSlug) {

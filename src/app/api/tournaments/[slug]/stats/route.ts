@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getTournamentBySlugAsync } from '@/lib/tournamentStore';
+import { reconcileMissingTournamentPayments } from '@/lib/paymentReconciler';
 import { supabase } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
@@ -19,6 +20,9 @@ export async function GET(
         { status: 404 }
       );
     }
+
+    // Auto-reconcile any captured payments in background
+    await reconcileMissingTournamentPayments(slug);
 
     // Query exact real player count from players table
     let count = tournament.registeredCount || 0;

@@ -7,6 +7,7 @@ import {
   updatePlayer,
   deletePlayer,
 } from '@/lib/tournamentStore';
+import { reconcileMissingTournamentPayments } from '@/lib/paymentReconciler';
 import { verifyAdminSession } from '@/lib/auth';
 
 export async function GET(
@@ -23,6 +24,9 @@ export async function GET(
         { status: 404 }
       );
     }
+
+    // Auto-reconcile any captured Razorpay payments if mobile user closed the app
+    await reconcileMissingTournamentPayments(slug);
 
     const rawPlayers = await getPlayersByTournamentAsync(slug);
 
