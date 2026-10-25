@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { PlayerFormData, RegistrationSubmission, Tournament } from '@/lib/types';
 import { Navbar } from '@/components/Navbar';
 import { RegistrationForm } from '@/components/RegistrationForm';
@@ -14,6 +15,7 @@ import { TournamentShareBar } from '@/components/TournamentShareBar';
 import { Toast, ToastMessage, ToastType } from '@/components/Toast';
 import {
   Trophy,
+  Radio,
   MapPin,
   Calendar,
   Users,
@@ -587,6 +589,18 @@ export default function TournamentRegistrationPage() {
               <Users className="w-4 h-4" />
               <span>View All Added Players ({registeredPlayers.length})</span>
             </button>
+          </div>
+
+          {/* Quick Access to Live Auction Arena */}
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/auction/${slug}/live`}
+              target="_blank"
+              className="px-4 py-3 rounded-xl text-xs sm:text-sm font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 bg-gradient-to-r from-rose-500/20 via-amber-500/20 to-emerald-500/20 text-amber-300 border border-amber-500/40 hover:border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)] hover:scale-[1.02] active:scale-95"
+            >
+              <Radio className="w-4 h-4 text-rose-400 animate-pulse" />
+              <span>Watch Live Auction</span>
+            </Link>
           </div>
         </div>
 

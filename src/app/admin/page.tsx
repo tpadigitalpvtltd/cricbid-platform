@@ -38,6 +38,7 @@ import {
   Download,
   Upload,
   Camera,
+  Gavel,
 } from 'lucide-react';
 import { compressImage } from '@/lib/utils';
 
@@ -868,7 +869,7 @@ export default function AdminPage() {
                         {/* View Link */}
                         <div>
                           <span className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
-                            Live Page
+                            Public Form
                           </span>
                           <Link
                             href={`/tournament/${tournament.slug}/register`}
@@ -879,6 +880,32 @@ export default function AdminPage() {
                             <span>View</span>
                             <ExternalLink className="w-3 h-3 text-slate-500" />
                           </Link>
+                        </div>
+
+                        {/* Live Auction Engine Links */}
+                        <div>
+                          <span className="text-[10px] font-black uppercase text-amber-400 block mb-1">
+                            🏏 Live Auction
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <Link
+                              href={`/auction/${tournament.slug}`}
+                              target="_blank"
+                              className="px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 text-xs font-black flex items-center gap-1 border border-amber-500/40 shadow-sm"
+                              title="Open 4K TV / Projector Display"
+                            >
+                              <Gavel className="w-3 h-3 text-amber-400" />
+                              <span>TV</span>
+                            </Link>
+                            <Link
+                              href={`/auction/${tournament.slug}/controller`}
+                              target="_blank"
+                              className="px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 text-xs font-black flex items-center gap-1 border border-cyan-500/40 shadow-sm"
+                              title="Open Auctioneer Desk Controller"
+                            >
+                              <span>Desk</span>
+                            </Link>
+                          </div>
                         </div>
 
                       </div>
