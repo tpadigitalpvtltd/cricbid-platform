@@ -162,7 +162,12 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({
                 {registration.fullName}
               </h3>
               <p className="text-xs text-slate-400">
-                Age: {registration.age} • {registration.battingStyle} • {registration.bowlingStyle}
+                Age: {registration.age} • {registration.battingStyle}
+                {registration.role !== 'Pure Batsman' &&
+                registration.bowlingStyle &&
+                registration.bowlingStyle !== 'None'
+                  ? ` • ${registration.bowlingStyle}`
+                  : ''}
               </p>
             </div>
           </div>

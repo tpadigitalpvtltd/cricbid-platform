@@ -99,6 +99,10 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
       newErrors.role = 'Please select your primary playing role';
     }
 
+    if (!formData.photoUrl || !formData.photoUrl.trim()) {
+      newErrors.photo = 'Player passport / profile photo is mandatory to enter the auction (फोटो अपलोड करना अनिवार्य है)';
+    }
+
     if (!agreedToRules) {
       newErrors.rules = 'Please agree to tournament rules to proceed';
     }
@@ -166,8 +170,12 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
   };
 
   // Check section completion
-  const isSection1Complete = Boolean(formData.fullName.trim() && formData.phone.trim() && formData.age);
-  const isSection2Complete = Boolean(formData.role && formData.battingStyle && formData.bowlingStyle);
+  const isSection1Complete = Boolean(formData.fullName.trim() && formData.phone.trim() && formData.age && formData.photoUrl);
+  const isSection2Complete = Boolean(
+    formData.role &&
+    formData.battingStyle &&
+    (formData.role === 'Pure Batsman' || (formData.bowlingStyle && formData.bowlingStyle !== 'None'))
+  );
 
   return (
     <form onSubmit={validateAndSubmit} className="space-y-6">
@@ -263,11 +271,18 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
 
           {/* Luxury Photo Uploader Box */}
           <div className="mb-6" id="field-photo">
-            <label className="block text-xs font-black uppercase tracking-wider text-slate-200 mb-2.5">
-              Player Passport Photo <span className="text-amber-400 font-normal">(Shows on Pass & Card)</span>
+            <label className="block text-xs font-black uppercase tracking-wider text-slate-200 mb-2.5 flex items-center justify-between">
+              <span>
+                Player Passport Photo <span className="text-rose-400 font-black">* (Mandatory / जरूरी)</span>
+              </span>
+              <span className="text-[10px] text-amber-400 font-semibold">Required for Auction Entry</span>
             </label>
 
-            <div className="flex flex-col sm:flex-row items-center gap-5 p-4 sm:p-5 rounded-2xl border border-slate-800 bg-slate-950/70 hover:border-slate-700 transition-all">
+            <div className={`flex flex-col sm:flex-row items-center gap-5 p-4 sm:p-5 rounded-2xl border transition-all ${
+              errors.photo
+                ? 'border-rose-500 bg-rose-950/20 shadow-[0_0_20px_rgba(244,63,94,0.25)]'
+                : 'border-slate-800 bg-slate-950/70 hover:border-slate-700'
+            }`}>
               
               {/* Photo Avatar Frame */}
               <div className="relative group shrink-0">
@@ -337,7 +352,12 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
                 <p className="text-xs text-slate-400 mt-2">
                   Upload a clear selfie or passport photo for your pass.
                 </p>
-                {errors.photo && <p className="text-xs text-rose-400 font-bold mt-1.5">{errors.photo}</p>}
+                {errors.photo && (
+                  <div className="flex items-center gap-2 text-xs text-rose-400 font-bold mt-2.5 bg-rose-500/10 border border-rose-500/30 px-3 py-2 rounded-xl">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                    <span>{errors.photo}</span>
+                  </div>
+                )}
               </div>
 
             </div>
@@ -490,7 +510,13 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
             <RoleSelector
               selectedRole={formData.role}
               onChange={(role: PlayingRole) => {
-                onChange({ role });
+                if (role === 'Pure Batsman') {
+                  onChange({ role, bowlingStyle: 'None' });
+                } else if (formData.bowlingStyle === 'None') {
+                  onChange({ role, bowlingStyle: 'Right-arm Fast' });
+                } else {
+                  onChange({ role });
+                }
                 if (errors.role) setErrors((prev) => ({ ...prev, role: '' }));
               }}
               error={errors.role}
@@ -500,8 +526,8 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
           {/* Batting Hand & Bowling Style Segmented Controls */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-5 pt-2">
             
-            {/* Batting Hand (5 cols) */}
-            <div className="md:col-span-5">
+            {/* Batting Hand */}
+            <div className={formData.role === 'Pure Batsman' ? 'md:col-span-12' : 'md:col-span-5'}>
               <label className="block text-xs font-black uppercase tracking-wider text-slate-200 mb-2">
                 Batting Hand <span className="text-amber-400">*</span>
               </label>
@@ -527,31 +553,35 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({
               </div>
             </div>
 
-            {/* Bowling Style (7 cols) */}
-            <div className="md:col-span-7">
-              <label className="block text-xs font-black uppercase tracking-wider text-slate-200 mb-2">
-                Bowling Specialization <span className="text-amber-400">*</span>
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {bowlingStyles.map((style) => {
-                  const isSelected = formData.bowlingStyle === style;
-                  return (
-                    <button
-                      type="button"
-                      key={style}
-                      onClick={() => onChange({ bowlingStyle: style })}
-                      className={`py-2.5 px-2 rounded-xl border text-[11px] font-black text-center transition-all ${
-                        isSelected
-                          ? 'border-emerald-400 bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 shadow-[0_0_15px_rgba(16,232,123,0.35)] scale-[1.02]'
-                          : 'border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-700 hover:text-white'
-                      }`}
-                    >
-                      {style}
-                    </button>
-                  );
-                })}
+            {/* Bowling Style - Completely hidden when role is Pure Batsman */}
+            {formData.role !== 'Pure Batsman' && (
+              <div className="md:col-span-7 animate-in fade-in duration-200">
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-200 mb-2">
+                  Bowling Specialization <span className="text-amber-400">*</span>
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {bowlingStyles
+                    .filter((style) => style !== 'None')
+                    .map((style) => {
+                      const isSelected = formData.bowlingStyle === style;
+                      return (
+                        <button
+                          type="button"
+                          key={style}
+                          onClick={() => onChange({ bowlingStyle: style })}
+                          className={`py-2.5 px-2 rounded-xl border text-[11px] font-black text-center transition-all ${
+                            isSelected
+                              ? 'border-emerald-400 bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 shadow-[0_0_15px_rgba(16,232,123,0.35)] scale-[1.02]'
+                              : 'border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-700 hover:text-white'
+                          }`}
+                        >
+                          {style}
+                        </button>
+                      );
+                    })}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 

@@ -155,10 +155,12 @@ export const PlayerPreviewCard: React.FC<PlayerPreviewCardProps> = ({
                   <Swords className="w-3 h-3 text-amber-400" />
                   <span>{battingStyle}</span>
                 </div>
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-bold text-emerald-300">
-                  <Flame className="w-3 h-3 text-emerald-400" />
-                  <span>{bowlingStyle}</span>
-                </div>
+                {role !== 'Pure Batsman' && bowlingStyle && bowlingStyle !== 'None' && (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-bold text-emerald-300">
+                    <Flame className="w-3 h-3 text-emerald-400" />
+                    <span>{bowlingStyle}</span>
+                  </div>
+                )}
               </div>
 
             </div>
