@@ -519,7 +519,7 @@ export default function AdminPage() {
     );
   }
 
-  const totalRegistered = tournaments.reduce((acc, t) => acc + (t.registeredCount || 0), 0);
+  const totalRegistered = players.length > 0 ? players.length : tournaments.reduce((acc, t) => acc + (t.registeredCount || 0), 0);
   const paidCount = tournaments.filter((t) => t.isPaid).length;
   const freeCount = tournaments.filter((t) => !t.isPaid).length;
   const verifiedPaidPlayers = players.filter((p) => p.paymentStatus === 'PAID');
@@ -776,9 +776,25 @@ export default function AdminPage() {
                           <div className="flex items-center gap-4 text-xs text-slate-400 mt-1">
                             <span>Auction: {tournament.auctionDate}</span>
                             <span>•</span>
-                            <span className="text-amber-400 font-bold">
-                              🔥 {tournament.registeredCount || 0} Registered
-                            </span>
+                            {(() => {
+                              const matchPlayerCount = players.filter(
+                                (p) => p.tournamentSlug?.toLowerCase() === tournament.slug?.toLowerCase()
+                              ).length;
+                              const displayRegCount = matchPlayerCount > 0 ? matchPlayerCount : (tournament.registeredCount || 0);
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedTournamentFilter(tournament.slug);
+                                    setActiveTab('players');
+                                  }}
+                                  className="text-amber-400 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                                  title="Click to view registered players in Draft Pool"
+                                >
+                                  🔥 {displayRegCount} Registered
+                                </button>
+                              );
+                            })()}
                           </div>
                         </div>
                       </div>
@@ -935,11 +951,17 @@ export default function AdminPage() {
                   className="bg-slate-950 border border-slate-800 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-amber-400"
                 >
                   <option value="all">All Tournaments ({players.length})</option>
-                  {tournaments.map((t) => (
-                    <option key={t.id} value={t.slug}>
-                      {t.title}
-                    </option>
-                  ))}
+                  {tournaments.map((t) => {
+                    const pCount = players.filter(
+                      (p) => p.tournamentSlug?.toLowerCase() === t.slug?.toLowerCase()
+                    ).length;
+                    const countToShow = pCount > 0 ? pCount : (t.registeredCount || 0);
+                    return (
+                      <option key={t.id} value={t.slug}>
+                        {t.title} ({countToShow})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 

@@ -236,25 +236,32 @@ export function getTournamentBySlug(slug: string): Tournament | null {
 }
 
 export async function getTournamentBySlugAsync(slug: string): Promise<Tournament | null> {
+  const cleanSlug = slug.toLowerCase();
   try {
-    const { data, error } = await supabase
-      .from('tournaments')
-      .select('*')
-      .ilike('slug', slug)
-      .maybeSingle();
+    const [tRes, pRes] = await Promise.all([
+      supabase.from('tournaments').select('*').ilike('slug', cleanSlug).maybeSingle(),
+      supabase.from('players').select('tournament_slug').ilike('tournament_slug', cleanSlug),
+    ]);
 
-    if (!error) {
-      if (data) {
-        return mapDbTournamentToModel(data);
+    if (!tRes.error && tRes.data) {
+      const model = mapDbTournamentToModel(tRes.data);
+      if (!pRes.error && Array.isArray(pRes.data)) {
+        model.registeredCount = pRes.data.length;
       }
-      return null;
+      return model;
     }
   } catch (err) {
     console.warn('Supabase getTournamentBySlug notice:', err);
   }
 
   const all = readTournamentsFromFile();
-  return all.find((t) => t.slug.toLowerCase() === slug.toLowerCase()) || null;
+  const found = all.find((t) => t.slug.toLowerCase() === cleanSlug);
+  if (found) {
+    const localPlayers = readPlayersFromFile();
+    const count = localPlayers.filter((p) => p.tournamentSlug?.toLowerCase() === cleanSlug).length;
+    return { ...found, registeredCount: count > 0 ? count : found.registeredCount };
+  }
+  return null;
 }
 
 export function getTournamentById(id: string): Tournament | null {
@@ -469,24 +476,35 @@ export function deleteTournament(idOrSlug: string): boolean {
 }
 
 export async function incrementRegistrationCountAsync(slug: string): Promise<number> {
-  const tournaments = readTournamentsFromFile();
-  const tournament = tournaments.find((t) => t.slug.toLowerCase() === slug.toLowerCase());
-  if (tournament) {
-    tournament.registeredCount = (tournament.registeredCount || 0) + 1;
-    saveTournamentsToFile([...tournaments]);
+  const cleanSlug = slug.toLowerCase();
+  let updatedCount = 1;
 
-    try {
-      await supabase
-        .from('tournaments')
-        .update({ registered_count: tournament.registeredCount })
-        .ilike('slug', slug);
-    } catch (err) {
-      console.error('Supabase increment count error:', err);
-    }
+  try {
+    const { data: tourney } = await supabase
+      .from('tournaments')
+      .select('registered_count')
+      .ilike('slug', cleanSlug)
+      .maybeSingle();
 
-    return tournament.registeredCount;
+    const currentCount = Number(tourney?.registered_count) || 0;
+    updatedCount = currentCount + 1;
+
+    await supabase
+      .from('tournaments')
+      .update({ registered_count: updatedCount })
+      .ilike('slug', cleanSlug);
+  } catch (err) {
+    console.error('Supabase increment count error:', err);
   }
-  return 0;
+
+  const tournaments = readTournamentsFromFile();
+  const tournament = tournaments.find((t) => t.slug.toLowerCase() === cleanSlug);
+  if (tournament) {
+    tournament.registeredCount = updatedCount;
+    saveTournamentsToFile([...tournaments]);
+  }
+
+  return updatedCount;
 }
 
 export function incrementRegistrationCount(slug: string): number {
