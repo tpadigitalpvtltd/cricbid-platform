@@ -136,6 +136,99 @@ async function runAuctionTests() {
     log('AT-08: Next Player Loading', false, e.message);
   }
 
+  // TEST 7: Update Room Settings (Base Price & Bid Increment)
+  try {
+    const res = await apiFetch(`/api/auction/${slug}/action`, {
+      method: 'POST',
+      body: {
+        action: 'UPDATE_SETTINGS',
+        payload: {
+          basePrice: 2000,
+          bidIncrement: 1000,
+          timerSeconds: 15,
+        },
+        adminPin: 'Shoaib@55',
+      },
+    });
+    const pass = res.status === 200 && res.json?.state?.room?.basePrice === 2000 && res.json?.state?.room?.bidIncrement === 1000;
+    log('AT-09: Update Room Settings', pass, `BasePrice: ₹${res.json?.state?.room?.basePrice}, Increment: ₹${res.json?.state?.room?.bidIncrement}`);
+  } catch (e) {
+    log('AT-09: Update Room Settings', false, e.message);
+  }
+
+  // TEST 8: Add Custom Franchise & Purse
+  const customTeamId = `team_test_${Date.now()}`;
+  try {
+    const res = await apiFetch(`/api/auction/${slug}/action`, {
+      method: 'POST',
+      body: {
+        action: 'SAVE_TEAM',
+        payload: {
+          team: {
+            id: customTeamId,
+            name: 'Hyderabad Hawks',
+            shortName: 'HH',
+            logoUrl: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?w=100',
+            color: '#f97316',
+            totalPurse: 250000,
+            remainingPurse: 250000,
+            maxPlayers: 15,
+            secretPin: '7777',
+          },
+        },
+        adminPin: 'Shoaib@55',
+      },
+    });
+    const createdTeam = res.json?.state?.teams?.find((t) => t.id === customTeamId || t.name === 'Hyderabad Hawks');
+    const pass = res.status === 200 && createdTeam && createdTeam.totalPurse === 250000;
+    log('AT-10: Add Custom Franchise & Purse', pass, `Created ${createdTeam?.name} with ₹${createdTeam?.totalPurse} purse and PIN ${createdTeam?.secretPin}`);
+  } catch (e) {
+    log('AT-10: Add Custom Franchise & Purse', false, e.message);
+  }
+
+  // TEST 9: Update Player Individual Base Price
+  try {
+    const stateRes = await apiFetch(`/api/auction/${slug}`);
+    const firstPlayer = stateRes.json?.state?.playersQueue?.[0]?.player;
+    const targetPlayerId = firstPlayer?.registrationId;
+
+    const res = await apiFetch(`/api/auction/${slug}/action`, {
+      method: 'POST',
+      body: {
+        action: 'UPDATE_PLAYER_BASE_PRICE',
+        payload: {
+          playerId: targetPlayerId,
+          basePrice: 3500,
+        },
+        adminPin: 'Shoaib@55',
+      },
+    });
+    const updatedQueueItem = res.json?.state?.playersQueue?.find((pq) => pq.player.registrationId === targetPlayerId);
+    const pass = res.status === 200 && updatedQueueItem?.basePrice === 3500;
+    log('AT-11: Update Player Base Price', pass, `Player: ${firstPlayer?.fullName}, Base Price: ₹${updatedQueueItem?.basePrice}`);
+  } catch (e) {
+    log('AT-11: Update Player Base Price', false, e.message);
+  }
+
+  // TEST 10: Clean-up Delete Custom Franchise
+  try {
+    const res = await apiFetch(`/api/auction/${slug}/action`, {
+      method: 'POST',
+      body: {
+        action: 'DELETE_TEAM',
+        payload: {
+          teamId: customTeamId,
+        },
+        adminPin: 'Shoaib@55',
+      },
+    });
+    const exists = res.json?.state?.teams?.some((t) => t.id === customTeamId);
+    const pass = res.status === 200 && !exists;
+    log('AT-12: Delete Franchise Clean-up', pass, `Team removed successfully`);
+  } catch (e) {
+    log('AT-12: Delete Franchise Clean-up', false, e.message);
+  }
+
   console.log('======================================================');
   console.log('ALL AUCTION ENGINE TESTS COMPLETE');
   console.log('======================================================');

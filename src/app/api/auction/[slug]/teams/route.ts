@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getTournamentTeams, saveTournamentTeams } from '@/lib/auctionStore';
+import { getTournamentTeams, saveTournamentTeams, executeAuctioneerAction } from '@/lib/auctionStore';
+import { verifyAdminSession, getAdminPassword } from '@/lib/auth';
 
 export async function GET(
   request: Request,
@@ -68,6 +69,80 @@ export async function POST(
         boughtPlayersCount: team.boughtPlayersCount,
       },
     });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err?.message }, { status: 500 });
+  }
+}
+
+// Add or Update Team
+export async function PUT(
+  request: Request,
+  { params }: { params: { slug: string } }
+) {
+  try {
+    const slug = params.slug;
+    const body = await request.json().catch(() => ({}));
+    const { team, adminPin } = body;
+
+    const isAuthedSession = verifyAdminSession(request);
+    const validPin = getAdminPassword();
+    const isAuthedPin = Boolean(adminPin && String(adminPin).trim() === String(validPin).trim());
+
+    if (!isAuthedSession && !isAuthedPin) {
+      return NextResponse.json({ success: false, error: 'Unauthorized: Admin PIN or session required' }, { status: 401 });
+    }
+
+    const res = await executeAuctioneerAction({
+      slug,
+      action: 'SAVE_TEAM',
+      payload: { team },
+    });
+
+    if (!res.success) {
+      return NextResponse.json({ success: false, error: res.error }, { status: 400 });
+    }
+
+    return NextResponse.json({ success: true, teams: res.state?.teams, state: res.state });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err?.message }, { status: 500 });
+  }
+}
+
+// Delete Team
+export async function DELETE(
+  request: Request,
+  { params }: { params: { slug: string } }
+) {
+  try {
+    const slug = params.slug;
+    const { searchParams } = new URL(request.url);
+    const body = await request.json().catch(() => ({}));
+    const teamId = body?.teamId || searchParams.get('teamId');
+    const adminPin = body?.adminPin || searchParams.get('adminPin');
+
+    const isAuthedSession = verifyAdminSession(request);
+    const validPin = getAdminPassword();
+    const isAuthedPin = Boolean(adminPin && String(adminPin).trim() === String(validPin).trim());
+
+    if (!isAuthedSession && !isAuthedPin) {
+      return NextResponse.json({ success: false, error: 'Unauthorized: Admin PIN or session required' }, { status: 401 });
+    }
+
+    if (!teamId) {
+      return NextResponse.json({ success: false, error: 'teamId is required' }, { status: 400 });
+    }
+
+    const res = await executeAuctioneerAction({
+      slug,
+      action: 'DELETE_TEAM',
+      payload: { teamId },
+    });
+
+    if (!res.success) {
+      return NextResponse.json({ success: false, error: res.error }, { status: 400 });
+    }
+
+    return NextResponse.json({ success: true, teams: res.state?.teams, state: res.state });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err?.message }, { status: 500 });
   }
