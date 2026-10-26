@@ -29,6 +29,7 @@ const AUCTION_DATA_FILE = path.join(STORAGE_DIR, 'auction_data.json');
 interface LocalAuctionData {
   rooms: Record<string, AuctionRoom>;
   teams: Record<string, TournamentTeam[]>;
+  teamsInitialized: Record<string, boolean>;
   bids: Record<string, AuctionBid[]>;
   playerStates: Record<string, Record<string, AuctionPlayerState>>; // slug -> playerId -> state
 }
@@ -42,6 +43,7 @@ if (!globalThis.__CRICBID_AUCTION_DATA__) {
   globalThis.__CRICBID_AUCTION_DATA__ = {
     rooms: {},
     teams: {},
+    teamsInitialized: {},
     bids: {},
     playerStates: {},
   };
@@ -66,6 +68,7 @@ function readLocalData(): LocalAuctionData {
         globalThis.__CRICBID_AUCTION_DATA__ = {
           rooms: data.rooms || {},
           teams: data.teams || {},
+          teamsInitialized: data.teamsInitialized || {},
           bids: data.bids || {},
           playerStates: data.playerStates || {},
         };
@@ -78,6 +81,7 @@ function readLocalData(): LocalAuctionData {
     globalThis.__CRICBID_AUCTION_DATA__ || {
       rooms: {},
       teams: {},
+      teamsInitialized: {},
       bids: {},
       playerStates: {},
     }
@@ -323,7 +327,7 @@ export async function saveAuctionRoom(room: AuctionRoom): Promise<AuctionRoom> {
 }
 
 /**
- * Get Tournament Teams (seeds default 6 teams if empty)
+ * Get Tournament Teams (seeds default 6 teams if empty, respects empty if user deleted all)
  */
 export async function getTournamentTeams(slug: string): Promise<TournamentTeam[]> {
   const cleanSlug = slug.toLowerCase();
@@ -336,34 +340,48 @@ export async function getTournamentTeams(slug: string): Promise<TournamentTeam[]
       .ilike('tournament_slug', cleanSlug)
       .order('created_at', { ascending: true });
 
-    if (!error && Array.isArray(data) && data.length > 0) {
-      return data.map((t) => ({
-        id: t.id,
-        tournamentId: t.tournament_id,
-        tournamentSlug: t.tournament_slug,
-        name: t.name,
-        shortName: t.short_name,
-        logoUrl: t.logo_url || '',
-        color: t.color || '#f59e0b',
-        totalPurse: Number(t.total_purse) || 100000,
-        remainingPurse: Number(t.remaining_purse) || 100000,
-        secretPin: String(t.secret_pin || '1111'),
-        maxPlayers: Number(t.max_players) || 15,
-        boughtPlayersCount: Number(t.bought_players_count) || 0,
-        createdAt: t.created_at,
-      }));
+    if (!error && Array.isArray(data)) {
+      if (data.length > 0) {
+        return data.map((t) => ({
+          id: t.id,
+          tournamentId: t.tournament_id,
+          tournamentSlug: t.tournament_slug,
+          name: t.name,
+          shortName: t.short_name,
+          logoUrl: t.logo_url || '',
+          color: t.color || '#f59e0b',
+          totalPurse: Number(t.total_purse) || 100000,
+          remainingPurse: Number(t.remaining_purse) || 100000,
+          secretPin: String(t.secret_pin || '1111'),
+          maxPlayers: Number(t.max_players) || 15,
+          boughtPlayersCount: Number(t.bought_players_count) || 0,
+          createdAt: t.created_at,
+        }));
+      }
+
+      // If database returned 0 rows, check if tournament was already initialized.
+      // If initialized, respect that the admin intentionally cleared all teams!
+      const local = readLocalData();
+      if (local.teamsInitialized?.[cleanSlug]) {
+        return local.teams[cleanSlug] || [];
+      }
     }
   } catch (err) {}
 
   // 2. Try Local Store
   const local = readLocalData();
+  if (local.teamsInitialized?.[cleanSlug]) {
+    return local.teams[cleanSlug] || [];
+  }
   if (local.teams[cleanSlug] && local.teams[cleanSlug].length > 0) {
     return local.teams[cleanSlug];
   }
 
-  // 3. Seed Default Teams
+  // 3. Seed Default Teams ONLY on initial room setup
   const defaultTeams = getDefaultSeedTeams(cleanSlug);
   local.teams[cleanSlug] = defaultTeams;
+  if (!local.teamsInitialized) local.teamsInitialized = {};
+  local.teamsInitialized[cleanSlug] = true;
   saveLocalData(local);
 
   // Sync to Supabase in background
@@ -394,6 +412,8 @@ export async function getTournamentTeams(slug: string): Promise<TournamentTeam[]
 export async function deleteTournamentTeam(slug: string, teamId: string): Promise<void> {
   const cleanSlug = slug.toLowerCase();
   const local = readLocalData();
+  if (!local.teamsInitialized) local.teamsInitialized = {};
+  local.teamsInitialized[cleanSlug] = true;
   if (local.teams[cleanSlug]) {
     local.teams[cleanSlug] = local.teams[cleanSlug].filter((t) => t.id !== teamId);
     saveLocalData(local);
@@ -406,6 +426,8 @@ export async function deleteTournamentTeam(slug: string, teamId: string): Promis
 export async function saveTournamentTeams(slug: string, teams: TournamentTeam[]): Promise<void> {
   const cleanSlug = slug.toLowerCase();
   const local = readLocalData();
+  if (!local.teamsInitialized) local.teamsInitialized = {};
+  local.teamsInitialized[cleanSlug] = true;
   local.teams[cleanSlug] = teams;
   saveLocalData(local);
 
@@ -795,11 +817,12 @@ export async function executeAuctioneerAction(params: {
     const player = rawPlayers.find((p) => p.registrationId === targetPlayerId);
     if (!player) return { success: false, error: 'Player not found in tournament pool' };
 
-    const basePrice = payload?.basePrice || 1000;
+    const playerCustomBase = playerStates[player.registrationId]?.basePrice;
+    const basePrice = payload?.basePrice || playerCustomBase || room.basePrice || 1000;
     room.currentPlayerId = player.registrationId;
     room.currentBid = basePrice;
     room.currentBiddingTeamId = null;
-    room.timerSeconds = 10;
+    room.timerSeconds = room.timerSeconds || 10;
     room.timerRunning = room.status === 'ACTIVE';
     room.lastAction = 'NEXT';
     room.lastActionTimestamp = Date.now();
@@ -824,10 +847,12 @@ export async function executeAuctioneerAction(params: {
 
     const nextPlayer = rawPlayers[targetIndex];
     if (nextPlayer) {
+      const playerCustomBase = playerStates[nextPlayer.registrationId]?.basePrice;
+      const basePrice = (playerCustomBase && playerCustomBase > 0) ? playerCustomBase : (room.basePrice || 1000);
       room.currentPlayerId = nextPlayer.registrationId;
-      room.currentBid = room.basePrice || 1000;
+      room.currentBid = basePrice;
       room.currentBiddingTeamId = null;
-      room.timerSeconds = 10;
+      room.timerSeconds = room.timerSeconds || 10;
       room.timerRunning = room.status === 'ACTIVE';
       room.lastAction = 'NEXT';
       room.lastActionTimestamp = Date.now();
@@ -837,7 +862,7 @@ export async function executeAuctioneerAction(params: {
         playerId: nextPlayer.registrationId,
         tournamentSlug: cleanSlug,
         status: 'IN_AUCTION',
-        basePrice: room.basePrice || 1000,
+        basePrice,
       });
 
       await broadcastAuctionUpdate(cleanSlug, 'PLAYER_CHANGED', { room, player: nextPlayer });
@@ -980,6 +1005,10 @@ export async function executeAuctioneerAction(params: {
     const teamId = payload?.teamId;
     if (teamId) {
       const filtered = teams.filter((t) => t.id !== teamId);
+      if (room.currentBiddingTeamId === teamId) {
+        room.currentBiddingTeamId = null;
+        await saveAuctionRoom(room);
+      }
       await saveTournamentTeams(cleanSlug, filtered);
       await deleteTournamentTeam(cleanSlug, teamId);
       await broadcastAuctionUpdate(cleanSlug, 'TEAMS_UPDATED', { teams: filtered });

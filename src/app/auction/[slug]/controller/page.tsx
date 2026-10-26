@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -32,7 +32,12 @@ import {
   Check,
   ExternalLink,
   DollarSign,
-  AlertCircle
+  AlertCircle,
+  Upload,
+  Image as ImageIcon,
+  ArrowLeft,
+  Flame,
+  Zap,
 } from 'lucide-react';
 import { FullAuctionState, TournamentTeam } from '@/lib/auctionTypes';
 import { supabase } from '@/lib/supabase';
@@ -55,6 +60,16 @@ const PRESET_COLORS = [
   '#f97316', // Orange
   '#06b6d4', // Cyan
   '#ec4899', // Pink
+];
+
+const ROLE_OPTIONS = [
+  { label: 'All Roles', value: 'All' },
+  { label: 'Pure Batsman', value: 'Pure Batsman' },
+  { label: 'Fast Bowlers', value: 'Fast Bowler' },
+  { label: 'Spin Bowlers', value: 'Spin Bowler' },
+  { label: 'Batting All-Rounders', value: 'Batting All-Rounder' },
+  { label: 'Bowling All-Rounders', value: 'Bowling All-Rounder' },
+  { label: 'Wicket Keepers', value: 'Wicket Keeper Batsman' },
 ];
 
 export default function AuctioneerControllerPage() {
@@ -85,10 +100,17 @@ export default function AuctioneerControllerPage() {
   const [playerBasePrices, setPlayerBasePrices] = useState<Record<string, number>>({});
 
   // Global settings form state
+  const hasInitializedSettings = useRef(false);
   const [settingsBasePrice, setSettingsBasePrice] = useState<number>(1000);
   const [settingsBidIncrement, setSettingsBidIncrement] = useState<number>(500);
   const [settingsTimerSeconds, setSettingsTimerSeconds] = useState<number>(10);
   const [settingsSavedMsg, setSettingsSavedMsg] = useState(false);
+
+  // Decision toast announcement in Bidding Desk
+  const [lastDecisionMsg, setLastDecisionMsg] = useState<{
+    type: 'SOLD' | 'UNSOLD';
+    text: string;
+  } | null>(null);
 
   // Franchise Modal State (Add / Edit)
   const [showTeamModal, setShowTeamModal] = useState(false);
@@ -102,6 +124,7 @@ export default function AuctioneerControllerPage() {
   const [teamFormMaxPlayers, setTeamFormMaxPlayers] = useState<number>(15);
   const [teamFormSecretPin, setTeamFormSecretPin] = useState('');
   const [copiedPinId, setCopiedPinId] = useState<string | null>(null);
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
 
   // Check saved admin PIN in sessionStorage
   useEffect(() => {
@@ -135,11 +158,12 @@ export default function AuctioneerControllerPage() {
         const json = await res.json();
         if (json.success && json.state) {
           setState(json.state);
-          // Sync settings state if available
-          if (json.state.room) {
+          // Sync settings state only on first load so background polling doesn't overwrite admin typing
+          if (json.state.room && !hasInitializedSettings.current) {
             setSettingsBasePrice(json.state.room.basePrice || 1000);
             setSettingsBidIncrement(json.state.room.bidIncrement || 500);
             setSettingsTimerSeconds(json.state.room.timerSeconds || 10);
+            hasInitializedSettings.current = true;
           }
         }
       }
@@ -190,8 +214,10 @@ export default function AuctioneerControllerPage() {
       } else if (json.state) {
         setState(json.state);
       }
+      return json;
     } catch (e: any) {
       alert(e.message || 'Action error');
+      return null;
     } finally {
       setActionLoading(false);
     }
@@ -201,6 +227,9 @@ export default function AuctioneerControllerPage() {
     if (!slug || !teamId || !amount) return;
     try {
       setActionLoading(true);
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(40);
+      }
       const res = await fetch(`/api/auction/${slug}/bid`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -215,11 +244,47 @@ export default function AuctioneerControllerPage() {
         alert(json.error || 'Unable to place bid');
       } else if (json.state) {
         setState(json.state);
+        setCustomBidAmount('');
       }
     } catch (e: any) {
       alert(e.message || 'Error placing bid');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // Decision Handler: SOLD
+  const handleMarkSold = async () => {
+    if (!currentPlayer) return;
+    if (!currentBiddingTeam) {
+      alert('Cannot mark as SOLD: No franchise has placed a bid yet! Select a team and place at least one bid.');
+      return;
+    }
+    const soldPrice = currentBid;
+    const soldTeamName = currentBiddingTeam.name;
+    const playerName = currentPlayer.fullName;
+
+    const res = await executeAction('MARK_SOLD');
+    if (res?.success) {
+      setLastDecisionMsg({
+        type: 'SOLD',
+        text: `🎉 SOLD! ${playerName} sold to ${soldTeamName} for ₹${soldPrice.toLocaleString('en-IN')}!`,
+      });
+      setTimeout(() => setLastDecisionMsg(null), 8000);
+    }
+  };
+
+  // Decision Handler: UNSOLD
+  const handleMarkUnsold = async () => {
+    if (!currentPlayer) return;
+    const playerName = currentPlayer.fullName;
+    const res = await executeAction('MARK_UNSOLD');
+    if (res?.success) {
+      setLastDecisionMsg({
+        type: 'UNSOLD',
+        text: `⚠️ ${playerName} marked as UNSOLD.`,
+      });
+      setTimeout(() => setLastDecisionMsg(null), 6000);
     }
   };
 
@@ -249,6 +314,47 @@ export default function AuctioneerControllerPage() {
     setTeamFormMaxPlayers(team.maxPlayers || 15);
     setTeamFormSecretPin(team.secretPin || '1111');
     setShowTeamModal(true);
+  };
+
+  // Handle Logo Upload from Device Gallery (converts to compressed base64)
+  const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file (PNG, JPG, WEBP)');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new (window as any).Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 360;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height *= MAX_SIZE / width;
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/png', 0.88);
+        setTeamFormLogoUrl(dataUrl);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   // Save Franchise (Add / Edit)
@@ -297,13 +403,17 @@ export default function AuctioneerControllerPage() {
   // Save Global Settings
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
+    const baseP = Number(settingsBasePrice) || 1000;
+    const bidInc = Number(settingsBidIncrement) || 500;
+    const timerS = Number(settingsTimerSeconds) || 10;
+
     await executeAction('UPDATE_SETTINGS', {
-      basePrice: Number(settingsBasePrice),
-      bidIncrement: Number(settingsBidIncrement),
-      timerSeconds: Number(settingsTimerSeconds),
+      basePrice: baseP,
+      bidIncrement: bidInc,
+      timerSeconds: timerS,
     });
     setSettingsSavedMsg(true);
-    setTimeout(() => setSettingsSavedMsg(false), 3000);
+    setTimeout(() => setSettingsSavedMsg(false), 3500);
   };
 
   // Update Individual Player Base Price
@@ -318,6 +428,12 @@ export default function AuctioneerControllerPage() {
       basePrice: price,
     });
     alert(`Base price updated to ₹${price.toLocaleString('en-IN')}`);
+  };
+
+  // Load a player onto stage and switch tab to Bidding Desk immediately
+  const handleLoadOnStage = async (playerId: string, basePrice: number) => {
+    await executeAction('SET_PLAYER', { playerId, basePrice });
+    setActiveTab('control');
   };
 
   // If PIN authentication required
@@ -369,11 +485,20 @@ export default function AuctioneerControllerPage() {
   };
 
   const currentBid = room.currentBid || room.basePrice || 1000;
-  const quickIncrements = [100, 500, 1000, 2000, 5000];
+  const currentIncrement = room.bidIncrement || 500;
+  const quickIncrements = [100, 500, 1000, 2000, 5000, 10000];
 
   // Filtered queue
   const filteredPlayers = playersQueue.filter((pq) => {
-    if (roleFilter !== 'All' && pq.player.role !== roleFilter) return false;
+    if (roleFilter !== 'All') {
+      const pRole = (pq.player.role || '').toLowerCase();
+      if (roleFilter === 'Fast Bowler' && !pRole.includes('fast')) return false;
+      if (roleFilter === 'Spin Bowler' && !pRole.includes('spin')) return false;
+      if (roleFilter === 'Batting All-Rounder' && !pRole.includes('batting all')) return false;
+      if (roleFilter === 'Bowling All-Rounder' && !pRole.includes('bowling all')) return false;
+      if (roleFilter === 'Wicket Keeper Batsman' && !pRole.includes('keeper')) return false;
+      if (roleFilter === 'Pure Batsman' && pq.player.role !== 'Pure Batsman') return false;
+    }
     if (statusFilter !== 'ALL' && pq.status !== statusFilter) return false;
     if (searchQuery.trim() && !pq.player.fullName.toLowerCase().includes(searchQuery.toLowerCase())) {
       return false;
@@ -392,7 +517,7 @@ export default function AuctioneerControllerPage() {
       {/* CONTROLLER TOP NAVIGATION */}
       <header className="px-4 sm:px-6 py-3.5 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-30">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-amber-400 text-slate-950 flex items-center justify-center font-black">
+          <div className="w-8 h-8 rounded-lg bg-amber-400 text-slate-950 flex items-center justify-center font-black shadow-md">
             <Gavel className="w-4 h-4" />
           </div>
           <div>
@@ -409,35 +534,35 @@ export default function AuctioneerControllerPage() {
         </div>
 
         {/* View Tabs */}
-        <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+        <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 overflow-x-auto max-w-full">
           <button
             onClick={() => setActiveTab('control')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              activeTab === 'control' ? 'bg-amber-400 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+              activeTab === 'control' ? 'bg-amber-400 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
             }`}
           >
             Bidding Desk
           </button>
           <button
             onClick={() => setActiveTab('players')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              activeTab === 'players' ? 'bg-amber-400 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+              activeTab === 'players' ? 'bg-amber-400 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
             }`}
           >
             Draft Pool & Base Prices ({playersQueue.length})
           </button>
           <button
             onClick={() => setActiveTab('teams')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              activeTab === 'teams' ? 'bg-amber-400 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+              activeTab === 'teams' ? 'bg-amber-400 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
             }`}
           >
             Franchises & Purse ({teams.length})
           </button>
           <button
             onClick={() => setActiveTab('settings')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              activeTab === 'settings' ? 'bg-amber-400 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+              activeTab === 'settings' ? 'bg-amber-400 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
             }`}
           >
             <SettingsIcon className="w-3.5 h-3.5 inline mr-1" /> Settings
@@ -458,7 +583,7 @@ export default function AuctioneerControllerPage() {
             <button
               onClick={() => executeAction('PAUSE')}
               disabled={actionLoading}
-              className="px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-1.5 hover:bg-amber-500/30 transition-colors"
             >
               <Pause className="w-3.5 h-3.5" /> Pause
             </button>
@@ -466,7 +591,7 @@ export default function AuctioneerControllerPage() {
             <button
               onClick={() => executeAction('RESUME')}
               disabled={actionLoading}
-              className="px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5 hover:bg-emerald-500/30 transition-colors"
             >
               <Play className="w-3.5 h-3.5" /> Start / Resume
             </button>
@@ -487,23 +612,25 @@ export default function AuctioneerControllerPage() {
         <div className="flex-1 p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto w-full">
           
           {/* LEFT: ACTIVE PLAYER ON STAGE (6 Cols) */}
-          <div className="lg:col-span-6 bg-slate-900/80 rounded-3xl border border-slate-800 p-5 sm:p-6 flex flex-col justify-between">
+          <div className="lg:col-span-6 bg-slate-900/80 rounded-3xl border border-slate-800 p-5 sm:p-6 flex flex-col justify-between shadow-xl">
             <div>
               <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
-                <span className="text-xs font-black uppercase tracking-wider text-amber-400">
-                  Current Player on Block
+                <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                  <Flame className="w-4 h-4 text-amber-400" /> Current Player on Block
                 </span>
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => executeAction('PREV_PLAYER')}
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                    disabled={actionLoading}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
                     title="Previous Player"
                   >
                     <SkipBack className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => executeAction('NEXT_PLAYER')}
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                    disabled={actionLoading}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
                     title="Next Player"
                   >
                     <SkipForward className="w-4 h-4" />
@@ -511,9 +638,36 @@ export default function AuctioneerControllerPage() {
                 </div>
               </div>
 
+              {/* Decision Announcement Banner */}
+              {lastDecisionMsg && (
+                <div
+                  className={`p-3.5 rounded-2xl mb-4 border font-bold text-xs flex items-center justify-between gap-2 shadow-lg animate-in fade-in ${
+                    lastDecisionMsg.type === 'SOLD'
+                      ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                      : 'bg-rose-500/20 border-rose-500/50 text-rose-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {lastDecisionMsg.type === 'SOLD' ? (
+                      <CheckCircle2 className="w-5 h-5 shrink-0" />
+                    ) : (
+                      <XCircle className="w-5 h-5 shrink-0" />
+                    )}
+                    <span>{lastDecisionMsg.text}</span>
+                  </div>
+                  <button
+                    onClick={() => executeAction('NEXT_PLAYER')}
+                    disabled={actionLoading}
+                    className="px-3 py-1.5 rounded-xl bg-white text-slate-950 font-black text-xs uppercase tracking-wider shrink-0 hover:bg-slate-200 transition-colors shadow"
+                  >
+                    Next Player &rarr;
+                  </button>
+                </div>
+              )}
+
               {currentPlayer ? (
                 <div className="flex items-center gap-5 mb-5">
-                  <div className="w-24 h-24 rounded-2xl p-[2px] bg-gradient-to-tr from-amber-400 to-emerald-400 shrink-0">
+                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl p-[2px] bg-gradient-to-tr from-amber-400 to-emerald-400 shrink-0 shadow-lg">
                     <div className="w-full h-full rounded-[14px] bg-slate-950 overflow-hidden flex items-center justify-center">
                       {currentPlayer.photoUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -523,26 +677,26 @@ export default function AuctioneerControllerPage() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full bg-slate-900 flex items-center justify-center font-black text-amber-400 text-xl">
+                        <div className="w-full h-full bg-slate-900 flex items-center justify-center font-black text-amber-400 text-2xl">
                           {getInitials(currentPlayer.fullName)}
                         </div>
                       )}
                     </div>
                   </div>
 
-                  <div>
-                    <span className="text-[10px] font-black uppercase text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[10px] font-black uppercase text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20 inline-block">
                       {currentPlayer.role}
                     </span>
-                    <h2 className="text-2xl font-black uppercase text-white mt-1">
+                    <h2 className="text-xl sm:text-2xl font-black uppercase text-white mt-1 truncate">
                       {currentPlayer.fullName}
                     </h2>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-slate-400 mt-0.5">
                       Age: {currentPlayer.age} yrs • {currentPlayer.battingStyle}
                       {currentPlayer.role !== 'Pure Batsman' && currentPlayer.bowlingStyle && currentPlayer.bowlingStyle !== 'None' ? ` • ${currentPlayer.bowlingStyle}` : ''}
                     </p>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className="text-xs text-amber-300 font-mono font-bold">
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-xs text-amber-300 font-mono font-bold bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
                         Base Price: ₹ {room.basePrice.toLocaleString('en-IN')}
                       </span>
                       {!currentBiddingTeam && (
@@ -553,7 +707,7 @@ export default function AuctioneerControllerPage() {
                               executeAction('SET_PLAYER', { playerId: currentPlayer.registrationId, basePrice: Number(val) });
                             }
                           }}
-                          className="text-[10px] text-amber-400 underline hover:text-amber-300 font-bold"
+                          className="text-[11px] text-amber-400 underline hover:text-amber-300 font-bold"
                         >
                           Change
                         </button>
@@ -564,10 +718,11 @@ export default function AuctioneerControllerPage() {
               ) : (
                 <div className="py-12 text-center text-slate-500">
                   <User className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                  <p className="text-xs">No active player loaded</p>
+                  <p className="text-xs">No active player loaded on auction block</p>
                   <button
                     onClick={() => executeAction('NEXT_PLAYER')}
-                    className="mt-3 px-4 py-2 rounded-xl bg-amber-400 text-slate-950 text-xs font-black uppercase"
+                    disabled={actionLoading}
+                    className="mt-3 px-4 py-2 rounded-xl bg-amber-400 text-slate-950 text-xs font-black uppercase shadow-lg hover:bg-amber-300"
                   >
                     Load First Player
                   </button>
@@ -575,13 +730,13 @@ export default function AuctioneerControllerPage() {
               )}
 
               {/* CURRENT BID DISPLAY */}
-              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 mb-6">
+              <div className="bg-slate-950 p-4 sm:p-5 rounded-2xl border border-slate-800 mb-6 shadow-inner">
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-[10px] uppercase font-black tracking-widest text-slate-500">
                       CURRENT STAGE BID
                     </span>
-                    <div className="text-3xl sm:text-4xl font-black text-amber-400 font-mono">
+                    <div className="text-3xl sm:text-4xl font-black text-amber-400 font-mono tracking-tight">
                       ₹ {currentBid.toLocaleString('en-IN')}
                     </div>
                   </div>
@@ -591,8 +746,19 @@ export default function AuctioneerControllerPage() {
                       HOLDING TEAM
                     </span>
                     {currentBiddingTeam ? (
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-sm font-black text-white uppercase">
+                      <div className="flex items-center gap-2 mt-1 justify-end">
+                        <div
+                          className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center font-black text-[10px] text-slate-950 shadow"
+                          style={{ backgroundColor: currentBiddingTeam.color || '#f59e0b' }}
+                        >
+                          {currentBiddingTeam.logoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={currentBiddingTeam.logoUrl} alt={currentBiddingTeam.name} className="w-full h-full object-cover" />
+                          ) : (
+                            currentBiddingTeam.shortName || 'TM'
+                          )}
+                        </div>
+                        <span className="text-sm font-black text-white uppercase truncate max-w-[150px]">
                           {currentBiddingTeam.name}
                         </span>
                       </div>
@@ -607,18 +773,18 @@ export default function AuctioneerControllerPage() {
             {/* BIG DECISION BUTTONS: MARK SOLD / UNSOLD */}
             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-800">
               <button
-                onClick={() => executeAction('MARK_SOLD')}
+                onClick={handleMarkSold}
                 disabled={actionLoading || !currentBiddingTeam}
-                className="py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 <CheckCircle2 className="w-5 h-5 stroke-[2.5]" />
                 <span>MARK AS SOLD</span>
               </button>
 
               <button
-                onClick={() => executeAction('MARK_UNSOLD')}
+                onClick={handleMarkUnsold}
                 disabled={actionLoading || !currentPlayer}
-                className="py-4 rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-sm uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="py-4 rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 <XCircle className="w-5 h-5 stroke-[2.5]" />
                 <span>MARK AS UNSOLD</span>
@@ -627,14 +793,14 @@ export default function AuctioneerControllerPage() {
           </div>
 
           {/* RIGHT: FLOOR BIDDING CONTROLS & TEAMS GRID (6 Cols) */}
-          <div className="lg:col-span-6 bg-slate-900/80 rounded-3xl border border-slate-800 p-5 sm:p-6 flex flex-col justify-between">
+          <div className="lg:col-span-6 bg-slate-900/80 rounded-3xl border border-slate-800 p-5 sm:p-6 flex flex-col justify-between shadow-xl">
             <div>
               <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
-                <span className="text-xs font-black uppercase tracking-wider text-amber-400">
-                  Floor Bidder (Place Bid on Behalf of Floor)
+                <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                  <Zap className="w-4 h-4 text-amber-400" /> Floor Bidder (Place Bid on Behalf of Floor)
                 </span>
                 <span className="text-[11px] text-slate-400 font-mono">
-                  {teams.length} Franchises Registered
+                  {teams.length} Franchises
                 </span>
               </div>
 
@@ -643,114 +809,140 @@ export default function AuctioneerControllerPage() {
                 <label className="text-[11px] font-black uppercase text-slate-400 block mb-2">
                   1. Select Bidding Team
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
-                  {teams.map((t) => {
-                    const isSelected = selectedTeamForBid === t.id;
-                    const isCurrentHolding = currentBiddingTeam?.id === t.id;
-                    const canAfford = t.remainingPurse >= currentBid + (room.bidIncrement || 500);
-                    return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => setSelectedTeamForBid(t.id)}
-                        className={`p-2.5 rounded-xl border text-left transition-all flex items-center gap-2 ${
-                          isSelected
-                            ? 'border-amber-400 bg-amber-400/20 text-white ring-2 ring-amber-400/40'
-                            : isCurrentHolding
-                            ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300'
-                            : 'border-slate-800 bg-slate-950 hover:border-slate-700 text-slate-300'
-                        } ${!canAfford ? 'opacity-50' : ''}`}
-                      >
-                        <div
-                          className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center font-black text-xs text-slate-950 overflow-hidden"
-                          style={{ backgroundColor: t.color || '#f59e0b' }}
+                {teams.length === 0 ? (
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-center text-xs text-slate-500">
+                    No franchises registered yet. Go to <strong className="text-amber-400">Franchises & Purse</strong> tab to add teams.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+                    {teams.map((t) => {
+                      const isSelected = selectedTeamForBid === t.id;
+                      const isCurrentHolding = currentBiddingTeam?.id === t.id;
+                      const canAfford = t.remainingPurse >= currentBid + currentIncrement;
+
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setSelectedTeamForBid(t.id)}
+                          className={`p-2.5 rounded-xl border text-left transition-all relative ${
+                            isSelected
+                              ? 'border-amber-400 bg-amber-400/20 ring-2 ring-amber-400/30'
+                              : isCurrentHolding
+                              ? 'border-emerald-500 bg-emerald-500/10'
+                              : 'border-slate-800 bg-slate-950 hover:border-slate-700'
+                          } ${!canAfford ? 'opacity-40' : ''}`}
                         >
-                          {t.logoUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={t.logoUrl} alt={t.name} className="w-full h-full object-cover" />
-                          ) : (
-                            t.shortName
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold truncate uppercase">{t.name}</p>
-                          <p className="text-[10px] text-slate-400 font-mono truncate">
-                            ₹{t.remainingPurse.toLocaleString('en-IN')}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <div
+                              className="w-5 h-5 rounded-md overflow-hidden flex items-center justify-center font-black text-[9px] text-slate-950 shrink-0"
+                              style={{ backgroundColor: t.color || '#f59e0b' }}
+                            >
+                              {t.logoUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={t.logoUrl} alt={t.name} className="w-full h-full object-cover" />
+                              ) : (
+                                t.shortName || 'TM'
+                              )}
+                            </div>
+                            <span className="text-xs font-bold text-white truncate flex-1">
+                              {t.name}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-amber-300/80 font-mono block">
+                            Purse: ₹{t.remainingPurse.toLocaleString('en-IN')}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
-              {/* Quick Increment Bids */}
+              {/* Quick Increment Bid Buttons */}
               <div className="mb-4">
                 <label className="text-[11px] font-black uppercase text-slate-400 block mb-2">
-                  2. Choose Quick Increment
+                  2. One-Tap Quick Increments
                 </label>
-                <div className="grid grid-cols-5 gap-2">
-                  {quickIncrements.map((inc) => {
-                    const nextVal = currentBid + inc;
-                    return (
-                      <button
-                        key={inc}
-                        type="button"
-                        onClick={() => {
-                          if (!selectedTeamForBid) {
-                            alert('Please select a team first from above grid');
-                            return;
-                          }
-                          handlePlaceFloorBid(selectedTeamForBid, nextVal);
-                        }}
-                        disabled={actionLoading || !selectedTeamForBid}
-                        className="py-2.5 px-1 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-center text-xs font-black text-amber-400 disabled:opacity-40"
-                      >
-                        +₹{inc}
-                      </button>
-                    );
-                  })}
+
+                {/* Primary Raise Increment Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!selectedTeamForBid) {
+                      alert('Please select a franchise first from the team grid above.');
+                      return;
+                    }
+                    handlePlaceFloorBid(selectedTeamForBid, currentBid + currentIncrement);
+                  }}
+                  disabled={actionLoading || !selectedTeamForBid}
+                  className="w-full py-3 mb-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg hover:from-amber-300 hover:to-yellow-300 disabled:opacity-40 transition-all flex items-center justify-center gap-2"
+                >
+                  <Coins className="w-4 h-4" />
+                  <span>
+                    Raise Bid (+₹{currentIncrement.toLocaleString('en-IN')}) &rarr; ₹{(currentBid + currentIncrement).toLocaleString('en-IN')}
+                  </span>
+                </button>
+
+                {/* Secondary Quick Increase Pill Grid */}
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                  {quickIncrements.map((inc) => (
+                    <button
+                      key={inc}
+                      type="button"
+                      onClick={() => {
+                        if (!selectedTeamForBid) {
+                          alert('Please select a franchise first from the team grid above.');
+                          return;
+                        }
+                        handlePlaceFloorBid(selectedTeamForBid, currentBid + inc);
+                      }}
+                      disabled={actionLoading || !selectedTeamForBid}
+                      className="py-2 rounded-xl bg-slate-950 border border-slate-700 hover:border-amber-400 text-amber-400 hover:text-white text-xs font-mono font-bold text-center transition-all disabled:opacity-30"
+                    >
+                      +₹{inc >= 1000 ? `${inc / 1000}k` : inc}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Custom Bid Amount */}
-              <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 mb-4">
+              {/* Custom Bid Input */}
+              <div className="mb-4 pt-3 border-t border-slate-800">
                 <label className="text-[11px] font-black uppercase text-slate-400 block mb-1.5">
-                  Custom Bid Amount
+                  3. Or Enter Custom Bid Amount (₹)
                 </label>
-                <div className="flex items-center gap-2">
+                <div className="flex gap-2">
                   <input
                     type="number"
-                    placeholder={`e.g. ${currentBid + 1000}`}
+                    placeholder={`Min: ₹${(currentBid + currentIncrement).toLocaleString('en-IN')}`}
                     value={customBidAmount}
                     onChange={(e) => setCustomBidAmount(e.target.value ? Number(e.target.value) : '')}
-                    className="flex-1 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-sm focus:outline-none focus:border-amber-400"
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-sm focus:outline-none focus:border-amber-400"
                   />
                   <button
                     type="button"
                     onClick={() => {
                       if (!selectedTeamForBid) {
-                        alert('Please select a team from the grid first');
+                        alert('Please select a franchise first');
                         return;
                       }
                       if (!customBidAmount || customBidAmount <= currentBid) {
-                        alert(`Custom bid must be greater than ₹${currentBid}`);
+                        alert(`Bid must be higher than current stage bid (₹${currentBid.toLocaleString('en-IN')})`);
                         return;
                       }
-                      handlePlaceFloorBid(selectedTeamForBid, Number(customBidAmount));
-                      setCustomBidAmount('');
+                      handlePlaceFloorBid(selectedTeamForBid, customBidAmount);
                     }}
                     disabled={actionLoading || !selectedTeamForBid || !customBidAmount}
-                    className="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 font-black text-xs uppercase disabled:opacity-40"
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-black uppercase tracking-wider disabled:opacity-40 transition-colors"
                   >
-                    Set Bid
+                    Place Bid
                   </button>
                 </div>
               </div>
             </div>
 
-            <div className="text-[11px] text-slate-500 text-center italic">
-              Floor bids instantly reflect across 4K Projector and Team Owner mobile screens.
+            <div className="text-[11px] text-slate-500 text-center italic mt-2">
+              All floor bids sync in sub-100ms across 4K Projector [TV] and Team Owner mobile screens.
             </div>
           </div>
 
@@ -760,48 +952,60 @@ export default function AuctioneerControllerPage() {
       {/* TAB 2: PLAYER QUEUE MANAGEMENT & BASE PRICES */}
       {activeTab === 'players' && (
         <div className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full">
-          <div className="bg-slate-900/80 rounded-3xl border border-slate-800 p-6">
+          <div className="bg-slate-900/80 rounded-3xl border border-slate-800 p-6 shadow-xl">
             
             {/* Search & Filter Header */}
             <div className="flex flex-wrap items-center justify-between gap-4 pb-4 mb-4 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-black uppercase text-white">
-                  Tournament Draft Pool ({filteredPlayers.length} Players)
-                </h3>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setActiveTab('control')}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors flex items-center gap-1 text-xs font-bold"
+                  title="Return to Bidding Desk"
+                >
+                  <ArrowLeft className="w-4 h-4" /> Desk
+                </button>
+                <div className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-base font-black uppercase text-white">
+                    Tournament Draft Pool ({filteredPlayers.length} Players)
+                  </h3>
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
                 {/* Search */}
-                <input
-                  type="text"
-                  placeholder="Search player name..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
-                />
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Search player name..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-8 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
 
                 {/* Role Filter */}
                 <select
                   value={roleFilter}
                   onChange={(e) => setRoleFilter(e.target.value)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none"
+                  className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none focus:border-amber-400"
                 >
-                  <option value="All">All Roles</option>
-                  <option value="Pure Batsman">Pure Batsman</option>
-                  <option value="Bowler">Bowler</option>
-                  <option value="All-Rounder">All-Rounder</option>
-                  <option value="Wicket Keeper">Wicket Keeper</option>
+                  {ROLE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
                 </select>
 
                 {/* Status Filter */}
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as any)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none"
+                  className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none focus:border-amber-400"
                 >
                   <option value="ALL">All Status</option>
-                  <option value="PENDING">Pending</option>
+                  <option value="PENDING">Pending (Ready)</option>
                   <option value="SOLD">Sold</option>
                   <option value="UNSOLD">Unsold</option>
                 </select>
@@ -809,101 +1013,119 @@ export default function AuctioneerControllerPage() {
             </div>
 
             {/* Players Table / Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[650px] overflow-y-auto pr-1 scrollbar-thin">
-              {filteredPlayers.map(({ player, status, basePrice, soldPrice, soldTeamName }) => {
-                const isCurrentlyActive = currentPlayer?.registrationId === player.registrationId;
-                const localBasePrice = playerBasePrices[player.registrationId] !== undefined
-                  ? playerBasePrices[player.registrationId]
-                  : basePrice;
+            {filteredPlayers.length === 0 ? (
+              <div className="py-16 text-center text-slate-500">
+                <Users className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                <p className="text-sm font-bold">No players found matching your filters</p>
+                <button
+                  onClick={() => {
+                    setRoleFilter('All');
+                    setStatusFilter('ALL');
+                    setSearchQuery('');
+                  }}
+                  className="mt-3 px-3 py-1.5 rounded-xl bg-slate-800 text-amber-400 text-xs font-bold"
+                >
+                  Reset Filters
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 max-h-[650px] overflow-y-auto pr-1 scrollbar-thin">
+                {filteredPlayers.map(({ player, status, basePrice, soldPrice, soldTeamName }) => {
+                  const isCurrentlyActive = currentPlayer?.registrationId === player.registrationId;
+                  const localBasePrice = playerBasePrices[player.registrationId] !== undefined
+                    ? playerBasePrices[player.registrationId]
+                    : basePrice;
 
-                return (
-                  <div
-                    key={player.registrationId}
-                    className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between ${
-                      isCurrentlyActive
-                        ? 'border-amber-400 bg-amber-400/15 ring-2 ring-amber-400/30'
-                        : 'border-slate-800 bg-slate-950/70 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-14 h-14 rounded-xl bg-slate-900 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
-                        {player.photoUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={player.photoUrl} alt={player.fullName} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="font-black text-amber-400 text-xs">{getInitials(player.fullName)}</span>
-                        )}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <span className="text-[9px] font-bold text-amber-400 uppercase block truncate">
-                          {player.role}
-                        </span>
-                        <h4 className="text-xs font-black text-white uppercase truncate">
-                          {player.fullName}
-                        </h4>
-                        <div className="flex items-center gap-1.5 text-[10px] font-mono mt-0.5">
-                          <span
-                            className={`px-1.5 py-0.2 rounded font-bold ${
-                              status === 'SOLD'
-                                ? 'bg-emerald-500/20 text-emerald-400'
-                                : status === 'UNSOLD'
-                                ? 'bg-rose-500/20 text-rose-400'
-                                : 'bg-slate-800 text-slate-300'
-                            }`}
-                          >
-                            {status}
-                          </span>
-                          {status === 'SOLD' && soldPrice && (
-                            <span className="text-emerald-300 font-bold">
-                              ₹{soldPrice.toLocaleString('en-IN')} {soldTeamName ? `(${soldTeamName})` : ''}
-                            </span>
+                  return (
+                    <div
+                      key={player.registrationId}
+                      className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between ${
+                        isCurrentlyActive
+                          ? 'border-amber-400 bg-amber-400/15 ring-2 ring-amber-400/30 shadow-lg'
+                          : 'border-slate-800 bg-slate-950/70 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-14 h-14 rounded-xl bg-slate-900 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center shadow">
+                          {player.photoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={player.photoUrl} alt={player.fullName} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="font-black text-amber-400 text-xs">{getInitials(player.fullName)}</span>
                           )}
                         </div>
-                      </div>
-                    </div>
 
-                    {/* Base Price & Actions Row */}
-                    <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-slate-400 uppercase font-black">Base ₹</span>
-                        <input
-                          type="number"
-                          value={localBasePrice}
-                          onChange={(e) => {
-                            const val = e.target.value ? Number(e.target.value) : 0;
-                            setPlayerBasePrices((prev) => ({
-                              ...prev,
-                              [player.registrationId]: val,
-                            }));
-                          }}
-                          disabled={status === 'SOLD'}
-                          className="w-20 px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs font-mono text-amber-300 focus:outline-none focus:border-amber-400 disabled:opacity-40"
-                        />
-                        {localBasePrice !== basePrice && status !== 'SOLD' && (
-                          <button
-                            type="button"
-                            onClick={() => handleUpdatePlayerBasePrice(player.registrationId)}
-                            className="px-2 py-1 rounded-lg bg-amber-400 text-slate-950 text-[10px] font-black uppercase"
-                          >
-                            Save
-                          </button>
-                        )}
+                        <div className="min-w-0 flex-1">
+                          <span className="text-[9px] font-bold text-amber-400 uppercase block truncate">
+                            {player.role}
+                          </span>
+                          <h4 className="text-xs font-black text-white uppercase truncate">
+                            {player.fullName}
+                          </h4>
+                          <div className="flex items-center gap-1.5 text-[10px] font-mono mt-0.5">
+                            <span
+                              className={`px-1.5 py-0.5 rounded font-bold ${
+                                status === 'SOLD'
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                  : status === 'UNSOLD'
+                                  ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                                  : 'bg-slate-800 text-slate-300'
+                              }`}
+                            >
+                              {status}
+                            </span>
+                            {status === 'SOLD' && soldPrice && (
+                              <span className="text-emerald-300 font-bold truncate">
+                                ₹{soldPrice.toLocaleString('en-IN')} {soldTeamName ? `(${soldTeamName})` : ''}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => executeAction('SET_PLAYER', { playerId: player.registrationId, basePrice: localBasePrice })}
-                        disabled={isCurrentlyActive || actionLoading}
-                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-amber-400 hover:text-slate-950 text-xs font-bold text-slate-300 transition-colors shrink-0 disabled:opacity-40"
-                      >
-                        {isCurrentlyActive ? 'On Block' : status === 'UNSOLD' ? 'Re-Auction' : 'Load on Stage'}
-                      </button>
+                      {/* Base Price & Actions Row */}
+                      <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-slate-400 uppercase font-black">Base ₹</span>
+                          <input
+                            type="number"
+                            value={localBasePrice}
+                            onChange={(e) => {
+                              const val = e.target.value ? Number(e.target.value) : 0;
+                              setPlayerBasePrices((prev) => ({
+                                ...prev,
+                                [player.registrationId]: val,
+                              }));
+                            }}
+                            disabled={status === 'SOLD'}
+                            step={100}
+                            className="w-20 px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs font-mono text-amber-300 focus:outline-none focus:border-amber-400 disabled:opacity-40"
+                          />
+                          {localBasePrice !== basePrice && status !== 'SOLD' && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdatePlayerBasePrice(player.registrationId)}
+                              className="px-2 py-1 rounded-lg bg-amber-400 text-slate-950 text-[10px] font-black uppercase shadow"
+                            >
+                              Save
+                            </button>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleLoadOnStage(player.registrationId, localBasePrice)}
+                          disabled={isCurrentlyActive || actionLoading}
+                          className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-amber-400 hover:text-slate-950 text-xs font-bold text-slate-300 transition-colors shrink-0 disabled:opacity-40 shadow"
+                        >
+                          {isCurrentlyActive ? 'On Block' : status === 'UNSOLD' ? 'Re-Auction' : 'Load on Stage'}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
 
           </div>
         </div>
@@ -912,7 +1134,7 @@ export default function AuctioneerControllerPage() {
       {/* TAB 3: FRANCHISES & PURSE MANAGEMENT */}
       {activeTab === 'teams' && (
         <div className="flex-1 p-4 sm:p-6 max-w-6xl mx-auto w-full">
-          <div className="bg-slate-900/80 rounded-3xl border border-slate-800 p-6">
+          <div className="bg-slate-900/80 rounded-3xl border border-slate-800 p-6 shadow-xl">
             
             {/* Header & Actions */}
             <div className="flex flex-wrap items-center justify-between gap-4 pb-4 mb-6 border-b border-slate-800">
@@ -922,7 +1144,7 @@ export default function AuctioneerControllerPage() {
                   Franchises, Purse Budgets & Mobile PINs
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Set franchise names, team logos, total purse budget, and share the 4-digit PIN for smartphone live bidding.
+                  Set franchise names, team logos (from gallery or URL), purse budget, and share the 4-digit PIN for smartphone live bidding.
                 </p>
               </div>
 
@@ -930,14 +1152,14 @@ export default function AuctioneerControllerPage() {
                 <button
                   type="button"
                   onClick={handleOpenAddTeam}
-                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-xs uppercase flex items-center gap-1.5 shadow-lg"
+                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-xs uppercase flex items-center gap-1.5 shadow-lg hover:from-amber-300 hover:to-yellow-300"
                 >
                   <Plus className="w-4 h-4 stroke-[3]" /> Add New Franchise
                 </button>
 
                 <button
                   onClick={() => {
-                    if (confirm('Reset franchises back to 6 starter default teams? Any custom franchises will be reset.')) {
+                    if (confirm('Reset franchises back to 6 starter default teams? Any custom franchises will be overwritten.')) {
                       executeAction('SEED_TEAMS');
                     }
                   }}
@@ -949,149 +1171,181 @@ export default function AuctioneerControllerPage() {
               </div>
             </div>
 
-            {/* Purse Statistics Summary Bar */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 p-4 rounded-2xl bg-slate-950 border border-slate-800">
+            {/* Overall Purse Statistics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6 bg-slate-950 p-4 rounded-2xl border border-slate-800">
               <div>
-                <span className="text-[10px] text-slate-400 uppercase font-black block">Total Franchises</span>
-                <span className="text-lg font-black text-white">{teams.length} Teams</span>
+                <span className="text-[10px] uppercase font-black tracking-wider text-slate-500">
+                  TOTAL FRANCHISES
+                </span>
+                <div className="text-xl font-black text-white mt-0.5">
+                  {teams.length} Teams
+                </div>
+                <span className="text-[10px] text-slate-500 font-mono">
+                  Purse Spent (Sold): ₹{spentPursePool.toLocaleString('en-IN')}
+                </span>
               </div>
+
               <div>
-                <span className="text-[10px] text-slate-400 uppercase font-black block">Total Purse Pool</span>
-                <span className="text-lg font-black text-amber-400 font-mono">₹{totalPursePool.toLocaleString('en-IN')}</span>
+                <span className="text-[10px] uppercase font-black tracking-wider text-slate-500">
+                  TOTAL PURSE POOL
+                </span>
+                <div className="text-xl font-black text-amber-400 font-mono mt-0.5">
+                  ₹{totalPursePool.toLocaleString('en-IN')}
+                </div>
               </div>
+
               <div>
-                <span className="text-[10px] text-slate-400 uppercase font-black block">Purse Spent (Sold)</span>
-                <span className="text-lg font-black text-emerald-400 font-mono">₹{spentPursePool.toLocaleString('en-IN')}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase font-black block">Remaining Purse</span>
-                <span className="text-lg font-black text-slate-200 font-mono">₹{remainingPursePool.toLocaleString('en-IN')}</span>
+                <span className="text-[10px] uppercase font-black tracking-wider text-slate-500">
+                  REMAINING PURSE
+                </span>
+                <div className="text-xl font-black text-emerald-400 font-mono mt-0.5">
+                  ₹{remainingPursePool.toLocaleString('en-IN')}
+                </div>
               </div>
             </div>
 
-            {/* Franchise Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {teams.map((t) => {
-                const pursePercent = Math.max(0, Math.min(100, Math.round((t.remainingPurse / (t.totalPurse || 1)) * 100)));
-                const isCopied = copiedPinId === t.id;
+            {/* Franchise Cards List */}
+            {teams.length === 0 ? (
+              <div className="py-16 text-center text-slate-500">
+                <ShieldCheck className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                <p className="text-sm font-bold">No franchises created yet</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Click &quot;Add New Franchise&quot; above to create your own custom teams, or click &quot;Reset Default Teams&quot; to restore defaults.
+                </p>
+                <button
+                  onClick={handleOpenAddTeam}
+                  className="mt-4 px-4 py-2 rounded-xl bg-amber-400 text-slate-950 text-xs font-black uppercase shadow-lg hover:bg-amber-300"
+                >
+                  + Add Franchise
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {teams.map((t) => {
+                  const pursePct = Math.round(((t.remainingPurse || 0) / (t.totalPurse || 1)) * 100);
 
-                return (
-                  <div
-                    key={t.id}
-                    className="p-4 rounded-2xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between"
-                  >
-                    <div>
-                      {/* Top: Logo, Name & Actions */}
-                      <div className="flex items-center justify-between gap-3 mb-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div
-                            className="w-12 h-12 rounded-xl shrink-0 overflow-hidden flex items-center justify-center font-black text-sm text-slate-950 shadow-md"
-                            style={{ backgroundColor: t.color || '#f59e0b' }}
-                          >
-                            {t.logoUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={t.logoUrl} alt={t.name} className="w-full h-full object-cover" />
-                            ) : (
-                              t.shortName
-                            )}
-                          </div>
-
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <h4 className="text-sm font-black uppercase text-white truncate">{t.name}</h4>
-                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-bold">
-                                {t.shortName}
-                              </span>
+                  return (
+                    <div
+                      key={t.id}
+                      className="p-4 rounded-2xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between shadow"
+                    >
+                      <div>
+                        {/* Top Row: Logo, Name, Edit, Delete */}
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center font-black text-sm text-slate-950 shrink-0 shadow"
+                              style={{ backgroundColor: t.color || '#f59e0b' }}
+                            >
+                              {t.logoUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={t.logoUrl} alt={t.name} className="w-full h-full object-cover" />
+                              ) : (
+                                t.shortName || 'TM'
+                              )}
                             </div>
-                            <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                              Squad: <strong className="text-white">{t.boughtPlayersCount || 0}</strong> / {t.maxPlayers || 15} Players
-                            </p>
+
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-sm font-black text-white uppercase truncate flex items-center gap-2">
+                                {t.name}
+                                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-900 border border-slate-800 text-slate-400">
+                                  {t.shortName}
+                                </span>
+                              </h4>
+                              <p className="text-[11px] text-slate-400 mt-0.5">
+                                Squad: <strong className="text-white">{t.boughtPlayersCount || 0}</strong> / {t.maxPlayers || 15} Players
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditTeam(t)}
+                              className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
+                              title="Edit Franchise"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTeam(t)}
+                              className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors"
+                              title="Delete Franchise"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
 
-                        {/* Edit & Delete Buttons */}
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditTeam(t)}
-                            className="p-1.5 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-amber-400 transition-colors"
-                            title="Edit Franchise"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteTeam(t)}
-                            className="p-1.5 rounded-lg bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-rose-400 transition-colors"
-                            title="Delete Franchise"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                        {/* Purse Progress Bar */}
+                        <div className="mb-3">
+                          <div className="flex items-center justify-between text-xs font-mono mb-1">
+                            <span className="text-slate-400">Remaining Purse:</span>
+                            <span className="text-amber-300 font-bold">
+                              ₹{t.remainingPurse.toLocaleString('en-IN')}{' '}
+                              <span className="text-slate-500 font-normal">/ ₹{t.totalPurse.toLocaleString('en-IN')}</span>
+                            </span>
+                          </div>
+                          <div className="h-2 w-full rounded-full bg-slate-900 overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-500"
+                              style={{
+                                width: `${Math.max(0, Math.min(100, pursePct))}%`,
+                                backgroundColor: t.color || '#f59e0b',
+                              }}
+                            />
+                          </div>
                         </div>
                       </div>
 
-                      {/* Purse Progress Bar */}
-                      <div className="mb-3">
-                        <div className="flex items-center justify-between text-xs font-mono mb-1">
-                          <span className="text-slate-400">Remaining Purse:</span>
-                          <span className="font-bold text-amber-400">
-                            ₹{t.remainingPurse.toLocaleString('en-IN')}{' '}
-                            <span className="text-slate-500 font-normal">/ ₹{t.totalPurse.toLocaleString('en-IN')}</span>
-                          </span>
-                        </div>
-                        <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{
-                              width: `${pursePercent}%`,
-                              backgroundColor: t.color || '#f59e0b',
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Bottom: Mobile Login PIN */}
-                    <div className="pt-3 border-t border-slate-900 flex items-center justify-between">
-                      <span className="text-[10px] text-slate-400 uppercase font-black">
-                        Mobile Bidding PIN
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="px-3 py-1 rounded-lg bg-amber-400/10 border border-amber-400/30 text-amber-400 font-mono font-black text-sm tracking-widest">
-                          {t.secretPin}
+                      {/* Bottom Row: Mobile Bidding 4-Digit PIN */}
+                      <div className="pt-2.5 border-t border-slate-900 flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase text-slate-400">
+                          MOBILE BIDDING PIN
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => handleCopyPin(t.secretPin, t.id)}
-                          className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white"
-                          title="Copy PIN"
-                        >
-                          {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2.5 py-1 rounded-lg bg-amber-400/15 border border-amber-400/30 text-amber-300 font-mono font-bold text-xs tracking-wider">
+                            {t.secretPin}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyPin(t.secretPin, t.id)}
+                            className="p-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                            title="Copy PIN"
+                          >
+                            {copiedPinId === t.id ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
 
           </div>
         </div>
       )}
 
-      {/* TAB 4: GLOBAL AUCTION SETTINGS */}
+      {/* TAB 4: ROOM & AUCTION SETTINGS */}
       {activeTab === 'settings' && (
-        <div className="flex-1 p-4 sm:p-6 max-w-3xl mx-auto w-full">
-          <div className="bg-slate-900/80 rounded-3xl border border-slate-800 p-6">
-            <div className="flex items-center gap-2 pb-4 mb-6 border-b border-slate-800">
+        <div className="flex-1 p-4 sm:p-6 max-w-2xl mx-auto w-full">
+          <div className="bg-slate-900/80 rounded-3xl border border-slate-800 p-6 shadow-xl">
+            <h3 className="text-base font-black uppercase text-white mb-2 flex items-center gap-2">
               <SettingsIcon className="w-5 h-5 text-amber-400" />
-              <h3 className="text-base font-black uppercase text-white">
-                Live Auction Room Settings
-              </h3>
-            </div>
+              Auction Rules & Default Stage Settings
+            </h3>
+            <p className="text-xs text-slate-400 mb-6">
+              Configure default base price, bid increments, and countdown timer duration. All changes instantly reflect across Projector [TV] and mobile live screens.
+            </p>
 
             <form onSubmit={handleSaveSettings} className="space-y-5">
-              {/* Default Base Price */}
+              {/* Default Starting Base Price */}
               <div>
                 <label className="text-xs font-black uppercase text-slate-300 block mb-1.5">
                   Default Player Starting Base Price (₹)
@@ -1102,6 +1356,7 @@ export default function AuctioneerControllerPage() {
                   onChange={(e) => setSettingsBasePrice(Number(e.target.value))}
                   min={100}
                   step={100}
+                  required
                   className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-sm focus:outline-none focus:border-amber-400"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
@@ -1120,6 +1375,7 @@ export default function AuctioneerControllerPage() {
                   onChange={(e) => setSettingsBidIncrement(Number(e.target.value))}
                   min={50}
                   step={50}
+                  required
                   className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-sm focus:outline-none focus:border-amber-400"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
@@ -1138,6 +1394,7 @@ export default function AuctioneerControllerPage() {
                   onChange={(e) => setSettingsTimerSeconds(Number(e.target.value))}
                   min={5}
                   max={60}
+                  required
                   className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-sm focus:outline-none focus:border-amber-400"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
@@ -1146,15 +1403,15 @@ export default function AuctioneerControllerPage() {
               </div>
 
               {settingsSavedMsg && (
-                <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" /> Room settings saved successfully! Projector and mobile synced.
+                <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 shadow">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" /> Room settings saved successfully! Projector and mobile synced.
                 </div>
               )}
 
               <button
                 type="submit"
                 disabled={actionLoading}
-                className="w-full py-3.5 rounded-xl bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg hover:bg-amber-300 disabled:opacity-40"
+                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg hover:from-amber-300 hover:to-yellow-300 disabled:opacity-40 transition-all"
               >
                 Save Room Settings
               </button>
@@ -1235,31 +1492,62 @@ export default function AuctioneerControllerPage() {
                 </div>
               </div>
 
-              {/* Team Logo URL with Live Preview */}
+              {/* Team Logo Upload from Gallery & URL Input */}
               <div>
-                <label className="text-xs font-black uppercase text-slate-300 block mb-1">
-                  Logo URL (Optional)
+                <label className="text-xs font-black uppercase text-slate-300 block mb-1.5">
+                  Franchise Logo (From Gallery or URL)
                 </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="url"
-                    placeholder="https://example.com/logo.png"
-                    value={teamFormLogoUrl}
-                    onChange={(e) => setTeamFormLogoUrl(e.target.value)}
-                    className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-amber-400"
-                  />
+
+                <div className="flex items-center gap-3 mb-2">
+                  {/* Live Preview Avatar */}
                   <div
-                    className="w-10 h-10 rounded-xl shrink-0 overflow-hidden flex items-center justify-center font-black text-xs text-slate-950 shadow"
+                    className="w-14 h-14 rounded-2xl overflow-hidden flex items-center justify-center font-black text-sm text-slate-950 shrink-0 border border-slate-700 shadow"
                     style={{ backgroundColor: teamFormColor }}
                   >
                     {teamFormLogoUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={teamFormLogoUrl} alt="Preview" className="w-full h-full object-cover" />
+                      <img src={teamFormLogoUrl} alt="Logo preview" className="w-full h-full object-cover" />
                     ) : (
-                      teamFormShortName || 'RC'
+                      teamFormShortName || 'TM'
+                    )}
+                  </div>
+
+                  {/* Upload from Gallery Button */}
+                  <div className="flex-1">
+                    <input
+                      type="file"
+                      ref={logoFileInputRef}
+                      onChange={handleLogoFileUpload}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => logoFileInputRef.current?.click()}
+                      className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-amber-300 text-xs font-bold flex items-center gap-1.5 transition-colors shadow"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload from Gallery</span>
+                    </button>
+                    {teamFormLogoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setTeamFormLogoUrl('')}
+                        className="text-[10px] text-rose-400 hover:underline mt-1 block"
+                      >
+                        Remove Logo
+                      </button>
                     )}
                   </div>
                 </div>
+
+                <input
+                  type="text"
+                  placeholder="Or enter logo image URL (https://...)"
+                  value={teamFormLogoUrl.startsWith('data:') ? '' : teamFormLogoUrl}
+                  onChange={(e) => setTeamFormLogoUrl(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs placeholder-slate-600 focus:outline-none focus:border-amber-400"
+                />
               </div>
 
               {/* Purse Budget & Max Players */}
@@ -1313,7 +1601,7 @@ export default function AuctioneerControllerPage() {
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
                   />
                   <p className="text-[10px] text-slate-500 mt-0.5">
-                    Adjust only if correcting manual penalties or awards.
+                    Adjust only if correcting manual penalties or floor purchases.
                   </p>
                 </div>
               )}
@@ -1329,17 +1617,17 @@ export default function AuctioneerControllerPage() {
                     onClick={() => setTeamFormSecretPin(String(Math.floor(1000 + Math.random() * 9000)))}
                     className="text-[10px] text-amber-400 hover:text-amber-300 underline font-bold"
                   >
-                    Random PIN
+                    Generate Random PIN
                   </button>
                 </div>
                 <input
                   type="text"
                   placeholder="e.g. 1111"
                   value={teamFormSecretPin}
-                  onChange={(e) => setTeamFormSecretPin(e.target.value)}
+                  onChange={(e) => setTeamFormSecretPin(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
                   maxLength={6}
                   required
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-amber-400 text-sm font-mono tracking-widest text-center focus:outline-none focus:border-amber-400"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-amber-400 text-sm font-mono tracking-widest text-center focus:outline-none focus:border-amber-400 font-bold"
                 />
               </div>
 
@@ -1355,7 +1643,7 @@ export default function AuctioneerControllerPage() {
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-black text-xs uppercase shadow-lg hover:bg-amber-300"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-xs uppercase shadow-lg hover:from-amber-300 hover:to-yellow-300 transition-all"
                 >
                   {editingTeam ? 'Save Changes' : 'Create Franchise'}
                 </button>
