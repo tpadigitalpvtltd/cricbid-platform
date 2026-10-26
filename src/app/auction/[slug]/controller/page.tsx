@@ -38,6 +38,8 @@ import {
   ArrowLeft,
   Flame,
   Zap,
+  Smartphone,
+  Share2,
 } from 'lucide-react';
 import { FullAuctionState, TournamentTeam } from '@/lib/auctionTypes';
 import { supabase } from '@/lib/supabase';
@@ -569,8 +571,16 @@ export default function AuctioneerControllerPage() {
           </button>
         </div>
 
-        {/* Master Room Controls & TV Link */}
+        {/* Master Room Controls, TV & Mobile Owner Links */}
         <div className="flex items-center gap-2">
+          <Link
+            href={`/auction/${slug}/bid`}
+            target="_blank"
+            className="px-3 py-1.5 rounded-xl bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/40 text-amber-300 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-sm"
+          >
+            <Smartphone className="w-3.5 h-3.5" /> Owner Bidding [Mobile]
+          </Link>
+
           <Link
             href={`/auction/${slug}`}
             target="_blank"
@@ -1137,7 +1147,7 @@ export default function AuctioneerControllerPage() {
           <div className="bg-slate-900/80 rounded-3xl border border-slate-800 p-6 shadow-xl">
             
             {/* Header & Actions */}
-            <div className="flex flex-wrap items-center justify-between gap-4 pb-4 mb-6 border-b border-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-4 pb-4 mb-4 border-b border-slate-800">
               <div>
                 <h3 className="text-base font-black uppercase text-white flex items-center gap-2">
                   <ShieldCheck className="w-5 h-5 text-amber-400" />
@@ -1168,6 +1178,47 @@ export default function AuctioneerControllerPage() {
                 >
                   Reset Default Teams
                 </button>
+              </div>
+            </div>
+
+            {/* TEAM OWNER DIRECT BIDDING LINK SHARE BANNER */}
+            <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-amber-400/15 via-amber-400/5 to-slate-950 border border-amber-400/30 flex flex-wrap items-center justify-between gap-4 shadow-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black shrink-0 shadow">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black uppercase text-amber-400 tracking-wider">
+                    Team Owner Mobile Bidding Link
+                  </h4>
+                  <p className="text-xs text-slate-300 mt-0.5 font-mono select-all break-all">
+                    {typeof window !== 'undefined' ? `${window.location.origin}/auction/${slug}/bid` : `/auction/${slug}/bid`}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const link = typeof window !== 'undefined' ? `${window.location.origin}/auction/${slug}/bid` : `/auction/${slug}/bid`;
+                    if (navigator?.clipboard) {
+                      navigator.clipboard.writeText(link);
+                      alert('Owner Bidding Link copied to clipboard!\n\n' + link);
+                    }
+                  }}
+                  className="px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black uppercase flex items-center gap-1.5 shadow transition-all"
+                >
+                  <Copy className="w-3.5 h-3.5" /> Copy Owner Link
+                </button>
+
+                <Link
+                  href={`/auction/${slug}/bid`}
+                  target="_blank"
+                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Open Screen
+                </Link>
               </div>
             </div>
 
@@ -1299,8 +1350,8 @@ export default function AuctioneerControllerPage() {
                         </div>
                       </div>
 
-                      {/* Bottom Row: Mobile Bidding 4-Digit PIN */}
-                      <div className="pt-2.5 border-t border-slate-900 flex items-center justify-between">
+                      {/* Bottom Row: Mobile Bidding 4-Digit PIN & Share Invite */}
+                      <div className="pt-2.5 border-t border-slate-900 flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[10px] font-black uppercase text-slate-400">
                           MOBILE BIDDING PIN
                         </span>
@@ -1311,7 +1362,7 @@ export default function AuctioneerControllerPage() {
                           <button
                             type="button"
                             onClick={() => handleCopyPin(t.secretPin, t.id)}
-                            className="p-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                            className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
                             title="Copy PIN"
                           >
                             {copiedPinId === t.id ? (
@@ -1319,6 +1370,23 @@ export default function AuctioneerControllerPage() {
                             ) : (
                               <Copy className="w-3.5 h-3.5" />
                             )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                              const inviteText = `🏏 *CricBid Live Auction Invite - ${t.name}*\n\nApne mobile par live boli lagane ke liye is link ko open karein:\n🔗 ${origin}/auction/${slug}/bid\n\n📌 *Team:* ${t.name}\n🔑 *Secret 4-Digit PIN:* ${t.secretPin}\n\nIs link par ja kar apni team select karein aur PIN enter karke live auction me boli lagayein!`;
+                              if (navigator?.clipboard) {
+                                navigator.clipboard.writeText(inviteText);
+                                alert(`Invitation message for ${t.name} copied to clipboard!\n\nAb WhatsApp par paste karke Owner/Captain ko bhej dijiye.`);
+                              }
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1 transition-colors shadow-sm"
+                            title="Copy WhatsApp Invite for this Team"
+                          >
+                            <Share2 className="w-3 h-3" />
+                            <span>Share Invite</span>
                           </button>
                         </div>
                       </div>
