@@ -10,6 +10,8 @@ import {
 import { reconcileMissingTournamentPayments } from '@/lib/paymentReconciler';
 import { verifyAdminSession } from '@/lib/auth';
 
+const lastReconcileTimeBySlug = new Map<string, number>();
+
 export async function GET(
   request: Request,
   { params }: { params: { slug: string } }
@@ -25,8 +27,14 @@ export async function GET(
       );
     }
 
-    // Auto-reconcile any captured Razorpay payments if mobile user closed the app
-    await reconcileMissingTournamentPayments(slug);
+    // Auto-reconcile captured Razorpay payments with throttling (at most once every 45s per tournament)
+    // to prevent serverless concurrency race conditions and Razorpay rate limits
+    const now = Date.now();
+    const lastTime = lastReconcileTimeBySlug.get(slug.toLowerCase()) || 0;
+    if (now - lastTime > 45000) {
+      lastReconcileTimeBySlug.set(slug.toLowerCase(), now);
+      await reconcileMissingTournamentPayments(slug).catch(() => 0);
+    }
 
     const rawPlayers = await getPlayersByTournamentAsync(slug);
 

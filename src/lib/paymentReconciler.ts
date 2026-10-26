@@ -44,7 +44,7 @@ export async function reconcileMissingTournamentPayments(slug: string): Promise<
     // Query existing players for this tournament from Supabase
     const { data: dbPlayers } = await supabase
       .from('players')
-      .select('registration_id, payment_id, order_id, phone')
+      .select('registration_id, payment_id, order_id, phone, payment_status')
       .ilike('tournament_slug', slug);
 
     const existingPaymentIds = new Set(
@@ -52,6 +52,12 @@ export async function reconcileMissingTournamentPayments(slug: string): Promise<
     );
     const existingOrderIds = new Set(
       (dbPlayers || []).map((p) => p.order_id).filter(Boolean)
+    );
+    const existingPhones = new Set(
+      (dbPlayers || [])
+        .filter((p) => p.payment_status !== 'PENDING_PAYMENT')
+        .map((p) => clean10DigitPhone(p.phone || ''))
+        .filter(Boolean)
     );
 
     let recoveredCount = 0;
@@ -68,10 +74,15 @@ export async function reconcileMissingTournamentPayments(slug: string): Promise<
 
       if (!isMatch) continue;
 
-      // Check if already reconciled
+      const playerPhone = clean10DigitPhone(
+        String(pay.notes?.phone || pay.contact || '')
+      );
+
+      // Check if already reconciled by payment ID, order ID, or player phone
       if (
         existingPaymentIds.has(pay.id) ||
-        (pay.order_id && existingOrderIds.has(pay.order_id))
+        (pay.order_id && existingOrderIds.has(pay.order_id)) ||
+        (playerPhone && existingPhones.has(playerPhone))
       ) {
         continue;
       }
@@ -81,10 +92,6 @@ export async function reconcileMissingTournamentPayments(slug: string): Promise<
         pay.notes?.fullName ||
         pay.notes?.player_name ||
         'Verified Player';
-
-      const playerPhone = clean10DigitPhone(
-        String(pay.notes?.phone || pay.contact || '')
-      );
 
       const timestamp = new Date(pay.created_at * 1000).toLocaleString('en-IN', {
         timeZone: 'Asia/Kolkata',
@@ -160,9 +167,25 @@ export async function reconcileMissingTournamentPayments(slug: string): Promise<
         amount: pay.amount ? Number(pay.amount) / 100 : Number(tournament.entryFee) || 0,
       };
 
+      // Double check Supabase right before saving to prevent race conditions with returning checkout
+      const { data: alreadyInserted } = await supabase
+        .from('players')
+        .select('registration_id')
+        .or(`payment_id.eq.${pay.id}${playerPhone ? `,phone.ilike.%${playerPhone}%` : ''}`)
+        .ilike('tournament_slug', tournament.slug)
+        .neq('payment_status', 'PENDING_PAYMENT')
+        .maybeSingle();
+
+      if (alreadyInserted) {
+        existingPaymentIds.add(pay.id);
+        if (playerPhone) existingPhones.add(playerPhone);
+        continue;
+      }
+
       await savePlayerRegistrationAsync(newRecord);
       await incrementRegistrationCountAsync(tournament.slug);
       existingPaymentIds.add(pay.id);
+      if (playerPhone) existingPhones.add(playerPhone);
       recoveredCount++;
       console.log(
         `[Auto-Recovery] Successfully reconciled payment ${pay.id} for player "${playerName}" in ${tournament.slug}`

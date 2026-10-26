@@ -289,6 +289,73 @@ export async function POST(request: Request) {
 
       finalPaymentId = paymentId.trim();
 
+      // Check if this payment was ALREADY registered (e.g. by Auto-Recovery or parallel checkout return)
+      const { data: existingByPayment } = await supabase
+        .from('players')
+        .select('*')
+        .eq('payment_id', finalPaymentId)
+        .neq('payment_status', 'PENDING_PAYMENT')
+        .maybeSingle();
+
+      if (existingByPayment) {
+        // Verify whether this is the same player or another person attempting to reuse the payment ID
+        const existingPlayerPhone = clean10DigitPhone(existingByPayment.phone || '');
+        if (existingPlayerPhone !== normalizedPhone) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'This payment transaction reference has already been used for another registration.',
+            },
+            { status: 409 }
+          );
+        }
+
+        // Exact same transaction returning from checkout: update photo & details if missing, and return without duplicating
+        const needsPhotoUpdate = Boolean(!existingByPayment.photo_url && sanitizedPhotoUrl);
+        const needsStatsUpdate = Boolean(
+          (!existingByPayment.stats || existingByPayment.stats === 'Auto-reconciled via Razorpay Gateway') &&
+          stats && String(stats).trim()
+        );
+
+        if (needsPhotoUpdate || needsStatsUpdate || (orderId && orderId !== 'N/A' && existingByPayment.order_id !== orderId)) {
+          const updates: any = {};
+          if (needsPhotoUpdate) updates.photo_url = sanitizedPhotoUrl;
+          if (needsStatsUpdate) updates.stats = String(stats).trim().slice(0, 300);
+          if (orderId && orderId !== 'N/A') updates.order_id = String(orderId).trim();
+          if (trimmedName && (!existingByPayment.full_name || existingByPayment.full_name === 'Verified Player')) {
+            updates.full_name = trimmedName;
+          }
+
+          await supabase.from('players').update(updates).eq('registration_id', existingByPayment.registration_id);
+          existingByPayment.photo_url = updates.photo_url || existingByPayment.photo_url;
+          existingByPayment.stats = updates.stats || existingByPayment.stats;
+          existingByPayment.full_name = updates.full_name || existingByPayment.full_name;
+        }
+
+        return NextResponse.json({
+          success: true,
+          message: 'Payment verified and player registration confirmed!',
+          registration: {
+            registrationId: existingByPayment.registration_id,
+            tournamentSlug: existingByPayment.tournament_slug,
+            tournamentTitle: existingByPayment.tournament_title || tournament.title,
+            fullName: existingByPayment.full_name,
+            phone: existingByPayment.phone,
+            age: existingByPayment.age,
+            role: existingByPayment.role,
+            battingStyle: existingByPayment.batting_style,
+            bowlingStyle: existingByPayment.bowling_style,
+            stats: existingByPayment.stats,
+            photoUrl: existingByPayment.photo_url,
+            paymentId: existingByPayment.payment_id,
+            orderId: existingByPayment.order_id,
+            paymentStatus: existingByPayment.payment_status,
+            amount: existingByPayment.amount,
+            timestamp: existingByPayment.timestamp,
+          },
+        });
+      }
+
       // Replay Attack Protection: Check if this paymentId was already used
       const allExisting = await getAllPlayersAsync();
       const isReplayed = allExisting.some(
@@ -452,6 +519,32 @@ export async function POST(request: Request) {
       paymentStatus: finalPaymentStatus,
       amount: isPaidTournament ? tournamentEntryFee : 0,
     };
+
+    // Final concurrency guard: ensure no parallel request just saved this exact payment
+    if (isPaidTournament && finalPaymentId) {
+      const { data: finalRaceCheck } = await supabase
+        .from('players')
+        .select('*')
+        .eq('payment_id', finalPaymentId)
+        .neq('payment_status', 'PENDING_PAYMENT')
+        .maybeSingle();
+
+      if (finalRaceCheck) {
+        if (!finalRaceCheck.photo_url && sanitizedPhotoUrl) {
+          await supabase.from('players').update({ photo_url: sanitizedPhotoUrl }).eq('registration_id', finalRaceCheck.registration_id);
+          finalRaceCheck.photo_url = sanitizedPhotoUrl;
+        }
+        return NextResponse.json({
+          success: true,
+          message: 'Player registered & fee verified successfully!',
+          registration: {
+            ...registrationRecord,
+            registrationId: finalRaceCheck.registration_id,
+            photoUrl: finalRaceCheck.photo_url || sanitizedPhotoUrl,
+          },
+        });
+      }
+    }
 
     // Save to persistent database (Awaited to ensure serverless persistence)
     await savePlayerRegistrationAsync(registrationRecord);
