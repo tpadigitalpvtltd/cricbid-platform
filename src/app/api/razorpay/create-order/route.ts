@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import Razorpay from 'razorpay';
 import { getTournamentBySlugAsync, savePendingOrder } from '@/lib/tournamentStore';
+import { supabase } from '@/lib/supabase';
 
 export async function POST(request: Request) {
   try {
@@ -116,6 +117,31 @@ export async function POST(request: Request) {
       if (cleanDigits) {
         savePendingOrder(`${cleanDigits}_${tournament.slug}`, pendingData);
       }
+    }
+
+    // Persist draft with photo to Supabase so it survives across serverless container restarts & UPI app switches
+    try {
+      const cleanDigits = String(phone || '').replace(/[^0-9]/g, '').slice(-10);
+      await supabase.from('players').upsert({
+        registration_id: `DRAFT_${order.id}`,
+        tournament_slug: tournament.slug,
+        tournament_title: tournament.title,
+        full_name: fullName || 'Player',
+        phone: cleanDigits || '9876543210',
+        age: String(age || '24'),
+        role: role || 'Batting All-Rounder',
+        batting_style: battingStyle || 'Right-hand',
+        bowling_style: bowlingStyle || 'Right-arm Fast',
+        stats: stats || 'Draft pending checkout',
+        photo_url: photoUrl || '',
+        payment_id: 'PENDING',
+        order_id: order.id,
+        payment_status: 'PENDING_PAYMENT',
+        amount: amountInINR,
+        timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' }),
+      });
+    } catch (e) {
+      console.warn('Draft persistence notice:', e);
     }
 
     // Generate Razorpay Hosted Payment Link (rzp.io) to avoid domain restrictions

@@ -11,6 +11,7 @@ import {
   MASTER_GOOGLE_SHEET_URL,
 } from '@/lib/tournamentStore';
 import { clean10DigitPhone, validatePhoneNumber } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
 
 const VALID_ROLES = [
   'Pure Batsman',
@@ -66,6 +67,53 @@ export async function POST(request: Request) {
       stats = stats || pendingData.stats;
       photoUrl = photoUrl || pendingData.photoUrl;
       tournamentSlug = tournamentSlug || pendingData.tournamentSlug;
+    }
+
+    // Check persistent Supabase draft if photoUrl or fields are missing due to mobile browser storage clear
+    if (!photoUrl || !fullName || !role) {
+      try {
+        let draftFromDb: any = null;
+        if (orderId) {
+          const { data: dOrder } = await supabase
+            .from('players')
+            .select('*')
+            .eq('order_id', orderId)
+            .eq('payment_status', 'PENDING_PAYMENT')
+            .maybeSingle();
+          if (dOrder) draftFromDb = dOrder;
+        }
+        if (!draftFromDb && phone && tournamentSlug) {
+          const cleanP = clean10DigitPhone(phone);
+          const { data: dPhone } = await supabase
+            .from('players')
+            .select('*')
+            .ilike('tournament_slug', tournamentSlug)
+            .ilike('phone', `%${cleanP}%`)
+            .eq('payment_status', 'PENDING_PAYMENT')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (dPhone) draftFromDb = dPhone;
+        }
+
+        if (draftFromDb) {
+          fullName = fullName || draftFromDb.full_name;
+          phone = phone || draftFromDb.phone;
+          age = age || draftFromDb.age;
+          role = role || draftFromDb.role;
+          battingStyle = battingStyle || draftFromDb.batting_style;
+          bowlingStyle = bowlingStyle || draftFromDb.bowling_style;
+          stats = stats || (draftFromDb.stats !== 'Draft pending checkout' ? draftFromDb.stats : '');
+          photoUrl = photoUrl || draftFromDb.photo_url;
+          tournamentSlug = tournamentSlug || draftFromDb.tournament_slug;
+
+          if (draftFromDb.registration_id) {
+            try {
+              await supabase.from('players').delete().eq('registration_id', draftFromDb.registration_id);
+            } catch (e) {}
+          }
+        }
+      } catch (e) {}
     }
 
     // Auto-recovery for paid registration returns if mobile browser storage was lost

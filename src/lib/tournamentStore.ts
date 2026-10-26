@@ -579,6 +579,7 @@ export async function getPlayersByTournamentAsync(slug: string): Promise<Registr
       .from('players')
       .select('*')
       .ilike('tournament_slug', slug)
+      .neq('payment_status', 'PENDING_PAYMENT')
       .order('created_at', { ascending: false });
 
     if (!error && Array.isArray(data)) {
@@ -599,6 +600,7 @@ export async function getAllPlayersAsync(): Promise<RegistrationSubmission[]> {
     const { data, error } = await supabase
       .from('players')
       .select('*')
+      .neq('payment_status', 'PENDING_PAYMENT')
       .order('created_at', { ascending: false });
 
     if (!error && Array.isArray(data)) {

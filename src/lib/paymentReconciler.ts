@@ -98,19 +98,62 @@ export async function reconcileMissingTournamentPayments(slug: string): Promise<
         (playerPhone ? getPendingOrder(`${playerPhone}_${slug}`) : null) ||
         (playerPhone ? getPendingOrder(`${playerPhone}_${tournament.slug}`) : null);
 
+      // Check persistent Supabase draft records to recover photo and all form data
+      let draftFromDb: any = null;
+      try {
+        if (pay.order_id) {
+          const { data: dOrder } = await supabase
+            .from('players')
+            .select('*')
+            .eq('order_id', pay.order_id)
+            .eq('payment_status', 'PENDING_PAYMENT')
+            .maybeSingle();
+          if (dOrder) draftFromDb = dOrder;
+        }
+        if (!draftFromDb && playerPhone) {
+          const { data: dPhone } = await supabase
+            .from('players')
+            .select('*')
+            .ilike('tournament_slug', slug)
+            .ilike('phone', `%${playerPhone}%`)
+            .eq('payment_status', 'PENDING_PAYMENT')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (dPhone) draftFromDb = dPhone;
+        }
+      } catch (e) {}
+
+      const resolvedPhoto = draftFromDb?.photo_url || pending?.photoUrl || '';
+      const resolvedName = draftFromDb?.full_name || pending?.fullName || String(playerName).trim();
+      const resolvedAge = draftFromDb?.age || pending?.age || '24';
+      const resolvedRole = (draftFromDb?.role as PlayingRole) || (pending?.role as PlayingRole) || ('Batting All-Rounder' as PlayingRole);
+      const resolvedBatting = draftFromDb?.batting_style || pending?.battingStyle || 'Right-hand';
+      const resolvedBowling = draftFromDb?.bowling_style || pending?.bowlingStyle || 'Right-arm Fast';
+      const resolvedStats = (draftFromDb?.stats && draftFromDb.stats !== 'Draft pending checkout') 
+        ? draftFromDb.stats 
+        : (pending?.stats || 'Auto-reconciled via Razorpay Gateway');
+
+      // Clean up temporary draft row if it existed
+      if (draftFromDb?.registration_id) {
+        try {
+          await supabase.from('players').delete().eq('registration_id', draftFromDb.registration_id);
+        } catch (e) {}
+      }
+
       const newRecord: RegistrationSubmission = {
         timestamp,
         registrationId: `CRIC-2026-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
         tournamentSlug: tournament.slug,
         tournamentTitle: tournament.title,
-        fullName: pending?.fullName || String(playerName).trim(),
+        fullName: resolvedName,
         phone: pending?.phone || playerPhone || '9876543210',
-        age: pending?.age || '24',
-        role: (pending?.role as PlayingRole) || ('Batting All-Rounder' as PlayingRole),
-        battingStyle: pending?.battingStyle || 'Right-hand',
-        bowlingStyle: pending?.bowlingStyle || 'Right-arm Fast',
-        stats: pending?.stats || 'Auto-reconciled via Razorpay Gateway',
-        photoUrl: pending?.photoUrl || '',
+        age: resolvedAge,
+        role: resolvedRole,
+        battingStyle: resolvedBatting,
+        bowlingStyle: resolvedBowling,
+        stats: resolvedStats,
+        photoUrl: resolvedPhoto,
         paymentId: pay.id,
         orderId: pay.order_id || 'AUTO_RECONCILED',
         paymentStatus: 'PAID',
