@@ -62,7 +62,7 @@ export default function MobileBiddingPage() {
   const fetchState = async () => {
     if (!slug) return;
     try {
-      const res = await fetch(`/api/auction/${slug}?t=${Date.now()}`, { cache: 'no-store' });
+      const res = await fetch(`/api/auction/${slug}?view=bid&t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.state) {
@@ -86,7 +86,12 @@ export default function MobileBiddingPage() {
 
   useEffect(() => {
     fetchState();
-    const interval = setInterval(fetchState, 2000);
+    // 30s quiet fallback only when tab is active (Supabase WebSocket handles all live updates in <50ms)
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        fetchState();
+      }
+    }, 30000);
     return () => clearInterval(interval);
   }, [slug, currentTeam?.id]);
 

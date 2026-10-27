@@ -178,7 +178,12 @@ export default function AuctioneerControllerPage() {
 
   useEffect(() => {
     fetchState();
-    const interval = setInterval(fetchState, 2500);
+    // 30s quiet fallback only when tab is active (Supabase WebSocket handles all live updates in <50ms)
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        fetchState();
+      }
+    }, 30000);
     return () => clearInterval(interval);
   }, [slug]);
 
