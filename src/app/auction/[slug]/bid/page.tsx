@@ -90,15 +90,30 @@ export default function MobileBiddingPage() {
     return () => clearInterval(interval);
   }, [slug, currentTeam?.id]);
 
-  // Realtime Supabase listener
+  // Realtime Supabase listener (instant state update in <50ms without round-trip HTTP)
   useEffect(() => {
     if (!slug) return;
     const channel = supabase.channel(`auction_${slug.toLowerCase()}`);
-    channel.on('broadcast', { event: '*' }, () => fetchState()).subscribe();
+    channel.on('broadcast', { event: '*' }, (msg: any) => {
+      if (msg?.payload?.state) {
+        setState(msg.payload.state);
+        if (currentTeam) {
+          const updated = msg.payload.state.teams?.find((t: TournamentTeam) => t.id === currentTeam.id);
+          if (updated) {
+            setCurrentTeam(updated);
+            try {
+              localStorage.setItem(`cricbid_team_session_${slug}`, JSON.stringify(updated));
+            } catch (e) {}
+          }
+        }
+      } else {
+        fetchState();
+      }
+    }).subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [slug]);
+  }, [slug, currentTeam?.id]);
 
   // Login handler
   const handleTeamLogin = async (e: React.FormEvent) => {
@@ -141,7 +156,7 @@ export default function MobileBiddingPage() {
     } catch (e) {}
   };
 
-  // Place Bid with Haptic Feedback
+  // Place Bid with Haptic Feedback and instant optimistic update
   const handlePlaceBid = async (amount: number) => {
     if (!slug || !currentTeam) return;
 
@@ -149,6 +164,22 @@ export default function MobileBiddingPage() {
     if (typeof window !== 'undefined' && 'vibrate' in navigator) {
       navigator.vibrate(60);
     }
+
+    // Instant optimistic feedback
+    setState((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        room: {
+          ...prev.room,
+          currentBid: amount,
+          currentBiddingTeamId: currentTeam.id,
+          timerSeconds: 10,
+          timerRunning: true,
+        },
+        currentBiddingTeam: currentTeam,
+      };
+    });
 
     try {
       setBiddingLoading(true);
@@ -165,11 +196,13 @@ export default function MobileBiddingPage() {
       const json = await res.json();
       if (!res.ok || !json.success) {
         setBidError(json.error || 'Bid rejected');
+        fetchState();
       } else if (json.state) {
         setState(json.state);
       }
     } catch (e: any) {
       setBidError(e.message || 'Bidding error');
+      fetchState();
     } finally {
       setBiddingLoading(false);
     }

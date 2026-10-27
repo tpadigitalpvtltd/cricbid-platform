@@ -182,15 +182,29 @@ export default function AuctioneerControllerPage() {
     return () => clearInterval(interval);
   }, [slug]);
 
-  // Realtime subscription
+  // Realtime subscription (instant state update in <50ms without round-trip HTTP)
   useEffect(() => {
     if (!slug) return;
     const channel = supabase.channel(`auction_${slug.toLowerCase()}`);
-    channel.on('broadcast', { event: '*' }, () => fetchState()).subscribe();
+    channel.on('broadcast', { event: '*' }, (msg: any) => {
+      if (msg?.payload?.state) {
+        setState(msg.payload.state);
+      } else {
+        fetchState();
+      }
+    }).subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
   }, [slug]);
+
+  // Manual Player Edit Modal State
+  const [showPlayerEditModal, setShowPlayerEditModal] = useState(false);
+  const [editingPlayerObj, setEditingPlayerObj] = useState<any | null>(null);
+  const [playerEditStatus, setPlayerEditStatus] = useState<string>('PENDING');
+  const [playerEditBasePrice, setPlayerEditBasePrice] = useState<number | string>(1000);
+  const [playerEditSoldPrice, setPlayerEditSoldPrice] = useState<number | string>('');
+  const [playerEditSoldTeamId, setPlayerEditSoldTeamId] = useState<string>('');
 
   const executeAction = async (action: string, payload?: any) => {
     if (!slug) return;
@@ -228,10 +242,26 @@ export default function AuctioneerControllerPage() {
   const handlePlaceFloorBid = async (teamId: string, amount: number) => {
     if (!slug || !teamId || !amount) return;
     try {
-      setActionLoading(true);
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
         navigator.vibrate(40);
       }
+      // Instant optimistic feedback
+      setState((prev) => {
+        if (!prev) return prev;
+        const team = prev.teams.find((t) => t.id === teamId);
+        return {
+          ...prev,
+          room: {
+            ...prev.room,
+            currentBid: amount,
+            currentBiddingTeamId: teamId,
+            timerSeconds: 10,
+            timerRunning: true,
+          },
+          currentBiddingTeam: team || prev.currentBiddingTeam,
+        };
+      });
+
       const res = await fetch(`/api/auction/${slug}/bid`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -244,14 +274,14 @@ export default function AuctioneerControllerPage() {
       const json = await res.json();
       if (!res.ok || !json.success) {
         alert(json.error || 'Unable to place bid');
+        fetchState();
       } else if (json.state) {
         setState(json.state);
         setCustomBidAmount('');
       }
     } catch (e: any) {
       alert(e.message || 'Error placing bid');
-    } finally {
-      setActionLoading(false);
+      fetchState();
     }
   };
 
@@ -287,6 +317,100 @@ export default function AuctioneerControllerPage() {
         text: `⚠️ ${playerName} marked as UNSOLD.`,
       });
       setTimeout(() => setLastDecisionMsg(null), 6000);
+    }
+  };
+
+  // Open Manual Player Edit Modal
+  const handleOpenManualEditPlayer = (
+    player: any,
+    currentStatus: string,
+    basePrice: number,
+    soldPrice?: number | null,
+    soldTeamName?: string | null
+  ) => {
+    setEditingPlayerObj(player);
+    setPlayerEditStatus(currentStatus || 'PENDING');
+    setPlayerEditBasePrice(basePrice || 1000);
+    setPlayerEditSoldPrice(soldPrice !== undefined && soldPrice !== null ? soldPrice : '');
+    const currentTeam = teams.find((t) => t.name === soldTeamName);
+    setPlayerEditSoldTeamId(currentTeam ? currentTeam.id : '');
+    setShowPlayerEditModal(true);
+  };
+
+  // Save Manual Player Edit
+  const handleSaveManualEditPlayer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPlayerObj) return;
+
+    const baseP = Number(playerEditBasePrice) > 0 ? Number(playerEditBasePrice) : 1000;
+    const isSold = playerEditStatus === 'SOLD';
+    const soldP = isSold ? (playerEditSoldPrice !== '' ? Number(playerEditSoldPrice) : baseP) : undefined;
+    const soldTeamId = isSold ? playerEditSoldTeamId : undefined;
+
+    if (isSold && !soldTeamId) {
+      alert('Please select the Franchise to which this player is SOLD.');
+      return;
+    }
+
+    const res = await executeAction('MANUAL_EDIT_PLAYER_AUCTION', {
+      playerId: editingPlayerObj.registrationId,
+      status: playerEditStatus,
+      basePrice: baseP,
+      soldPrice: soldP,
+      soldToTeamId: soldTeamId,
+    });
+
+    if (res?.success) {
+      setShowPlayerEditModal(false);
+      setEditingPlayerObj(null);
+      setLastDecisionMsg({
+        type: 'SOLD',
+        text: `✅ Player record for ${editingPlayerObj.fullName} updated manually!`,
+      });
+      setTimeout(() => setLastDecisionMsg(null), 5000);
+    }
+  };
+
+  // Re-Auction a player (works for any player whether SOLD, UNSOLD, or PENDING)
+  const handleReAuctionPlayer = async (playerId: string) => {
+    const p = playersQueue.find((pq) => pq.player.registrationId === playerId);
+    const name = p?.player.fullName || 'Player';
+    if (confirm(`Do you want to put ${name} back on the auction block for Re-Auction? (If sold, previous franchise purse will be refunded automatically).`)) {
+      const res = await executeAction('REAUCTION_PLAYER', { playerId });
+      if (res?.success) {
+        setActiveTab('control');
+        setLastDecisionMsg({
+          type: 'SOLD',
+          text: `🔥 ${name} is now LIVE on the bidding stage for Re-Auction!`,
+        });
+        setTimeout(() => setLastDecisionMsg(null), 6000);
+      }
+    }
+  };
+
+  // Undo Last Sold Decision
+  const handleUndoSold = async () => {
+    if (confirm('Undo the last sold decision? This will refund the franchise purse and put the player back on the bidding stage.')) {
+      const res = await executeAction('UNDO_SOLD');
+      if (res?.success) {
+        setLastDecisionMsg({
+          type: 'UNSOLD',
+          text: `↩️ Reverted! Franchise purse refunded and player returned to bidding stage.`,
+        });
+        setTimeout(() => setLastDecisionMsg(null), 6000);
+      }
+    }
+  };
+
+  // Skip Player to Pool
+  const handleSkipPlayer = async () => {
+    const res = await executeAction('SKIP_PLAYER');
+    if (res?.success) {
+      setLastDecisionMsg({
+        type: 'UNSOLD',
+        text: `⏩ Player skipped to draft pool.`,
+      });
+      setTimeout(() => setLastDecisionMsg(null), 4000);
     }
   };
 
@@ -639,6 +763,14 @@ export default function AuctioneerControllerPage() {
                 </span>
                 <div className="flex items-center gap-1.5">
                   <button
+                    onClick={handleSkipPlayer}
+                    disabled={actionLoading}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-400 text-xs font-bold transition-colors flex items-center gap-1"
+                    title="Skip player to pool"
+                  >
+                    <SkipForward className="w-3.5 h-3.5" /> Skip
+                  </button>
+                  <button
                     onClick={() => executeAction('PREV_PLAYER')}
                     disabled={actionLoading}
                     className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
@@ -660,7 +792,7 @@ export default function AuctioneerControllerPage() {
               {/* Decision Announcement Banner */}
               {lastDecisionMsg && (
                 <div
-                  className={`p-3.5 rounded-2xl mb-4 border font-bold text-xs flex items-center justify-between gap-2 shadow-lg animate-in fade-in ${
+                  className={`p-3.5 rounded-2xl mb-4 border font-bold text-xs flex flex-wrap items-center justify-between gap-2 shadow-lg animate-in fade-in ${
                     lastDecisionMsg.type === 'SOLD'
                       ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
                       : 'bg-rose-500/20 border-rose-500/50 text-rose-300'
@@ -674,13 +806,25 @@ export default function AuctioneerControllerPage() {
                     )}
                     <span>{lastDecisionMsg.text}</span>
                   </div>
-                  <button
-                    onClick={() => executeAction('NEXT_PLAYER')}
-                    disabled={actionLoading}
-                    className="px-3 py-1.5 rounded-xl bg-white text-slate-950 font-black text-xs uppercase tracking-wider shrink-0 hover:bg-slate-200 transition-colors shadow"
-                  >
-                    Next Player &rarr;
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleUndoSold}
+                      disabled={actionLoading}
+                      className="px-2.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs uppercase tracking-wider shrink-0 transition-colors shadow flex items-center gap-1"
+                      title="Undo this decision and refund purse"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Undo
+                    </button>
+                    <button
+                      onClick={() => executeAction('NEXT_PLAYER')}
+                      disabled={actionLoading}
+                      className="px-3 py-1.5 rounded-xl bg-white text-slate-950 font-black text-xs uppercase tracking-wider shrink-0 hover:bg-slate-200 transition-colors shadow"
+                    >
+                      Next Player &rarr;
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -790,11 +934,11 @@ export default function AuctioneerControllerPage() {
             </div>
 
             {/* BIG DECISION BUTTONS: MARK SOLD / UNSOLD */}
-            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-800">
+            <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-800">
               <button
                 onClick={handleMarkSold}
                 disabled={actionLoading || !currentBiddingTeam}
-                className="py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                className="py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 <CheckCircle2 className="w-5 h-5 stroke-[2.5]" />
                 <span>MARK AS SOLD</span>
@@ -803,10 +947,51 @@ export default function AuctioneerControllerPage() {
               <button
                 onClick={handleMarkUnsold}
                 disabled={actionLoading || !currentPlayer}
-                className="py-4 rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                className="py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 <XCircle className="w-5 h-5 stroke-[2.5]" />
                 <span>MARK AS UNSOLD</span>
+              </button>
+            </div>
+
+            {/* MANUAL CONTROLS ROW: UNDO / SKIP / MANUAL EDIT */}
+            <div className="grid grid-cols-3 gap-2 pt-3">
+              <button
+                type="button"
+                onClick={handleUndoSold}
+                disabled={actionLoading}
+                className="py-2.5 px-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 text-amber-300 font-bold text-[11px] sm:text-xs flex items-center justify-center gap-1.5 transition-all shadow"
+                title="Undo last sold player (refunds purse and resets to stage)"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>Undo Sold</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSkipPlayer}
+                disabled={actionLoading}
+                className="py-2.5 px-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white font-bold text-[11px] sm:text-xs flex items-center justify-center gap-1.5 transition-all shadow"
+                title="Skip to next player without marking sold or unsold"
+              >
+                <SkipForward className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span>Skip Player</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (currentPlayer) {
+                    const st = playersQueue.find((pq) => pq.player.registrationId === currentPlayer.registrationId);
+                    handleOpenManualEditPlayer(currentPlayer, st?.status || 'IN_AUCTION', currentBid, st?.soldPrice, currentBiddingTeam?.name);
+                  }
+                }}
+                disabled={!currentPlayer}
+                className="py-2.5 px-2 rounded-xl bg-slate-950 hover:bg-amber-400 hover:text-slate-950 border border-slate-700 text-slate-300 font-bold text-[11px] sm:text-xs flex items-center justify-center gap-1.5 transition-all shadow disabled:opacity-40"
+                title="Manually edit any field for this player"
+              >
+                <Edit className="w-3.5 h-3.5 shrink-0" />
+                <span>Manual Edit</span>
               </button>
             </div>
           </div>
@@ -1103,7 +1288,7 @@ export default function AuctioneerControllerPage() {
                       </div>
 
                       {/* Base Price & Actions Row */}
-                      <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                      <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5">
                           <span className="text-[10px] text-slate-400 uppercase font-black">Base ₹</span>
                           <input
@@ -1116,11 +1301,10 @@ export default function AuctioneerControllerPage() {
                                 [player.registrationId]: val,
                               }));
                             }}
-                            disabled={status === 'SOLD'}
                             step={100}
-                            className="w-20 px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs font-mono text-amber-300 focus:outline-none focus:border-amber-400 disabled:opacity-40"
+                            className="w-20 px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs font-mono text-amber-300 focus:outline-none focus:border-amber-400"
                           />
-                          {localBasePrice !== basePrice && status !== 'SOLD' && (
+                          {localBasePrice !== basePrice && (
                             <button
                               type="button"
                               onClick={() => handleUpdatePlayerBasePrice(player.registrationId)}
@@ -1131,14 +1315,75 @@ export default function AuctioneerControllerPage() {
                           )}
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleLoadOnStage(player.registrationId, localBasePrice)}
-                          disabled={isCurrentlyActive || actionLoading}
-                          className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-amber-400 hover:text-slate-950 text-xs font-bold text-slate-300 transition-colors shrink-0 disabled:opacity-40 shadow"
-                        >
-                          {isCurrentlyActive ? 'On Block' : status === 'UNSOLD' ? 'Re-Auction' : 'Load on Stage'}
-                        </button>
+                        {/* Player Action Buttons */}
+                        <div className="flex items-center gap-1.5">
+                          {status === 'SOLD' ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleReAuctionPlayer(player.registrationId)}
+                                disabled={isCurrentlyActive || actionLoading}
+                                className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500 hover:text-slate-950 text-[11px] font-bold text-amber-300 transition-colors shrink-0 shadow flex items-center gap-1"
+                                title="Re-Auction player (refunds franchise purse)"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                Re-Auction
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (confirm(`Mark ${player.fullName} as UNSOLD? (This will refund ₹${soldPrice?.toLocaleString('en-IN') || 0} to ${soldTeamName || 'the franchise'}).`)) {
+                                    executeAction('MARK_UNSOLD', { playerId: player.registrationId });
+                                  }
+                                }}
+                                disabled={actionLoading}
+                                className="px-2 py-1.5 rounded-xl bg-rose-500/20 border border-rose-500/40 hover:bg-rose-500 hover:text-white text-[11px] font-bold text-rose-300 transition-colors shrink-0 shadow"
+                                title="Mark Unsold & Refund Purse"
+                              >
+                                Unsold
+                              </button>
+                            </>
+                          ) : status === 'UNSOLD' ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleLoadOnStage(player.registrationId, localBasePrice)}
+                                disabled={isCurrentlyActive || actionLoading}
+                                className="px-2.5 py-1.5 rounded-xl bg-amber-400 text-slate-950 text-[11px] font-black uppercase hover:bg-amber-300 transition-colors shrink-0 shadow flex items-center gap-1"
+                              >
+                                <Flame className="w-3 h-3" />
+                                Re-Auction
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => executeAction('MANUAL_EDIT_PLAYER_AUCTION', { playerId: player.registrationId, status: 'PENDING', basePrice: localBasePrice })}
+                                disabled={actionLoading}
+                                className="px-2 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-slate-300 transition-colors shrink-0"
+                                title="Reset to Pending"
+                              >
+                                Reset
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleLoadOnStage(player.registrationId, localBasePrice)}
+                              disabled={isCurrentlyActive || actionLoading}
+                              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-amber-400 hover:text-slate-950 text-[11px] font-bold text-slate-300 transition-colors shrink-0 shadow"
+                            >
+                              {isCurrentlyActive ? 'On Block' : 'Load on Stage'}
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenManualEditPlayer(player, status, localBasePrice, soldPrice, soldTeamName)}
+                            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-amber-400 transition-colors"
+                            title="Edit Player Details & Status"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -1723,6 +1968,129 @@ export default function AuctioneerControllerPage() {
                   className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-xs uppercase shadow-lg hover:from-amber-300 hover:to-yellow-300 transition-all"
                 >
                   {editingTeam ? 'Save Changes' : 'Create Franchise'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: MANUAL EDIT PLAYER AUCTION RECORD */}
+      {showPlayerEditModal && editingPlayerObj && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-md w-full shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black">
+                  <Edit className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black uppercase text-white">Manual Edit Player</h3>
+                  <p className="text-xs text-amber-400 font-bold">{editingPlayerObj.fullName}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPlayerEditModal(false)}
+                className="text-slate-400 hover:text-white text-lg font-bold p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveManualEditPlayer} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-400 block mb-1.5 uppercase">
+                  Auction Status
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['PENDING', 'IN_AUCTION', 'SOLD', 'UNSOLD'] as const).map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setPlayerEditStatus(st)}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
+                        playerEditStatus === st
+                          ? st === 'SOLD'
+                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 ring-2 ring-emerald-500/30'
+                            : st === 'UNSOLD'
+                            ? 'bg-rose-500/20 border-rose-500 text-rose-300 ring-2 ring-rose-500/30'
+                            : 'bg-amber-500/20 border-amber-500 text-amber-300 ring-2 ring-amber-500/30'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      {st === 'PENDING' ? 'Pending (Pool)' : st === 'IN_AUCTION' ? 'In Auction (Block)' : st === 'SOLD' ? 'SOLD' : 'UNSOLD'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-400 block mb-1 uppercase">
+                  Base Price (₹)
+                </label>
+                <input
+                  type="number"
+                  value={playerEditBasePrice}
+                  onChange={(e) => setPlayerEditBasePrice(e.target.value)}
+                  step={100}
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white font-mono focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              {playerEditStatus === 'SOLD' && (
+                <>
+                  <div>
+                    <label className="text-xs font-bold text-slate-400 block mb-1 uppercase">
+                      Sold Price (₹)
+                    </label>
+                    <input
+                      type="number"
+                      value={playerEditSoldPrice}
+                      onChange={(e) => setPlayerEditSoldPrice(e.target.value)}
+                      placeholder="Enter sold amount"
+                      step={100}
+                      required
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-emerald-300 font-mono font-bold focus:outline-none focus:border-emerald-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-400 block mb-1 uppercase">
+                      Sold To Franchise
+                    </label>
+                    <select
+                      value={playerEditSoldTeamId}
+                      onChange={(e) => setPlayerEditSoldTeamId(e.target.value)}
+                      required
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-emerald-400"
+                    >
+                      <option value="">-- Select Franchise --</option>
+                      {teams.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} (Remaining Purse: ₹{t.remainingPurse?.toLocaleString('en-IN')})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowPlayerEditModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading}
+                  className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black uppercase shadow-lg disabled:opacity-40"
+                >
+                  Save & Apply Changes
                 </button>
               </div>
             </form>

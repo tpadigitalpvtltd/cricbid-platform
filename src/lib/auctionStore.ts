@@ -10,6 +10,7 @@ import {
   FullAuctionState,
   SoldRecord,
   AuctionRoomStatus,
+  PlayerAuctionStatus,
 } from './auctionTypes';
 import { getPlayersByTournamentAsync, getTournamentBySlugAsync } from './tournamentStore';
 import { RegistrationSubmission } from './types';
@@ -448,32 +449,36 @@ export async function saveTournamentTeams(slug: string, teams: TournamentTeam[])
   try {
     const keepIds = teams.map((t) => t.id);
     if (keepIds.length > 0) {
-      for (const t of teams) {
-        await supabase.from('tournament_teams').upsert({
-          id: t.id,
-          tournament_slug: cleanSlug,
-          name: t.name,
-          short_name: t.shortName,
-          logo_url: t.logoUrl,
-          color: t.color,
-          total_purse: t.totalPurse,
-          remaining_purse: t.remainingPurse,
-          secret_pin: t.secretPin,
-          max_players: t.maxPlayers,
-          bought_players_count: t.boughtPlayersCount,
-        });
-      }
-      // Delete any teams belonging to this tournament that were removed
+      const records = teams.map((t) => ({
+        id: t.id,
+        tournament_slug: cleanSlug,
+        name: t.name,
+        short_name: t.shortName,
+        logo_url: t.logoUrl,
+        color: t.color,
+        total_purse: t.totalPurse,
+        remaining_purse: t.remainingPurse,
+        secret_pin: t.secretPin,
+        max_players: t.maxPlayers,
+        bought_players_count: t.boughtPlayersCount,
+      }));
+
+      // Single bulk upsert instead of sequential loop!
+      await supabase.from('tournament_teams').upsert(records);
+
+      // Clean up deleted teams if any
       const { data: currentDbTeams } = await supabase
         .from('tournament_teams')
         .select('id')
         .ilike('tournament_slug', cleanSlug);
 
       if (Array.isArray(currentDbTeams)) {
-        for (const dbTeam of currentDbTeams) {
-          if (!keepIds.includes(dbTeam.id)) {
-            await supabase.from('tournament_teams').delete().eq('id', dbTeam.id);
-          }
+        const toDelete = currentDbTeams
+          .filter((dbTeam) => !keepIds.includes(dbTeam.id))
+          .map((dbTeam) => dbTeam.id);
+
+        if (toDelete.length > 0) {
+          await supabase.from('tournament_teams').delete().in('id', toDelete);
         }
       }
     } else {
@@ -610,20 +615,18 @@ export async function saveAuctionPlayerState(state: AuctionPlayerState): Promise
 }
 
 /**
- * Retrieve the full consolidated state for the auction engine
+ * Build consolidated state synchronously in memory (0ms execution time)
  */
-export async function getFullAuctionState(slug: string): Promise<FullAuctionState | null> {
+export function buildFullAuctionStateSync(params: {
+  slug: string;
+  room: AuctionRoom;
+  teams: TournamentTeam[];
+  rawPlayers: RegistrationSubmission[];
+  playerStates: Record<string, AuctionPlayerState>;
+  bids: AuctionBid[];
+}): FullAuctionState {
+  const { slug, room, teams, rawPlayers, playerStates, bids } = params;
   const cleanSlug = slug.toLowerCase();
-  const tournament = await getTournamentBySlugAsync(cleanSlug);
-  if (!tournament) return null;
-
-  const [room, teams, rawPlayers, playerStates, bids] = await Promise.all([
-    getAuctionRoom(cleanSlug),
-    getTournamentTeams(cleanSlug),
-    getPlayersByTournamentAsync(cleanSlug),
-    getAuctionPlayerStates(cleanSlug),
-    getAuctionBids(cleanSlug, 15),
-  ]);
 
   // Current bidding team
   const currentBiddingTeam = teams.find((t) => t.id === room.currentBiddingTeamId) || null;
@@ -633,7 +636,7 @@ export async function getFullAuctionState(slug: string): Promise<FullAuctionStat
     const pState = playerStates[player.registrationId] || {
       playerId: player.registrationId,
       tournamentSlug: cleanSlug,
-      status: 'PENDING',
+      status: 'PENDING' as PlayerAuctionStatus,
       basePrice: room.basePrice || 1000,
     };
     return {
@@ -699,6 +702,32 @@ export async function getFullAuctionState(slug: string): Promise<FullAuctionStat
     soldHistory,
     playersQueue,
   };
+}
+
+/**
+ * Retrieve the full consolidated state for the auction engine
+ */
+export async function getFullAuctionState(slug: string): Promise<FullAuctionState | null> {
+  const cleanSlug = slug.toLowerCase();
+  const tournament = await getTournamentBySlugAsync(cleanSlug);
+  if (!tournament) return null;
+
+  const [room, teams, rawPlayers, playerStates, bids] = await Promise.all([
+    getAuctionRoom(cleanSlug),
+    getTournamentTeams(cleanSlug),
+    getPlayersByTournamentAsync(cleanSlug),
+    getAuctionPlayerStates(cleanSlug),
+    getAuctionBids(cleanSlug, 15),
+  ]);
+
+  return buildFullAuctionStateSync({
+    slug: cleanSlug,
+    room,
+    teams,
+    rawPlayers,
+    playerStates,
+    bids,
+  });
 }
 
 /**
@@ -774,8 +803,6 @@ export async function placeAuctionBid(params: {
   room.lastAction = 'NEW_BID';
   room.lastActionTimestamp = Date.now();
 
-  await saveAuctionRoom(room);
-
   // Record bid
   const bidRecord: AuctionBid = {
     id: `bid_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -790,17 +817,37 @@ export async function placeAuctionBid(params: {
     createdAt: new Date().toISOString(),
   };
 
-  await recordAuctionBid(bidRecord);
+  const [playerStates, recentBids] = await Promise.all([
+    getAuctionPlayerStates(cleanSlug),
+    getAuctionBids(cleanSlug, 14),
+  ]);
 
-  // Broadcast realtime update
+  const allBids = [bidRecord, ...recentBids];
+
+  const fullState = buildFullAuctionStateSync({
+    slug: cleanSlug,
+    room,
+    teams,
+    rawPlayers,
+    playerStates,
+    bids: allBids,
+  });
+
+  // Save room and bid concurrently in background (non-blocking for speed)
+  Promise.all([
+    saveAuctionRoom(room),
+    recordAuctionBid(bidRecord),
+  ]).catch((err) => console.error('Bid background save error:', err));
+
+  // Broadcast realtime update with the complete state to all viewers instantly!
   await broadcastAuctionUpdate(cleanSlug, 'BID_PLACED', {
     bid: bidRecord,
     room,
     team,
+    state: fullState,
   });
 
-  const fullState = await getFullAuctionState(cleanSlug);
-  return { success: true, state: fullState || undefined };
+  return { success: true, state: fullState };
 }
 
 /**
@@ -808,7 +855,26 @@ export async function placeAuctionBid(params: {
  */
 export async function executeAuctioneerAction(params: {
   slug: string;
-  action: 'START' | 'PAUSE' | 'RESUME' | 'NEXT_PLAYER' | 'PREV_PLAYER' | 'SET_PLAYER' | 'MARK_SOLD' | 'MARK_UNSOLD' | 'RESET_TIMER' | 'SEED_TEAMS' | 'UPDATE_SETTINGS' | 'UPDATE_PLAYER_BASE_PRICE' | 'SAVE_TEAM' | 'DELETE_TEAM' | 'UPDATE_ALL_TEAMS';
+  action:
+    | 'START'
+    | 'PAUSE'
+    | 'RESUME'
+    | 'NEXT_PLAYER'
+    | 'PREV_PLAYER'
+    | 'SET_PLAYER'
+    | 'SKIP_PLAYER'
+    | 'MARK_SOLD'
+    | 'MARK_UNSOLD'
+    | 'UNDO_SOLD'
+    | 'REAUCTION_PLAYER'
+    | 'MANUAL_EDIT_PLAYER_AUCTION'
+    | 'RESET_TIMER'
+    | 'SEED_TEAMS'
+    | 'UPDATE_SETTINGS'
+    | 'UPDATE_PLAYER_BASE_PRICE'
+    | 'SAVE_TEAM'
+    | 'DELETE_TEAM'
+    | 'UPDATE_ALL_TEAMS';
   payload?: any;
 }): Promise<{ success: boolean; error?: string; state?: FullAuctionState }> {
   const { slug, action, payload } = params;
@@ -827,35 +893,42 @@ export async function executeAuctioneerAction(params: {
     room.timerSeconds = 10;
     room.lastAction = 'RESUME';
     room.lastActionTimestamp = Date.now();
-    await saveAuctionRoom(room);
-    await broadcastAuctionUpdate(cleanSlug, 'AUCTION_STARTED', { room });
+    saveAuctionRoom(room).catch((e) => console.error(e));
   } else if (action === 'PAUSE') {
     room.status = 'PAUSED';
     room.timerRunning = false;
     room.lastAction = 'PAUSE';
     room.lastActionTimestamp = Date.now();
-    await saveAuctionRoom(room);
-    await broadcastAuctionUpdate(cleanSlug, 'AUCTION_PAUSED', { room });
+    saveAuctionRoom(room).catch((e) => console.error(e));
   } else if (action === 'RESUME') {
     room.status = 'ACTIVE';
     room.timerRunning = true;
     room.lastAction = 'RESUME';
     room.lastActionTimestamp = Date.now();
-    await saveAuctionRoom(room);
-    await broadcastAuctionUpdate(cleanSlug, 'AUCTION_RESUMED', { room });
+    saveAuctionRoom(room).catch((e) => console.error(e));
   } else if (action === 'RESET_TIMER') {
     room.timerSeconds = 10;
     room.timerRunning = true;
     room.lastAction = 'RESET';
     room.lastActionTimestamp = Date.now();
-    await saveAuctionRoom(room);
-    await broadcastAuctionUpdate(cleanSlug, 'TIMER_RESET', { room });
-  } else if (action === 'SET_PLAYER') {
+    saveAuctionRoom(room).catch((e) => console.error(e));
+  } else if (action === 'SET_PLAYER' || action === 'REAUCTION_PLAYER') {
     const targetPlayerId = payload?.playerId;
     const player = rawPlayers.find((p) => p.registrationId === targetPlayerId);
     if (!player) return { success: false, error: 'Player not found in tournament pool' };
 
-    const playerCustomBase = playerStates[player.registrationId]?.basePrice;
+    const existingState = playerStates[player.registrationId];
+    // If player was previously SOLD, automatically refund the previous team!
+    if (existingState && existingState.status === 'SOLD' && existingState.soldToTeamId) {
+      const prevTeam = teams.find((t) => t.id === existingState.soldToTeamId);
+      if (prevTeam) {
+        prevTeam.remainingPurse += existingState.soldPrice || 0;
+        prevTeam.boughtPlayersCount = Math.max(0, (prevTeam.boughtPlayersCount || 1) - 1);
+        await saveTournamentTeams(cleanSlug, teams);
+      }
+    }
+
+    const playerCustomBase = existingState?.basePrice;
     const basePrice = payload?.basePrice || playerCustomBase || room.basePrice || 1000;
     room.currentPlayerId = player.registrationId;
     room.currentBid = basePrice;
@@ -865,15 +938,23 @@ export async function executeAuctioneerAction(params: {
     room.lastAction = 'NEXT';
     room.lastActionTimestamp = Date.now();
 
-    await saveAuctionRoom(room);
-    await saveAuctionPlayerState({
+    const newPState: AuctionPlayerState = {
       playerId: player.registrationId,
       tournamentSlug: cleanSlug,
       status: 'IN_AUCTION',
       basePrice,
-    });
+      soldPrice: null,
+      soldToTeamId: null,
+      soldToTeamName: null,
+      soldToTeamLogo: null,
+      updatedAt: new Date().toISOString(),
+    };
+    playerStates[player.registrationId] = newPState;
 
-    await broadcastAuctionUpdate(cleanSlug, 'PLAYER_CHANGED', { room, player });
+    Promise.all([
+      saveAuctionRoom(room),
+      saveAuctionPlayerState(newPState),
+    ]).catch((err) => console.error('Save error:', err));
   } else if (action === 'NEXT_PLAYER' || action === 'PREV_PLAYER') {
     const currentIndex = rawPlayers.findIndex((p) => p.registrationId === room.currentPlayerId);
     let targetIndex = 0;
@@ -895,15 +976,73 @@ export async function executeAuctioneerAction(params: {
       room.lastAction = 'NEXT';
       room.lastActionTimestamp = Date.now();
 
-      await saveAuctionRoom(room);
-      await saveAuctionPlayerState({
+      const newPState: AuctionPlayerState = {
         playerId: nextPlayer.registrationId,
         tournamentSlug: cleanSlug,
         status: 'IN_AUCTION',
         basePrice,
-      });
+        updatedAt: new Date().toISOString(),
+      };
+      playerStates[nextPlayer.registrationId] = newPState;
 
-      await broadcastAuctionUpdate(cleanSlug, 'PLAYER_CHANGED', { room, player: nextPlayer });
+      Promise.all([
+        saveAuctionRoom(room),
+        saveAuctionPlayerState(newPState),
+      ]).catch((err) => console.error('Save error:', err));
+    }
+  } else if (action === 'SKIP_PLAYER') {
+    if (room.currentPlayerId) {
+      const currState = playerStates[room.currentPlayerId];
+      // If current player was IN_AUCTION with no bids, reset back to PENDING so they can be auctioned later
+      if (currState && currState.status === 'IN_AUCTION' && !room.currentBiddingTeamId) {
+        currState.status = 'PENDING';
+        currState.updatedAt = new Date().toISOString();
+        saveAuctionPlayerState(currState).catch((e) => console.error(e));
+      }
+    }
+
+    const currentIndex = rawPlayers.findIndex((p) => p.registrationId === room.currentPlayerId);
+    let nextPlayer = rawPlayers.slice(currentIndex + 1).find((p) => {
+      const st = playerStates[p.registrationId];
+      return !st || st.status === 'PENDING';
+    });
+
+    if (!nextPlayer) {
+      nextPlayer = rawPlayers.find((p) => {
+        const st = playerStates[p.registrationId];
+        return !st || st.status === 'PENDING';
+      });
+    }
+
+    if (!nextPlayer) {
+      const targetIndex = currentIndex >= 0 && currentIndex < rawPlayers.length - 1 ? currentIndex + 1 : 0;
+      nextPlayer = rawPlayers[targetIndex];
+    }
+
+    if (nextPlayer) {
+      const playerCustomBase = playerStates[nextPlayer.registrationId]?.basePrice;
+      const basePrice = (playerCustomBase && playerCustomBase > 0) ? playerCustomBase : (room.basePrice || 1000);
+      room.currentPlayerId = nextPlayer.registrationId;
+      room.currentBid = basePrice;
+      room.currentBiddingTeamId = null;
+      room.timerSeconds = room.timerSeconds || 10;
+      room.timerRunning = room.status === 'ACTIVE';
+      room.lastAction = 'NEXT';
+      room.lastActionTimestamp = Date.now();
+
+      const newPState: AuctionPlayerState = {
+        playerId: nextPlayer.registrationId,
+        tournamentSlug: cleanSlug,
+        status: 'IN_AUCTION',
+        basePrice,
+        updatedAt: new Date().toISOString(),
+      };
+      playerStates[nextPlayer.registrationId] = newPState;
+
+      Promise.all([
+        saveAuctionRoom(room),
+        saveAuctionPlayerState(newPState),
+      ]).catch((err) => console.error('Save error:', err));
     }
   } else if (action === 'MARK_SOLD') {
     if (!room.currentPlayerId) {
@@ -921,10 +1060,9 @@ export async function executeAuctioneerAction(params: {
     // Deduct purse and increment squad count
     winningTeam.remainingPurse = Math.max(0, winningTeam.remainingPurse - room.currentBid);
     winningTeam.boughtPlayersCount = (winningTeam.boughtPlayersCount || 0) + 1;
-    await saveTournamentTeams(cleanSlug, teams);
 
     // Mark player as SOLD
-    await saveAuctionPlayerState({
+    const soldPState: AuctionPlayerState = {
       playerId: room.currentPlayerId,
       tournamentSlug: cleanSlug,
       status: 'SOLD',
@@ -933,45 +1071,197 @@ export async function executeAuctioneerAction(params: {
       soldToTeamId: winningTeam.id,
       soldToTeamName: winningTeam.name,
       soldToTeamLogo: winningTeam.logoUrl,
-    });
+      updatedAt: new Date().toISOString(),
+    };
+    playerStates[room.currentPlayerId] = soldPState;
 
     room.lastAction = 'SOLD';
     room.lastActionTimestamp = Date.now();
     room.timerRunning = false;
-    await saveAuctionRoom(room);
 
-    await broadcastAuctionUpdate(cleanSlug, 'PLAYER_SOLD', {
-      room,
-      winningTeam,
-      soldPrice: room.currentBid,
-      playerId: room.currentPlayerId,
-    });
+    await Promise.all([
+      saveTournamentTeams(cleanSlug, teams),
+      saveAuctionPlayerState(soldPState),
+      saveAuctionRoom(room),
+    ]);
   } else if (action === 'MARK_UNSOLD') {
-    if (!room.currentPlayerId) {
+    const targetPlayerId = payload?.playerId || room.currentPlayerId;
+    if (!targetPlayerId) {
       return { success: false, error: 'No player on auction block to mark as UNSOLD.' };
     }
 
-    await saveAuctionPlayerState({
-      playerId: room.currentPlayerId,
+    const existingState = playerStates[targetPlayerId];
+    // If was previously sold, automatically refund the team!
+    if (existingState && existingState.status === 'SOLD' && existingState.soldToTeamId) {
+      const prevTeam = teams.find((t) => t.id === existingState.soldToTeamId);
+      if (prevTeam) {
+        prevTeam.remainingPurse += existingState.soldPrice || 0;
+        prevTeam.boughtPlayersCount = Math.max(0, (prevTeam.boughtPlayersCount || 1) - 1);
+        await saveTournamentTeams(cleanSlug, teams);
+      }
+    }
+
+    const basePrice = existingState?.basePrice || room.basePrice || 1000;
+    const unsoldState: AuctionPlayerState = {
+      playerId: targetPlayerId,
       tournamentSlug: cleanSlug,
       status: 'UNSOLD',
-      basePrice: room.basePrice,
-    });
+      basePrice,
+      soldPrice: null,
+      soldToTeamId: null,
+      soldToTeamName: null,
+      soldToTeamLogo: null,
+      updatedAt: new Date().toISOString(),
+    };
+    playerStates[targetPlayerId] = unsoldState;
 
-    room.lastAction = 'UNSOLD';
-    room.lastActionTimestamp = Date.now();
-    room.timerRunning = false;
+    if (room.currentPlayerId === targetPlayerId) {
+      room.lastAction = 'UNSOLD';
+      room.lastActionTimestamp = Date.now();
+      room.timerRunning = false;
+      room.currentBiddingTeamId = null;
+      saveAuctionRoom(room).catch((e) => console.error(e));
+    }
+
+    saveAuctionPlayerState(unsoldState).catch((e) => console.error(e));
+  } else if (action === 'UNDO_SOLD') {
+    let targetPlayerId = payload?.playerId || room.currentPlayerId;
+    let targetState = targetPlayerId ? playerStates[targetPlayerId] : null;
+
+    if (!targetState || targetState.status !== 'SOLD') {
+      const soldEntries = Object.values(playerStates).filter((s) => s.status === 'SOLD');
+      if (soldEntries.length > 0) {
+        soldEntries.sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+        targetPlayerId = soldEntries[0].playerId;
+        targetState = soldEntries[0];
+      }
+    }
+
+    if (!targetPlayerId || !targetState || targetState.status !== 'SOLD') {
+      return { success: false, error: 'No sold player found to undo.' };
+    }
+
+    const soldPrice = targetState.soldPrice || 0;
+    const soldToTeamId = targetState.soldToTeamId;
+
+    if (soldToTeamId) {
+      const team = teams.find((t) => t.id === soldToTeamId);
+      if (team) {
+        team.remainingPurse += soldPrice;
+        team.boughtPlayersCount = Math.max(0, (team.boughtPlayersCount || 1) - 1);
+        await saveTournamentTeams(cleanSlug, teams);
+      }
+    }
+
+    targetState.status = 'IN_AUCTION';
+    targetState.soldPrice = null;
+    targetState.soldToTeamId = null;
+    targetState.soldToTeamName = null;
+    targetState.soldToTeamLogo = null;
+    targetState.updatedAt = new Date().toISOString();
+    playerStates[targetPlayerId] = targetState;
+
+    room.currentPlayerId = targetPlayerId;
+    room.currentBid = targetState.basePrice || room.basePrice || 1000;
     room.currentBiddingTeamId = null;
-    await saveAuctionRoom(room);
+    room.timerRunning = false;
+    room.lastAction = 'UNDO';
+    room.lastActionTimestamp = Date.now();
 
-    await broadcastAuctionUpdate(cleanSlug, 'PLAYER_UNSOLD', {
-      room,
-      playerId: room.currentPlayerId,
-    });
+    Promise.all([
+      saveAuctionPlayerState(targetState),
+      saveAuctionRoom(room),
+    ]).catch((e) => console.error(e));
+  } else if (action === 'MANUAL_EDIT_PLAYER_AUCTION') {
+    const targetPlayerId = payload?.playerId;
+    if (!targetPlayerId) {
+      return { success: false, error: 'playerId is required' };
+    }
+
+    const existingState = playerStates[targetPlayerId] || {
+      playerId: targetPlayerId,
+      tournamentSlug: cleanSlug,
+      status: 'PENDING',
+      basePrice: room.basePrice || 1000,
+    };
+
+    const newStatus: PlayerAuctionStatus = payload.status || existingState.status;
+    const newBasePrice = Number(payload.basePrice) > 0 ? Number(payload.basePrice) : existingState.basePrice;
+    const newSoldPrice =
+      payload.soldPrice !== undefined && payload.soldPrice !== null && !isNaN(Number(payload.soldPrice))
+        ? Number(payload.soldPrice)
+        : existingState.soldPrice;
+    const newSoldToTeamId = payload.soldToTeamId !== undefined ? payload.soldToTeamId : existingState.soldToTeamId;
+
+    let teamsChanged = false;
+    const wasSold = existingState.status === 'SOLD' && Boolean(existingState.soldToTeamId);
+    const willBeSold = newStatus === 'SOLD' && Boolean(newSoldToTeamId);
+
+    // 1. If was sold previously, handle refund if team, price, or status changed
+    if (wasSold) {
+      const prevTeam = teams.find((t) => t.id === existingState.soldToTeamId);
+      if (!willBeSold || newSoldToTeamId !== existingState.soldToTeamId || newSoldPrice !== existingState.soldPrice) {
+        if (prevTeam) {
+          prevTeam.remainingPurse += existingState.soldPrice || 0;
+          prevTeam.boughtPlayersCount = Math.max(0, (prevTeam.boughtPlayersCount || 1) - 1);
+          teamsChanged = true;
+        }
+      }
+    }
+
+    // 2. If will be sold, charge the new team
+    let newTeamObj = null;
+    if (willBeSold) {
+      newTeamObj = teams.find((t) => t.id === newSoldToTeamId);
+      if (newTeamObj) {
+        if (!wasSold || newSoldToTeamId !== existingState.soldToTeamId || newSoldPrice !== existingState.soldPrice) {
+          newTeamObj.remainingPurse = Math.max(0, newTeamObj.remainingPurse - (newSoldPrice || 0));
+          newTeamObj.boughtPlayersCount = (newTeamObj.boughtPlayersCount || 0) + 1;
+          teamsChanged = true;
+        }
+      }
+    }
+
+    if (teamsChanged) {
+      await saveTournamentTeams(cleanSlug, teams);
+    }
+
+    const updatedState: AuctionPlayerState = {
+      playerId: targetPlayerId,
+      tournamentSlug: cleanSlug,
+      status: newStatus,
+      basePrice: newBasePrice,
+      soldPrice: willBeSold ? newSoldPrice : null,
+      soldToTeamId: willBeSold ? newSoldToTeamId : null,
+      soldToTeamName: willBeSold && newTeamObj ? newTeamObj.name : null,
+      soldToTeamLogo: willBeSold && newTeamObj ? newTeamObj.logoUrl : null,
+      updatedAt: new Date().toISOString(),
+    };
+    playerStates[targetPlayerId] = updatedState;
+
+    if (room.currentPlayerId === targetPlayerId) {
+      if (newStatus === 'SOLD') {
+        room.currentBid = newSoldPrice || newBasePrice;
+        room.currentBiddingTeamId = newSoldToTeamId || null;
+        room.lastAction = 'SOLD';
+        room.timerRunning = false;
+      } else if (newStatus === 'UNSOLD') {
+        room.currentBiddingTeamId = null;
+        room.lastAction = 'UNSOLD';
+        room.timerRunning = false;
+      } else {
+        room.currentBid = newBasePrice;
+        room.currentBiddingTeamId = null;
+        room.lastAction = 'EDIT';
+      }
+      room.lastActionTimestamp = Date.now();
+      saveAuctionRoom(room).catch((e) => console.error(e));
+    }
+
+    saveAuctionPlayerState(updatedState).catch((e) => console.error(e));
   } else if (action === 'SEED_TEAMS') {
     const defaultTeams = getDefaultSeedTeams(cleanSlug);
     await saveTournamentTeams(cleanSlug, defaultTeams);
-    await broadcastAuctionUpdate(cleanSlug, 'TEAMS_UPDATED', { teams: defaultTeams });
   } else if (action === 'UPDATE_SETTINGS') {
     if (payload?.basePrice !== undefined && Number(payload.basePrice) > 0) {
       room.basePrice = Number(payload.basePrice);
@@ -986,8 +1276,7 @@ export async function executeAuctioneerAction(params: {
       room.currentBid = room.basePrice;
     }
     room.updatedAt = new Date().toISOString();
-    await saveAuctionRoom(room);
-    await broadcastAuctionUpdate(cleanSlug, 'SETTINGS_UPDATED', { room });
+    saveAuctionRoom(room).catch((e) => console.error(e));
   } else if (action === 'UPDATE_PLAYER_BASE_PRICE') {
     const targetPlayerId = payload?.playerId;
     const newBasePrice = Number(payload?.basePrice) || 1000;
@@ -999,13 +1288,14 @@ export async function executeAuctioneerAction(params: {
         basePrice: newBasePrice,
       };
       existing.basePrice = newBasePrice;
-      await saveAuctionPlayerState(existing);
+      existing.updatedAt = new Date().toISOString();
+      playerStates[targetPlayerId] = existing;
+      saveAuctionPlayerState(existing).catch((e) => console.error(e));
 
       if (room.currentPlayerId === targetPlayerId && !room.currentBiddingTeamId) {
         room.currentBid = newBasePrice;
-        await saveAuctionRoom(room);
+        saveAuctionRoom(room).catch((e) => console.error(e));
       }
-      await broadcastAuctionUpdate(cleanSlug, 'PLAYER_UPDATED', { playerId: targetPlayerId, basePrice: newBasePrice });
     }
   } else if (action === 'SAVE_TEAM') {
     const teamData = payload?.team;
@@ -1043,7 +1333,6 @@ export async function executeAuctioneerAction(params: {
         teams.push(updatedTeam);
       }
       await saveTournamentTeams(cleanSlug, teams);
-      await broadcastAuctionUpdate(cleanSlug, 'TEAMS_UPDATED', { teams });
     }
   } else if (action === 'DELETE_TEAM') {
     const teamId = payload?.teamId;
@@ -1051,19 +1340,35 @@ export async function executeAuctioneerAction(params: {
       const filtered = teams.filter((t) => t.id !== teamId);
       if (room.currentBiddingTeamId === teamId) {
         room.currentBiddingTeamId = null;
-        await saveAuctionRoom(room);
+        saveAuctionRoom(room).catch((e) => console.error(e));
       }
       await saveTournamentTeams(cleanSlug, filtered);
-      await deleteTournamentTeam(cleanSlug, teamId);
-      await broadcastAuctionUpdate(cleanSlug, 'TEAMS_UPDATED', { teams: filtered });
+      deleteTournamentTeam(cleanSlug, teamId).catch((e) => console.error(e));
     }
   } else if (action === 'UPDATE_ALL_TEAMS') {
     if (Array.isArray(payload?.teams)) {
       await saveTournamentTeams(cleanSlug, payload.teams);
-      await broadcastAuctionUpdate(cleanSlug, 'TEAMS_UPDATED', { teams: payload.teams });
     }
   }
 
-  const fullState = await getFullAuctionState(cleanSlug);
-  return { success: true, state: fullState || undefined };
+  // Load recent bids
+  const bids = await getAuctionBids(cleanSlug, 15);
+
+  // Synchronously assemble the complete full state in 0ms!
+  const fullState = buildFullAuctionStateSync({
+    slug: cleanSlug,
+    room,
+    teams,
+    rawPlayers,
+    playerStates,
+    bids,
+  });
+
+  // Broadcast the full updated state to all connected screens (controller, live, bid) instantly!
+  await broadcastAuctionUpdate(cleanSlug, 'STATE_UPDATE', {
+    action,
+    state: fullState,
+  });
+
+  return { success: true, state: fullState };
 }

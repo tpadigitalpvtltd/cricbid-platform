@@ -32,7 +32,7 @@ export interface AuctionRoom {
   timerExpiresAt?: number | null;
   basePrice: number;
   bidIncrement: number;
-  lastAction?: 'NEW_BID' | 'SOLD' | 'UNSOLD' | 'NEXT' | 'PAUSE' | 'RESUME' | 'RESET' | 'INIT';
+  lastAction?: 'NEW_BID' | 'SOLD' | 'UNSOLD' | 'NEXT' | 'PAUSE' | 'RESUME' | 'RESET' | 'INIT' | 'UNDO' | 'EDIT';
   lastActionTimestamp?: number;
   updatedAt: string;
 }

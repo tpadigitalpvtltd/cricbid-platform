@@ -57,11 +57,17 @@ export default function MobileSpectatorLivePage() {
     return () => clearInterval(interval);
   }, [slug]);
 
-  // Realtime Supabase listener
+  // Realtime Supabase listener (instant state update in <50ms without round-trip HTTP)
   useEffect(() => {
     if (!slug) return;
     const channel = supabase.channel(`auction_${slug.toLowerCase()}`);
-    channel.on('broadcast', { event: '*' }, () => fetchState()).subscribe();
+    channel.on('broadcast', { event: '*' }, (msg: any) => {
+      if (msg?.payload?.state) {
+        setState(msg.payload.state);
+      } else {
+        fetchState();
+      }
+    }).subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
