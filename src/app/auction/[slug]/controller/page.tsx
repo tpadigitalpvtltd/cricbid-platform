@@ -121,9 +121,9 @@ export default function AuctioneerControllerPage() {
   const [teamFormShortName, setTeamFormShortName] = useState('');
   const [teamFormLogoUrl, setTeamFormLogoUrl] = useState('');
   const [teamFormColor, setTeamFormColor] = useState('#f59e0b');
-  const [teamFormTotalPurse, setTeamFormTotalPurse] = useState<number>(100000);
-  const [teamFormRemainingPurse, setTeamFormRemainingPurse] = useState<number>(100000);
-  const [teamFormMaxPlayers, setTeamFormMaxPlayers] = useState<number>(15);
+  const [teamFormTotalPurse, setTeamFormTotalPurse] = useState<number | string>(100000);
+  const [teamFormRemainingPurse, setTeamFormRemainingPurse] = useState<number | string>(100000);
+  const [teamFormMaxPlayers, setTeamFormMaxPlayers] = useState<number | string>(15);
   const [teamFormSecretPin, setTeamFormSecretPin] = useState('');
   const [copiedPinId, setCopiedPinId] = useState<string | null>(null);
   const logoFileInputRef = useRef<HTMLInputElement>(null);
@@ -369,15 +369,24 @@ export default function AuctioneerControllerPage() {
     const shortCode = (teamFormShortName.trim() || teamFormName.slice(0, 3)).toUpperCase();
     const pin = teamFormSecretPin.trim() || String(Math.floor(1000 + Math.random() * 9000));
 
+    const totalPurseNum = teamFormTotalPurse === '' ? 100000 : Number(teamFormTotalPurse);
+    const parsedTotalPurse = isNaN(totalPurseNum) ? 100000 : Math.max(0, totalPurseNum);
+
+    const remainingPurseNum = teamFormRemainingPurse === '' ? parsedTotalPurse : Number(teamFormRemainingPurse);
+    const parsedRemainingPurse = isNaN(remainingPurseNum) ? parsedTotalPurse : Math.max(0, remainingPurseNum);
+
+    const maxPlayersNum = teamFormMaxPlayers === '' ? 15 : Number(teamFormMaxPlayers);
+    const parsedMaxPlayers = isNaN(maxPlayersNum) ? 15 : Math.max(1, maxPlayersNum);
+
     const teamPayload: Partial<TournamentTeam> = {
       id: editingTeam ? editingTeam.id : undefined,
       name: teamFormName.trim(),
       shortName: shortCode,
       logoUrl: teamFormLogoUrl.trim(),
       color: teamFormColor,
-      totalPurse: Number(teamFormTotalPurse) || 100000,
-      remainingPurse: Number(teamFormRemainingPurse) || Number(teamFormTotalPurse) || 100000,
-      maxPlayers: Number(teamFormMaxPlayers) || 15,
+      totalPurse: parsedTotalPurse,
+      remainingPurse: parsedRemainingPurse,
+      maxPlayers: parsedMaxPlayers,
       secretPin: pin,
       boughtPlayersCount: editingTeam ? editingTeam.boughtPlayersCount : 0,
     };
@@ -1560,13 +1569,13 @@ export default function AuctioneerControllerPage() {
                 </div>
               </div>
 
-              {/* Team Logo Upload from Gallery & URL Input */}
+              {/* Team Logo Upload from Gallery */}
               <div>
                 <label className="text-xs font-black uppercase text-slate-300 block mb-1.5">
-                  Franchise Logo (From Gallery or URL)
+                  Franchise Logo (Upload from Gallery)
                 </label>
 
-                <div className="flex items-center gap-3 mb-2">
+                <div className="flex items-center gap-3">
                   {/* Live Preview Avatar */}
                   <div
                     className="w-14 h-14 rounded-2xl overflow-hidden flex items-center justify-center font-black text-sm text-slate-950 shrink-0 border border-slate-700 shadow"
@@ -1608,14 +1617,6 @@ export default function AuctioneerControllerPage() {
                     )}
                   </div>
                 </div>
-
-                <input
-                  type="text"
-                  placeholder="Or enter logo image URL (https://...)"
-                  value={teamFormLogoUrl.startsWith('data:') ? '' : teamFormLogoUrl}
-                  onChange={(e) => setTeamFormLogoUrl(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs placeholder-slate-600 focus:outline-none focus:border-amber-400"
-                />
               </div>
 
               {/* Purse Budget & Max Players */}
@@ -1628,13 +1629,14 @@ export default function AuctioneerControllerPage() {
                     type="number"
                     value={teamFormTotalPurse}
                     onChange={(e) => {
-                      const val = Number(e.target.value);
+                      const val = e.target.value === '' ? '' : Number(e.target.value);
                       setTeamFormTotalPurse(val);
                       if (!editingTeam) setTeamFormRemainingPurse(val);
                     }}
-                    min={1000}
-                    step={5000}
+                    min={0}
+                    step="any"
                     required
+                    placeholder="e.g. 100000"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
                   />
                 </div>
@@ -1646,9 +1648,12 @@ export default function AuctioneerControllerPage() {
                   <input
                     type="number"
                     value={teamFormMaxPlayers}
-                    onChange={(e) => setTeamFormMaxPlayers(Number(e.target.value))}
-                    min={5}
-                    max={30}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? '' : Number(e.target.value);
+                      setTeamFormMaxPlayers(val);
+                    }}
+                    min={1}
+                    max={100}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
                   />
                 </div>
@@ -1663,9 +1668,13 @@ export default function AuctioneerControllerPage() {
                   <input
                     type="number"
                     value={teamFormRemainingPurse}
-                    onChange={(e) => setTeamFormRemainingPurse(Number(e.target.value))}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? '' : Number(e.target.value);
+                      setTeamFormRemainingPurse(val);
+                    }}
                     min={0}
-                    step={1000}
+                    step="any"
+                    placeholder="e.g. 100000"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
                   />
                   <p className="text-[10px] text-slate-500 mt-0.5">

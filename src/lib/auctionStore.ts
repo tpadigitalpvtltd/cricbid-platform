@@ -974,8 +974,14 @@ export async function executeAuctioneerAction(params: {
     if (teamData) {
       let teamId = teamData.id;
       let existingIndex = teams.findIndex((t) => t.id === teamId);
-      const totalPurse = Number(teamData.totalPurse) || 100000;
-      const remainingPurse = teamData.remainingPurse !== undefined ? Number(teamData.remainingPurse) : totalPurse;
+      const totalPurse =
+        typeof teamData.totalPurse !== 'undefined' && !isNaN(Number(teamData.totalPurse)) && Number(teamData.totalPurse) >= 0
+          ? Number(teamData.totalPurse)
+          : 100000;
+      const remainingPurse =
+        typeof teamData.remainingPurse !== 'undefined' && !isNaN(Number(teamData.remainingPurse)) && Number(teamData.remainingPurse) >= 0
+          ? Number(teamData.remainingPurse)
+          : totalPurse;
       const maxPlayers = Number(teamData.maxPlayers) || 15;
       const secretPin = String(teamData.secretPin || Math.floor(1000 + Math.random() * 9000));
 
