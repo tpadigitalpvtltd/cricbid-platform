@@ -86,12 +86,12 @@ export default function MobileBiddingPage() {
 
   useEffect(() => {
     fetchState();
-    // 30s quiet fallback only when tab is active (Supabase WebSocket handles all live updates in <50ms)
+    // 3.5s fast fallback polling when tab is active (Supabase WebSocket handles sub-50ms instant updates)
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && !document.hidden) {
         fetchState();
       }
-    }, 30000);
+    }, 3500);
     return () => clearInterval(interval);
   }, [slug, currentTeam?.id]);
 
@@ -378,32 +378,65 @@ export default function MobileBiddingPage() {
               </div>
             </div>
 
-            {/* STAGE BID & LEADING STATUS */}
-            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/90 text-center">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">
-                CURRENT STAGE BID
-              </span>
-              <div className="text-4xl font-black text-amber-400 font-mono tracking-tight">
-                ₹ {currentBid.toLocaleString('en-IN')}
+            {/* STAGE BID & LEADING STATUS OR SOLD BANNER */}
+            {room.lastAction === 'SOLD' && currentBiddingTeam ? (
+              <div className="bg-gradient-to-b from-emerald-950/90 via-slate-950 to-emerald-950/90 p-5 rounded-2xl border-2 border-emerald-500 text-center mb-4 shadow-2xl animate-in zoom-in-95">
+                <span className="text-xs font-black uppercase tracking-wider text-emerald-400 block mb-1">
+                  🎉 AUCTION CLOSED - SOLD!
+                </span>
+                <div className="text-4xl font-black text-emerald-400 font-mono">
+                  ₹ {currentBid.toLocaleString('en-IN')}
+                </div>
+                <div className="mt-3 pt-3 border-t border-emerald-500/30">
+                  {currentBiddingTeam.id === currentTeam.id ? (
+                    <div className="py-2 px-3 rounded-xl bg-emerald-500 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow">
+                      <CheckCircle2 className="w-4 h-4" />
+                      CONGRATULATIONS! YOUR FRANCHISE BOUGHT THIS PLAYER!
+                    </div>
+                  ) : (
+                    <span className="text-xs font-bold text-slate-300">
+                      Sold to <strong className="text-white uppercase">{currentBiddingTeam.name}</strong>
+                    </span>
+                  )}
+                </div>
               </div>
+            ) : room.lastAction === 'UNSOLD' ? (
+              <div className="bg-gradient-to-b from-rose-950/80 via-slate-950 to-rose-950/80 p-5 rounded-2xl border-2 border-rose-500 text-center mb-4 shadow-2xl animate-in zoom-in-95">
+                <span className="text-xs font-black uppercase tracking-widest text-rose-400 block mb-1">
+                  ⚠️ AUCTION RESULT
+                </span>
+                <div className="text-3xl font-black text-rose-400 font-mono tracking-wider">
+                  PLAYER UNSOLD
+                </div>
+                <p className="text-xs text-slate-400 mt-2">Returned to draft pool</p>
+              </div>
+            ) : (
+              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/90 text-center">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">
+                  CURRENT STAGE BID
+                </span>
+                <div key={currentBid} className="text-4xl font-black text-amber-400 font-mono tracking-tight animate-in zoom-in-95">
+                  ₹ {currentBid.toLocaleString('en-IN')}
+                </div>
 
-              {/* Status Banner */}
-              <div className="mt-3">
-                {isLeadingBidder ? (
-                  <div className="py-1.5 px-3 rounded-xl bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 animate-pulse">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>YOU ARE THE HIGHEST BIDDER!</span>
-                  </div>
-                ) : currentBiddingTeam ? (
-                  <div className="py-1.5 px-3 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5">
-                    <AlertTriangle className="w-4 h-4 text-amber-400" />
-                    <span>Outbid by {currentBiddingTeam.name}</span>
-                  </div>
-                ) : (
-                  <div className="text-xs text-slate-500">Awaiting opening bid</div>
-                )}
+                {/* Status Banner */}
+                <div className="mt-3">
+                  {isLeadingBidder ? (
+                    <div className="py-1.5 px-3 rounded-xl bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 animate-pulse">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span>YOU ARE THE HIGHEST BIDDER!</span>
+                    </div>
+                  ) : currentBiddingTeam ? (
+                    <div className="py-1.5 px-3 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5">
+                      <AlertTriangle className="w-4 h-4 text-amber-400" />
+                      <span>Outbid by {currentBiddingTeam.name}</span>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-500">Awaiting opening bid</div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
           </div>
         ) : (
@@ -433,7 +466,7 @@ export default function MobileBiddingPage() {
                   key={inc}
                   type="button"
                   onClick={() => handlePlaceBid(targetAmount)}
-                  disabled={biddingLoading || !isAuctionActive || !canAfford || isSquadFull}
+                  disabled={biddingLoading || !isAuctionActive || !canAfford || isSquadFull || room.lastAction === 'SOLD' || room.lastAction === 'UNSOLD'}
                   className="py-2.5 px-1 rounded-xl bg-slate-900 border border-slate-700 text-center text-xs font-black text-amber-400 hover:border-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95"
                 >
                   +₹{inc.toLocaleString('en-IN')}
@@ -452,7 +485,9 @@ export default function MobileBiddingPage() {
               !hasEnoughPurse ||
               isSquadFull ||
               isLeadingBidder ||
-              !currentPlayer
+              !currentPlayer ||
+              room.lastAction === 'SOLD' ||
+              room.lastAction === 'UNSOLD'
             }
             className={`w-full py-5 rounded-2xl font-black text-lg uppercase tracking-wider shadow-2xl flex items-center justify-center gap-3 transition-all transform active:scale-95 ${
               isLeadingBidder

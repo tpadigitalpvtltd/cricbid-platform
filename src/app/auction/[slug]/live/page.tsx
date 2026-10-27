@@ -53,12 +53,12 @@ export default function MobileSpectatorLivePage() {
 
   useEffect(() => {
     fetchState();
-    // 30s quiet fallback only when tab is active (Supabase WebSocket handles all live updates in <50ms)
+    // 3.5s fast fallback polling when tab is active (Supabase WebSocket handles sub-50ms instant updates)
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && !document.hidden) {
         fetchState();
       }
-    }, 30000);
+    }, 3500);
     return () => clearInterval(interval);
   }, [slug]);
 
@@ -193,29 +193,67 @@ export default function MobileSpectatorLivePage() {
                   </div>
                 </div>
 
-                {/* Current Bid Display */}
-                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 text-center mb-4">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-1">
-                    CURRENT BID
-                  </span>
-                  <div className="text-4xl font-black text-amber-400 font-mono drop-shadow">
-                    ₹ {currentBid.toLocaleString('en-IN')}
+                {/* Current Bid Display OR Sold Celebration Banner */}
+                {room.lastAction === 'SOLD' && currentBiddingTeam ? (
+                  <div className="bg-gradient-to-b from-emerald-950/90 via-slate-950 to-emerald-950/90 p-5 rounded-2xl border-2 border-emerald-500 text-center mb-4 shadow-2xl animate-in zoom-in-95">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[11px] font-black uppercase tracking-wider mb-2">
+                      <Sparkles className="w-3.5 h-3.5 animate-spin" /> SOLD!
+                    </div>
+                    <div className="text-4xl sm:text-5xl font-black text-emerald-400 font-mono drop-shadow-md">
+                      ₹ {currentBid.toLocaleString('en-IN')}
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-emerald-500/30 flex items-center justify-center gap-2">
+                      <div
+                        className="w-6 h-6 rounded-md overflow-hidden flex items-center justify-center font-black text-[9px] text-slate-950"
+                        style={{ backgroundColor: currentBiddingTeam.color || '#10b981' }}
+                      >
+                        {currentBiddingTeam.logoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={currentBiddingTeam.logoUrl} alt={currentBiddingTeam.name} className="w-full h-full object-cover" />
+                        ) : (
+                          currentBiddingTeam.shortName || 'TM'
+                        )}
+                      </div>
+                      <span className="text-sm font-black uppercase text-white">
+                        SOLD TO {currentBiddingTeam.name}
+                      </span>
+                    </div>
                   </div>
+                ) : room.lastAction === 'UNSOLD' ? (
+                  <div className="bg-gradient-to-b from-rose-950/80 via-slate-950 to-rose-950/80 p-5 rounded-2xl border-2 border-rose-500 text-center mb-4 shadow-2xl animate-in zoom-in-95">
+                    <span className="text-xs font-black uppercase tracking-widest text-rose-400 block mb-1">
+                      ⚠️ AUCTION RESULT
+                    </span>
+                    <div className="text-3xl font-black text-rose-400 font-mono tracking-wider">
+                      PLAYER UNSOLD
+                    </div>
+                    <p className="text-xs text-slate-400 mt-2">Returned to draft pool</p>
+                  </div>
+                ) : (
+                  <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 text-center mb-4 transition-all">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-1">
+                      CURRENT STAGE BID
+                    </span>
+                    <div key={currentBid} className="text-4xl font-black text-amber-400 font-mono drop-shadow animate-in zoom-in-95">
+                      ₹ {currentBid.toLocaleString('en-IN')}
+                    </div>
 
-                  {/* Leading Franchise */}
-                  <div className="mt-4 pt-3 border-t border-slate-900 flex items-center justify-center gap-2">
-                    {currentBiddingTeam ? (
-                      <>
-                        <span className="text-xs text-slate-400">Held by:</span>
-                        <span className="text-xs font-black uppercase text-white bg-slate-900 px-3 py-1 rounded-xl border border-amber-400/30">
-                          {currentBiddingTeam.name}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-xs text-slate-500 italic">No bids placed yet</span>
-                    )}
+                    {/* Leading Franchise */}
+                    <div className="mt-4 pt-3 border-t border-slate-900 flex items-center justify-center gap-2">
+                      {currentBiddingTeam ? (
+                        <>
+                          <span className="text-xs text-slate-400">Held by:</span>
+                          <span className="text-xs font-black uppercase text-white bg-slate-900 px-3 py-1 rounded-xl border border-amber-400/30 flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                            {currentBiddingTeam.name}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-xs text-slate-500 italic">No bids placed yet</span>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Achievements note */}
                 {currentPlayer.stats && currentPlayer.stats !== 'No previous achievements provided' && (

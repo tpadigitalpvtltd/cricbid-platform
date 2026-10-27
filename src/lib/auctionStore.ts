@@ -194,17 +194,29 @@ export function getDefaultSeedTeams(slug: string): TournamentTeam[] {
  */
 export async function broadcastAuctionUpdate(slug: string, event: string, payload: any): Promise<void> {
   try {
-    const channel = supabase.channel(`auction_${slug.toLowerCase()}`);
-    await channel.send({
+    const cleanSlug = slug.toLowerCase();
+    const channel = supabase.channel(`auction_${cleanSlug}`);
+
+    // Ensure broadcast payload is lean (<50KB) so Supabase Realtime delivers in <30ms without dropping
+    let broadcastPayload = { ...payload, timestamp: Date.now() };
+    if (broadcastPayload.state) {
+      broadcastPayload.state = {
+        ...broadcastPayload.state,
+        playersQueue: [], // Strip heavy base64 queue to guarantee sub-50ms instant delivery
+      };
+    }
+
+    const sendRes = await channel.send({
       type: 'broadcast',
       event: event,
-      payload: {
-        ...payload,
-        timestamp: Date.now(),
-      },
+      payload: broadcastPayload,
     });
+
+    if (sendRes !== 'ok') {
+      console.warn(`[Supabase Realtime] broadcast ${event} returned:`, sendRes);
+    }
   } catch (err) {
-    // Non-blocking
+    console.error('broadcastAuctionUpdate error:', err);
   }
 }
 

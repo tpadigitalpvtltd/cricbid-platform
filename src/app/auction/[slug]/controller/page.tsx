@@ -178,12 +178,12 @@ export default function AuctioneerControllerPage() {
 
   useEffect(() => {
     fetchState();
-    // 30s quiet fallback only when tab is active (Supabase WebSocket handles all live updates in <50ms)
+    // 3.5s fast fallback polling when tab is active (Supabase WebSocket handles sub-50ms instant updates)
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && !document.hidden) {
         fetchState();
       }
-    }, 30000);
+    }, 3500);
     return () => clearInterval(interval);
   }, [slug]);
 
@@ -193,7 +193,17 @@ export default function AuctioneerControllerPage() {
     const channel = supabase.channel(`auction_${slug.toLowerCase()}`);
     channel.on('broadcast', { event: '*' }, (msg: any) => {
       if (msg?.payload?.state) {
-        setState(msg.payload.state);
+        const incoming = msg.payload.state;
+        setState((prev) => {
+          if (!prev) return incoming;
+          return {
+            ...incoming,
+            playersQueue:
+              incoming.playersQueue && incoming.playersQueue.length > 0
+                ? incoming.playersQueue
+                : prev.playersQueue,
+          };
+        });
       } else {
         fetchState();
       }
@@ -301,13 +311,37 @@ export default function AuctioneerControllerPage() {
     const soldTeamName = currentBiddingTeam.name;
     const playerName = currentPlayer.fullName;
 
+    // Instant optimistic update on controller screen (0ms)
+    setState((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        room: {
+          ...prev.room,
+          lastAction: 'SOLD',
+          timerRunning: false,
+        },
+        teams: prev.teams.map((t) =>
+          t.id === currentBiddingTeam.id
+            ? {
+                ...t,
+                remainingPurse: Math.max(0, t.remainingPurse - soldPrice),
+                boughtPlayersCount: (t.boughtPlayersCount || 0) + 1,
+              }
+            : t
+        ),
+      };
+    });
+
+    setLastDecisionMsg({
+      type: 'SOLD',
+      text: `🎉 SOLD! ${playerName} sold to ${soldTeamName} for ₹${soldPrice.toLocaleString('en-IN')}!`,
+    });
+    setTimeout(() => setLastDecisionMsg(null), 8000);
+
     const res = await executeAction('MARK_SOLD');
-    if (res?.success) {
-      setLastDecisionMsg({
-        type: 'SOLD',
-        text: `🎉 SOLD! ${playerName} sold to ${soldTeamName} for ₹${soldPrice.toLocaleString('en-IN')}!`,
-      });
-      setTimeout(() => setLastDecisionMsg(null), 8000);
+    if (!res?.success) {
+      fetchState();
     }
   };
 
@@ -315,13 +349,31 @@ export default function AuctioneerControllerPage() {
   const handleMarkUnsold = async () => {
     if (!currentPlayer) return;
     const playerName = currentPlayer.fullName;
+
+    // Instant optimistic update on controller screen (0ms)
+    setState((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        room: {
+          ...prev.room,
+          lastAction: 'UNSOLD',
+          timerRunning: false,
+          currentBiddingTeamId: null,
+        },
+        currentBiddingTeam: null,
+      };
+    });
+
+    setLastDecisionMsg({
+      type: 'UNSOLD',
+      text: `⚠️ ${playerName} marked as UNSOLD.`,
+    });
+    setTimeout(() => setLastDecisionMsg(null), 6000);
+
     const res = await executeAction('MARK_UNSOLD');
-    if (res?.success) {
-      setLastDecisionMsg({
-        type: 'UNSOLD',
-        text: `⚠️ ${playerName} marked as UNSOLD.`,
-      });
-      setTimeout(() => setLastDecisionMsg(null), 6000);
+    if (!res?.success) {
+      fetchState();
     }
   };
 
@@ -572,8 +624,26 @@ export default function AuctioneerControllerPage() {
 
   // Load a player onto stage and switch tab to Bidding Desk immediately
   const handleLoadOnStage = async (playerId: string, basePrice: number) => {
-    await executeAction('SET_PLAYER', { playerId, basePrice });
+    const targetPlayer = playersQueue.find((pq) => pq.player.registrationId === playerId);
+    if (targetPlayer) {
+      setState((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          currentPlayer: targetPlayer.player,
+          room: {
+            ...prev.room,
+            currentPlayerId: playerId,
+            currentBid: basePrice,
+            currentBiddingTeamId: null,
+            lastAction: 'NEXT',
+          },
+          currentBiddingTeam: null,
+        };
+      });
+    }
     setActiveTab('control');
+    await executeAction('SET_PLAYER', { playerId, basePrice });
   };
 
   // If PIN authentication required
