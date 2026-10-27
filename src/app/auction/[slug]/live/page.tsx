@@ -37,7 +37,7 @@ export default function MobileSpectatorLivePage() {
   const fetchState = async () => {
     if (!slug) return;
     try {
-      const res = await fetch(`/api/auction/${slug}`, { cache: 'no-store' });
+      const res = await fetch(`/api/auction/${slug}?t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.state) {

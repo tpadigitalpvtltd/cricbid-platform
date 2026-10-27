@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { getTournamentTeams, saveTournamentTeams, executeAuctioneerAction } from '@/lib/auctionStore';
 import { verifyAdminSession, getAdminPassword } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+
 export async function GET(
   request: Request,
   { params }: { params: { slug: string } }
@@ -24,7 +28,16 @@ export async function GET(
       boughtPlayersCount: t.boughtPlayersCount,
     }));
 
-    return NextResponse.json({ success: true, teams: publicTeams });
+    return NextResponse.json(
+      { success: true, teams: publicTeams },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          Pragma: 'no-cache',
+          Expires: '0',
+        },
+      }
+    );
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err?.message }, { status: 500 });
   }
