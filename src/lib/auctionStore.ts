@@ -219,8 +219,7 @@ export async function getAuctionRoom(slug: string): Promise<AuctionRoom> {
       .from('auction_rooms')
       .select('*')
       .ilike('tournament_slug', cleanSlug)
-      .limit(1)
-      .single();
+      .maybeSingle();
 
     if (!error && data) {
       return {
@@ -360,7 +359,20 @@ export async function getTournamentTeams(slug: string): Promise<TournamentTeam[]
       }
 
       // If database returned 0 rows, check if tournament was already initialized.
-      // If initialized, respect that the admin intentionally cleared all teams!
+      // 1. Check if auction room exists in Supabase
+      const { data: existingRoom } = await supabase
+        .from('auction_rooms')
+        .select('id')
+        .ilike('tournament_slug', cleanSlug)
+        .maybeSingle();
+
+      if (existingRoom) {
+        // Auction room exists in database! That means the auction was initialized
+        // and the admin deliberately deleted/cleared all teams. Respect empty state!
+        return [];
+      }
+
+      // 2. Check local in-memory initialized flag
       const local = readLocalData();
       if (local.teamsInitialized?.[cleanSlug]) {
         return local.teams[cleanSlug] || [];
@@ -420,7 +432,9 @@ export async function deleteTournamentTeam(slug: string, teamId: string): Promis
   }
   try {
     await supabase.from('tournament_teams').delete().eq('id', teamId);
-  } catch (e) {}
+  } catch (e) {
+    console.error('deleteTournamentTeam error:', e);
+  }
 }
 
 export async function saveTournamentTeams(slug: string, teams: TournamentTeam[]): Promise<void> {
@@ -432,22 +446,46 @@ export async function saveTournamentTeams(slug: string, teams: TournamentTeam[])
   saveLocalData(local);
 
   try {
-    for (const t of teams) {
-      await supabase.from('tournament_teams').upsert({
-        id: t.id,
-        tournament_slug: cleanSlug,
-        name: t.name,
-        short_name: t.shortName,
-        logo_url: t.logoUrl,
-        color: t.color,
-        total_purse: t.totalPurse,
-        remaining_purse: t.remainingPurse,
-        secret_pin: t.secretPin,
-        max_players: t.maxPlayers,
-        bought_players_count: t.boughtPlayersCount,
-      });
+    const keepIds = teams.map((t) => t.id);
+    if (keepIds.length > 0) {
+      for (const t of teams) {
+        await supabase.from('tournament_teams').upsert({
+          id: t.id,
+          tournament_slug: cleanSlug,
+          name: t.name,
+          short_name: t.shortName,
+          logo_url: t.logoUrl,
+          color: t.color,
+          total_purse: t.totalPurse,
+          remaining_purse: t.remainingPurse,
+          secret_pin: t.secretPin,
+          max_players: t.maxPlayers,
+          bought_players_count: t.boughtPlayersCount,
+        });
+      }
+      // Delete any teams belonging to this tournament that were removed
+      const { data: currentDbTeams } = await supabase
+        .from('tournament_teams')
+        .select('id')
+        .ilike('tournament_slug', cleanSlug);
+
+      if (Array.isArray(currentDbTeams)) {
+        for (const dbTeam of currentDbTeams) {
+          if (!keepIds.includes(dbTeam.id)) {
+            await supabase.from('tournament_teams').delete().eq('id', dbTeam.id);
+          }
+        }
+      }
+    } else {
+      // If teams array is empty, remove all teams for this tournament
+      await supabase
+        .from('tournament_teams')
+        .delete()
+        .ilike('tournament_slug', cleanSlug);
     }
-  } catch (e) {}
+  } catch (e) {
+    console.error('saveTournamentTeams error:', e);
+  }
 }
 
 /**
