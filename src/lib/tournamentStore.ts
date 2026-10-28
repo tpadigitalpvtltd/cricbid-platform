@@ -240,13 +240,25 @@ export async function getTournamentBySlugAsync(slug: string): Promise<Tournament
   try {
     const [tRes, pRes] = await Promise.all([
       supabase.from('tournaments').select('*').ilike('slug', cleanSlug).maybeSingle(),
-      supabase.from('players').select('tournament_slug').ilike('tournament_slug', cleanSlug),
+      supabase
+        .from('players')
+        .select('tournament_slug')
+        .ilike('tournament_slug', cleanSlug)
+        .neq('payment_status', 'PENDING_PAYMENT'),
     ]);
 
     if (!tRes.error && tRes.data) {
       const model = mapDbTournamentToModel(tRes.data);
       if (!pRes.error && Array.isArray(pRes.data)) {
         model.registeredCount = pRes.data.length;
+        if (Number(tRes.data.registered_count) !== pRes.data.length) {
+          fireAndForget(
+            supabase
+              .from('tournaments')
+              .update({ registered_count: pRes.data.length })
+              .ilike('slug', cleanSlug)
+          );
+        }
       }
       return model;
     }
@@ -258,7 +270,9 @@ export async function getTournamentBySlugAsync(slug: string): Promise<Tournament
   const found = all.find((t) => t.slug.toLowerCase() === cleanSlug);
   if (found) {
     const localPlayers = readPlayersFromFile();
-    const count = localPlayers.filter((p) => p.tournamentSlug?.toLowerCase() === cleanSlug).length;
+    const count = localPlayers.filter(
+      (p) => p.tournamentSlug?.toLowerCase() === cleanSlug && p.paymentStatus !== 'PENDING_PAYMENT' && p.paymentStatus !== 'PENDING'
+    ).length;
     return { ...found, registeredCount: count > 0 ? count : found.registeredCount };
   }
   return null;
@@ -480,14 +494,24 @@ export async function incrementRegistrationCountAsync(slug: string): Promise<num
   let updatedCount = 1;
 
   try {
-    const { data: tourney } = await supabase
-      .from('tournaments')
-      .select('registered_count')
-      .ilike('slug', cleanSlug)
-      .maybeSingle();
+    const { count: realCount, error: countErr } = await supabase
+      .from('players')
+      .select('*', { count: 'exact', head: true })
+      .ilike('tournament_slug', cleanSlug)
+      .neq('payment_status', 'PENDING_PAYMENT');
 
-    const currentCount = Number(tourney?.registered_count) || 0;
-    updatedCount = currentCount + 1;
+    if (!countErr && typeof realCount === 'number') {
+      updatedCount = realCount;
+    } else {
+      const { data: tourney } = await supabase
+        .from('tournaments')
+        .select('registered_count')
+        .ilike('slug', cleanSlug)
+        .maybeSingle();
+
+      const currentCount = Number(tourney?.registered_count) || 0;
+      updatedCount = currentCount + 1;
+    }
 
     await supabase
       .from('tournaments')

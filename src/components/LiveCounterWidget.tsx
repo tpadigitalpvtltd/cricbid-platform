@@ -6,13 +6,26 @@ import { Flame, Radio, RefreshCw, Users, ShieldCheck } from 'lucide-react';
 interface LiveCounterWidgetProps {
   tournamentSlug: string;
   initialCount?: number;
+  externalCount?: number;
+  onCountUpdate?: (count: number) => void;
 }
 
 export const LiveCounterWidget: React.FC<LiveCounterWidgetProps> = ({
   tournamentSlug,
   initialCount = 0,
+  externalCount,
+  onCountUpdate,
 }) => {
-  const [count, setCount] = useState<number>(initialCount);
+  const [count, setCount] = useState<number>(() => {
+    if (typeof externalCount === 'number' && externalCount >= 0) return externalCount;
+    return initialCount;
+  });
+
+  useEffect(() => {
+    if (typeof externalCount === 'number' && externalCount >= 0) {
+      setCount(externalCount);
+    }
+  }, [externalCount]);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const fetchLiveCount = async () => {
@@ -23,6 +36,7 @@ export const LiveCounterWidget: React.FC<LiveCounterWidgetProps> = ({
         const data = await res.json();
         if (data && typeof data.registeredCount === 'number') {
           setCount(data.registeredCount);
+          onCountUpdate?.(data.registeredCount);
         }
       }
     } catch (err) {

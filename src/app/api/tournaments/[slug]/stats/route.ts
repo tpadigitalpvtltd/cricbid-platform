@@ -24,16 +24,24 @@ export async function GET(
     // Auto-reconcile any captured payments in background
     await reconcileMissingTournamentPayments(slug);
 
-    // Query exact real player count from players table
+    // Query exact real player count from players table (excluding incomplete/abandoned payment drafts)
     let count = tournament.registeredCount || 0;
     try {
       const { count: realPlayerCount, error: countErr } = await supabase
         .from('players')
         .select('*', { count: 'exact', head: true })
-        .eq('tournament_slug', tournament.slug);
+        .ilike('tournament_slug', tournament.slug)
+        .neq('payment_status', 'PENDING_PAYMENT');
 
       if (!countErr && typeof realPlayerCount === 'number') {
         count = realPlayerCount;
+        // Keep tournaments table registered_count in exact sync
+        if (tournament.registeredCount !== realPlayerCount) {
+          await supabase
+            .from('tournaments')
+            .update({ registered_count: realPlayerCount })
+            .ilike('slug', tournament.slug);
+        }
       }
     } catch (e) {
       // fallback to tournament record count

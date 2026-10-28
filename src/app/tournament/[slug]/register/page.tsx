@@ -552,6 +552,7 @@ export default function TournamentRegistrationPage() {
           <LiveCounterWidget
             tournamentSlug={slug}
             initialCount={tournament?.registeredCount || 0}
+            externalCount={registeredPlayers.length > 0 ? registeredPlayers.length : undefined}
           />
         </div>
 

@@ -33,7 +33,7 @@ export interface RegistrationSubmission extends PlayerFormData {
   timestamp: string;
   paymentId: string;
   orderId?: string;
-  paymentStatus: 'PAID' | 'FREE' | 'PENDING' | 'FAILED';
+  paymentStatus: 'PAID' | 'FREE' | 'PENDING' | 'FAILED' | 'PENDING_PAYMENT';
   amount: number;
 }
 
