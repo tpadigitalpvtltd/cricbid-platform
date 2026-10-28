@@ -68,7 +68,36 @@ export default function MobileSpectatorLivePage() {
     const channel = supabase.channel(`auction_${slug.toLowerCase()}`);
     channel.on('broadcast', { event: '*' }, (msg: any) => {
       if (msg?.payload?.state) {
-        setState(msg.payload.state);
+        const incoming = msg.payload.state;
+        setState((prev) => {
+          if (!prev) return incoming;
+          const currentQueue =
+            incoming.playersQueue && incoming.playersQueue.length > 0
+              ? incoming.playersQueue
+              : prev.playersQueue;
+
+          const hydratedSoldHistory = (incoming.soldHistory || []).map((sh: any) => {
+            if (!sh.player?.photoUrl) {
+              const matched = currentQueue?.find((pq: any) => pq.player?.registrationId === sh.player?.registrationId);
+              if (matched?.player?.photoUrl) {
+                return {
+                  ...sh,
+                  player: {
+                    ...sh.player,
+                    photoUrl: matched.player.photoUrl,
+                  },
+                };
+              }
+            }
+            return sh;
+          });
+
+          return {
+            ...incoming,
+            playersQueue: currentQueue,
+            soldHistory: hydratedSoldHistory,
+          };
+        });
       } else {
         fetchState();
       }
@@ -316,33 +345,64 @@ export default function MobileSpectatorLivePage() {
         {/* TAB 3: TEAMS & PURSES */}
         {activeTab === 'teams' && (
           <div className="space-y-3">
-            {teams.map((t) => (
-              <div key={t.id} className="p-3.5 bg-slate-900 rounded-2xl border border-slate-800 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {t.logoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={t.logoUrl} alt={t.name} className="w-10 h-10 rounded-xl object-cover bg-slate-950" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 font-black flex items-center justify-center text-xs">
-                      {t.shortName}
+            {teams.map((t) => {
+              const teamSold = (soldHistory || []).filter(
+                (s) => s.team.id === t.id || (s.team.name && s.team.name.toLowerCase() === t.name.toLowerCase())
+              );
+              return (
+                <div key={t.id} className="p-3.5 bg-slate-900 rounded-2xl border border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {t.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={t.logoUrl} alt={t.name} className="w-10 h-10 rounded-xl object-cover bg-slate-950" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 font-black flex items-center justify-center text-xs">
+                          {t.shortName}
+                        </div>
+                      )}
+                      <div>
+                        <h4 className="text-xs font-black uppercase text-white truncate max-w-[150px]">{t.name}</h4>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          Squad: {teamSold.length}/{t.maxPlayers} players
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-xs sm:text-sm font-black text-amber-400 font-mono block">
+                        ₹ {t.remainingPurse.toLocaleString('en-IN')}
+                      </span>
+                      <span className="text-[9px] text-slate-500 uppercase font-bold">Purse Remaining</span>
+                    </div>
+                  </div>
+
+                  {/* Bought Squad Players for this franchise */}
+                  {teamSold.length > 0 && (
+                    <div className="mt-2.5 pt-2 border-t border-slate-800/80 space-y-1">
+                      <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider block">
+                        Squad Players ({teamSold.length}):
+                      </span>
+                      <div className="grid grid-cols-1 gap-1">
+                        {teamSold.map((sp, sIdx) => (
+                          <div
+                            key={sIdx}
+                            className="px-2 py-1 rounded-lg bg-slate-950/60 border border-slate-800/60 flex items-center justify-between text-xs"
+                          >
+                            <span className="font-bold text-slate-200 truncate max-w-[180px]">
+                              {sp.player.fullName} <span className="text-amber-400 text-[10px]">({sp.player.role})</span>
+                            </span>
+                            <span className="font-mono font-black text-emerald-400 shrink-0">
+                              ₹{sp.soldPrice.toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
-                  <div>
-                    <h4 className="text-xs font-black uppercase text-white truncate max-w-[150px]">{t.name}</h4>
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      Squad: {t.boughtPlayersCount}/{t.maxPlayers} players
-                    </span>
-                  </div>
                 </div>
-
-                <div className="text-right">
-                  <span className="text-xs sm:text-sm font-black text-amber-400 font-mono block">
-                    ₹ {t.remainingPurse.toLocaleString('en-IN')}
-                  </span>
-                  <span className="text-[9px] text-slate-500 uppercase font-bold">Purse Remaining</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

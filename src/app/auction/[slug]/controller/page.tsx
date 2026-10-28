@@ -41,7 +41,7 @@ import {
   Smartphone,
   Share2,
 } from 'lucide-react';
-import { FullAuctionState, TournamentTeam } from '@/lib/auctionTypes';
+import { FullAuctionState, TournamentTeam, PlayerAuctionStatus, SoldRecord } from '@/lib/auctionTypes';
 import { supabase } from '@/lib/supabase';
 
 function getInitials(name: string): string {
@@ -196,12 +196,32 @@ export default function AuctioneerControllerPage() {
         const incoming = msg.payload.state;
         setState((prev) => {
           if (!prev) return incoming;
+          const currentQueue =
+            incoming.playersQueue && incoming.playersQueue.length > 0
+              ? incoming.playersQueue
+              : prev.playersQueue;
+
+          // Hydrate photos in soldHistory from local queue if stripped for lean payload
+          const hydratedSoldHistory = (incoming.soldHistory || []).map((sh: any) => {
+            if (!sh.player?.photoUrl) {
+              const matched = currentQueue?.find((pq: any) => pq.player?.registrationId === sh.player?.registrationId);
+              if (matched?.player?.photoUrl) {
+                return {
+                  ...sh,
+                  player: {
+                    ...sh.player,
+                    photoUrl: matched.player.photoUrl,
+                  },
+                };
+              }
+            }
+            return sh;
+          });
+
           return {
             ...incoming,
-            playersQueue:
-              incoming.playersQueue && incoming.playersQueue.length > 0
-                ? incoming.playersQueue
-                : prev.playersQueue,
+            playersQueue: currentQueue,
+            soldHistory: hydratedSoldHistory,
           };
         });
       } else {
@@ -381,7 +401,7 @@ export default function AuctioneerControllerPage() {
   const handleOpenManualEditPlayer = (
     player: any,
     currentStatus: string,
-    basePrice: number,
+    basePrice?: number,
     soldPrice?: number | null,
     soldTeamName?: string | null
   ) => {
@@ -456,6 +476,74 @@ export default function AuctioneerControllerPage() {
         });
         setTimeout(() => setLastDecisionMsg(null), 6000);
       }
+    }
+  };
+
+  // Release / Mark Unsold a specific player directly from a team card
+  const handleReleasePlayerFromTeam = async (player: any, team: TournamentTeam, soldPrice: number) => {
+    const confirmMsg = `Kya aap "${player.fullName}" ko "${team.name}" se nikal kar UNSOLD karna chahte hain?\n\n₹${soldPrice.toLocaleString('en-IN')} automatically "${team.name}" ke purse me wapas add (refund) ho jayenge.`;
+    if (!confirm(confirmMsg)) return;
+
+    // Instant optimistic UI update (0ms latency)
+    setState((prev) => {
+      if (!prev) return prev;
+      const updatedSoldHistory = prev.soldHistory.filter((sh) => sh.player.registrationId !== player.registrationId);
+      const updatedTeams = prev.teams.map((t) => {
+        if (t.id === team.id) {
+          return {
+            ...t,
+            remainingPurse: t.remainingPurse + soldPrice,
+            boughtPlayersCount: Math.max(0, (t.boughtPlayersCount || 1) - 1),
+          };
+        }
+        return t;
+      });
+      const updatedPlayersQueue = prev.playersQueue.map((pq) => {
+        if (pq.player.registrationId === player.registrationId) {
+          return {
+            ...pq,
+            status: 'UNSOLD' as PlayerAuctionStatus,
+            soldPrice: undefined,
+            soldTeamName: undefined,
+            soldToTeamId: undefined,
+          };
+        }
+        return pq;
+      });
+
+      return {
+        ...prev,
+        teams: updatedTeams,
+        soldHistory: updatedSoldHistory,
+        playersQueue: updatedPlayersQueue,
+      };
+    });
+
+    setLastDecisionMsg({
+      type: 'UNSOLD',
+      text: `↩️ ${player.fullName} released from ${team.name} back to UNSOLD. ₹${soldPrice.toLocaleString('en-IN')} refunded to purse.`,
+    });
+    setTimeout(() => setLastDecisionMsg(null), 6000);
+
+    const res = await executeAction('MARK_UNSOLD', { playerId: player.registrationId });
+    if (!res?.success) {
+      fetchState();
+    }
+  };
+
+  // Re-Auction a player directly from a team card
+  const handleReAuctionFromTeam = async (player: any, team: TournamentTeam, soldPrice: number) => {
+    const confirmMsg = `Kya aap "${player.fullName}" ko wapas Live Stage par la kar RE-AUCTION karna chahte hain?\n\nIsse "${team.name}" ka ₹${soldPrice.toLocaleString('en-IN')} purse refund ho jayega aur player live stage par aa jayega.`;
+    if (!confirm(confirmMsg)) return;
+
+    const res = await executeAction('REAUCTION_PLAYER', { playerId: player.registrationId });
+    if (res?.success) {
+      setActiveTab('control'); // Switch directly to live auction stage
+      setLastDecisionMsg({
+        type: 'SOLD',
+        text: `🔥 ${player.fullName} is now LIVE on the bidding stage for Re-Auction!`,
+      });
+      setTimeout(() => setLastDecisionMsg(null), 6000);
     }
   };
 
@@ -686,12 +774,13 @@ export default function AuctioneerControllerPage() {
     );
   }
 
-  const { room, currentPlayer, currentBiddingTeam, teams, playersQueue } = state || {
+  const { room, currentPlayer, currentBiddingTeam, teams, playersQueue, soldHistory = [] } = state || {
     room: { status: 'WAITING', currentBid: 0, basePrice: 1000, bidIncrement: 500, timerSeconds: 10 },
     currentPlayer: null,
     currentBiddingTeam: null,
     teams: [],
     playersQueue: [],
+    soldHistory: [],
   };
 
   const currentBid = room.currentBid || room.basePrice || 1000;
@@ -1603,6 +1692,13 @@ export default function AuctioneerControllerPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {teams.map((t) => {
                   const pursePct = Math.round(((t.remainingPurse || 0) / (t.totalPurse || 1)) * 100);
+                  const teamSoldPlayers = (soldHistory as SoldRecord[]).filter(
+                    (sh: SoldRecord) =>
+                      sh.team?.id === t.id ||
+                      (sh.team?.name && t.name && sh.team.name.trim().toLowerCase() === t.name.trim().toLowerCase())
+                  );
+                  const squadCount = teamSoldPlayers.length;
+                  const totalTeamSpent = teamSoldPlayers.reduce((sum: number, sp: SoldRecord) => sum + (sp.soldPrice || 0), 0);
 
                   return (
                     <div
@@ -1633,7 +1729,7 @@ export default function AuctioneerControllerPage() {
                                 </span>
                               </h4>
                               <p className="text-[11px] text-slate-400 mt-0.5">
-                                Squad: <strong className="text-white">{t.boughtPlayersCount || 0}</strong> / {t.maxPlayers || 15} Players
+                                Squad: <strong className="text-white">{squadCount}</strong> / {t.maxPlayers || 15} Players
                               </p>
                             </div>
                           </div>
@@ -1676,6 +1772,104 @@ export default function AuctioneerControllerPage() {
                               }}
                             />
                           </div>
+                        </div>
+
+                        {/* Bought Squad Players Section */}
+                        <div className="mt-3 pt-3 border-t border-slate-900">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[11px] font-black uppercase text-slate-300 tracking-wider flex items-center gap-1.5">
+                              <Users className="w-3.5 h-3.5 text-amber-400" />
+                              Squad Players ({squadCount})
+                            </span>
+                            {squadCount > 0 && (
+                              <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                                Spent: ₹{totalTeamSpent.toLocaleString('en-IN')}
+                              </span>
+                            )}
+                          </div>
+
+                          {squadCount === 0 ? (
+                            <div className="p-3 rounded-xl bg-slate-900/40 border border-dashed border-slate-800 text-center">
+                              <p className="text-[11px] text-slate-500 font-medium">
+                                No players bought yet. Sold players will appear here.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                              {teamSoldPlayers.map((record: SoldRecord) => {
+                                const p = record.player;
+                                const photo =
+                                  p.photoUrl ||
+                                  playersQueue.find((pq) => pq.player.registrationId === p.registrationId)?.player.photoUrl;
+
+                                return (
+                                  <div
+                                    key={p.registrationId}
+                                    className="p-2 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 flex items-center justify-between gap-2 transition-all"
+                                  >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <div className="w-9 h-9 rounded-lg bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center shrink-0">
+                                        {photo ? (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img src={photo} alt={p.fullName} className="w-full h-full object-cover" />
+                                        ) : (
+                                          <span className="text-[10px] font-black text-amber-400">
+                                            {getInitials(p.fullName)}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <h5 className="text-xs font-black text-white uppercase truncate leading-tight">
+                                          {p.fullName}
+                                        </h5>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                          <span className="text-[9px] font-bold text-amber-400 uppercase bg-amber-400/10 px-1.5 py-0.2 rounded">
+                                            {p.role}
+                                          </span>
+                                          <span className="text-[10px] font-black font-mono text-emerald-400">
+                                            ₹{record.soldPrice.toLocaleString('en-IN')}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleReleasePlayerFromTeam(p, t, record.soldPrice)}
+                                        disabled={actionLoading}
+                                        className="px-2 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 hover:border-rose-500/40 text-[10px] font-black uppercase flex items-center gap-1 transition-all"
+                                        title={`Mark ${p.fullName} as UNSOLD and refund ₹${record.soldPrice.toLocaleString('en-IN')} to ${t.name}`}
+                                      >
+                                        <RotateCcw className="w-3 h-3" />
+                                        <span>Unsold</span>
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => handleReAuctionFromTeam(p, t, record.soldPrice)}
+                                        disabled={actionLoading}
+                                        className="p-1 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/20 text-[10px] font-black transition-all"
+                                        title={`Bring ${p.fullName} back to live stage for Re-Auction`}
+                                      >
+                                        <Gavel className="w-3 h-3" />
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenManualEditPlayer(p, 'SOLD', undefined, record.soldPrice, t.name)}
+                                        className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all"
+                                        title="Edit Player Details"
+                                      >
+                                        <Edit className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       </div>
 

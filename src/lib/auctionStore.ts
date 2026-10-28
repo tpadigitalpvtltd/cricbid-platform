@@ -204,6 +204,16 @@ export async function broadcastAuctionUpdate(slug: string, event: string, payloa
         ...broadcastPayload.state,
         playersQueue: [], // Strip heavy base64 queue to guarantee sub-50ms instant delivery
       };
+      if (Array.isArray(broadcastPayload.state.soldHistory)) {
+        broadcastPayload.state.soldHistory = broadcastPayload.state.soldHistory.map((sh: any) => ({
+          ...sh,
+          player: {
+            ...sh.player,
+            // Keep photoUrl lightweight so payload stays < 20KB (client rehydrates from local queue)
+            photoUrl: sh.player?.photoUrl && sh.player.photoUrl.length > 250 ? '' : sh.player?.photoUrl,
+          },
+        }));
+      }
     }
 
     const sendRes = await channel.send({
@@ -657,6 +667,7 @@ export function buildFullAuctionStateSync(params: {
       basePrice: pState.basePrice,
       soldPrice: pState.soldPrice,
       soldTeamName: pState.soldToTeamName,
+      soldToTeamId: pState.soldToTeamId,
     };
   });
 
@@ -687,12 +698,16 @@ export function buildFullAuctionStateSync(params: {
     }
   }
 
-  // Sold history
+  // Sold history - match either by team id or team name
   const soldHistory: SoldRecord[] = [];
   rawPlayers.forEach((p) => {
     const st = playerStates[p.registrationId];
-    if (st && st.status === 'SOLD' && st.soldToTeamId) {
-      const team = teams.find((t) => t.id === st.soldToTeamId);
+    if (st && st.status === 'SOLD' && (st.soldToTeamId || st.soldToTeamName)) {
+      const team = teams.find(
+        (t) =>
+          t.id === st.soldToTeamId ||
+          (st.soldToTeamName && t.name.toLowerCase() === st.soldToTeamName.toLowerCase())
+      );
       if (team) {
         soldHistory.push({
           player: p,
@@ -701,6 +716,18 @@ export function buildFullAuctionStateSync(params: {
           soldAt: st.updatedAt || new Date().toISOString(),
         });
       }
+    }
+  });
+
+  // Self-heal and mathematically guarantee exact consistency between soldHistory, team squad count, and remaining purse!
+  teams.forEach((t) => {
+    const teamSoldRecords = soldHistory.filter(
+      (sh) => sh.team.id === t.id || (sh.team.name && t.name && sh.team.name.toLowerCase() === t.name.toLowerCase())
+    );
+    t.boughtPlayersCount = teamSoldRecords.length;
+    const spentAmount = teamSoldRecords.reduce((sum, sh) => sum + (sh.soldPrice || 0), 0);
+    if (t.totalPurse > 0) {
+      t.remainingPurse = Math.max(0, t.totalPurse - spentAmount);
     }
   });
 
@@ -1104,8 +1131,12 @@ export async function executeAuctioneerAction(params: {
 
     const existingState = playerStates[targetPlayerId];
     // If was previously sold, automatically refund the team!
-    if (existingState && existingState.status === 'SOLD' && existingState.soldToTeamId) {
-      const prevTeam = teams.find((t) => t.id === existingState.soldToTeamId);
+    if (existingState && existingState.status === 'SOLD' && (existingState.soldToTeamId || existingState.soldToTeamName)) {
+      const prevTeam = teams.find(
+        (t) =>
+          t.id === existingState.soldToTeamId ||
+          (existingState.soldToTeamName && t.name.toLowerCase() === existingState.soldToTeamName.toLowerCase())
+      );
       if (prevTeam) {
         prevTeam.remainingPurse += existingState.soldPrice || 0;
         prevTeam.boughtPlayersCount = Math.max(0, (prevTeam.boughtPlayersCount || 1) - 1);
@@ -1135,7 +1166,7 @@ export async function executeAuctioneerAction(params: {
       saveAuctionRoom(room).catch((e) => console.error(e));
     }
 
-    saveAuctionPlayerState(unsoldState).catch((e) => console.error(e));
+    await saveAuctionPlayerState(unsoldState);
   } else if (action === 'UNDO_SOLD') {
     let targetPlayerId = payload?.playerId || room.currentPlayerId;
     let targetState = targetPlayerId ? playerStates[targetPlayerId] : null;
@@ -1375,6 +1406,9 @@ export async function executeAuctioneerAction(params: {
     playerStates,
     bids,
   });
+
+  // Ensure latest computed team purse & squad counts are safely persisted
+  saveTournamentTeams(cleanSlug, fullState.teams).catch((e) => console.error(e));
 
   // Broadcast the full updated state to all connected screens (controller, live, bid) instantly!
   await broadcastAuctionUpdate(cleanSlug, 'STATE_UPDATE', {

@@ -83,5 +83,6 @@ export interface FullAuctionState {
     basePrice: number;
     soldPrice?: number | null;
     soldTeamName?: string | null;
+    soldToTeamId?: string | null;
   }[];
 }

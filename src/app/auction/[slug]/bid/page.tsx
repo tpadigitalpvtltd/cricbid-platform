@@ -15,6 +15,8 @@ import {
   Clock,
   Sparkles,
   User,
+  Users,
+  X,
 } from 'lucide-react';
 import { FullAuctionState, TournamentTeam } from '@/lib/auctionTypes';
 import { supabase } from '@/lib/supabase';
@@ -44,6 +46,7 @@ export default function MobileBiddingPage() {
   const [loading, setLoading] = useState(true);
   const [biddingLoading, setBiddingLoading] = useState(false);
   const [bidError, setBidError] = useState('');
+  const [showMySquadModal, setShowMySquadModal] = useState(false);
 
   // Check persisted team session
   useEffect(() => {
@@ -101,7 +104,37 @@ export default function MobileBiddingPage() {
     const channel = supabase.channel(`auction_${slug.toLowerCase()}`);
     channel.on('broadcast', { event: '*' }, (msg: any) => {
       if (msg?.payload?.state) {
-        setState(msg.payload.state);
+        const incoming = msg.payload.state;
+        setState((prev) => {
+          if (!prev) return incoming;
+          const currentQueue =
+            incoming.playersQueue && incoming.playersQueue.length > 0
+              ? incoming.playersQueue
+              : prev.playersQueue;
+
+          const hydratedSoldHistory = (incoming.soldHistory || []).map((sh: any) => {
+            if (!sh.player?.photoUrl) {
+              const matched = currentQueue?.find((pq: any) => pq.player?.registrationId === sh.player?.registrationId);
+              if (matched?.player?.photoUrl) {
+                return {
+                  ...sh,
+                  player: {
+                    ...sh.player,
+                    photoUrl: matched.player.photoUrl,
+                  },
+                };
+              }
+            }
+            return sh;
+          });
+
+          return {
+            ...incoming,
+            playersQueue: currentQueue,
+            soldHistory: hydratedSoldHistory,
+          };
+        });
+
         if (currentTeam) {
           const updated = msg.payload.state.teams?.find((t: TournamentTeam) => t.id === currentTeam.id);
           if (updated) {
@@ -213,12 +246,23 @@ export default function MobileBiddingPage() {
     }
   };
 
-  const { room, currentPlayer, currentBiddingTeam, teams } = state || {
+  const { room, currentPlayer, currentBiddingTeam, teams, soldHistory = [], playersQueue = [] } = state || {
     room: { status: 'WAITING', currentBid: 0, basePrice: 1000, bidIncrement: 500 },
     currentPlayer: null,
     currentBiddingTeam: null,
     teams: [],
+    soldHistory: [],
+    playersQueue: [],
   };
+
+  const mySquad = currentTeam
+    ? (soldHistory || []).filter(
+        (sh) =>
+          sh.team.id === currentTeam.id ||
+          (sh.team.name && currentTeam.name && sh.team.name.toLowerCase() === currentTeam.name.toLowerCase())
+      )
+    : [];
+  const myTotalSpent = mySquad.reduce((sum, sp) => sum + (sp.soldPrice || 0), 0);
 
   // LOGIN SCREEN
   if (!currentTeam) {
@@ -315,9 +359,19 @@ export default function MobileBiddingPage() {
             <h2 className="text-sm font-black uppercase text-white truncate max-w-[140px] sm:max-w-xs">
               {currentTeam.name}
             </h2>
-            <span className="text-[10px] text-slate-400 font-mono">
-              Squad: <strong className="text-emerald-400">{currentTeam.boughtPlayersCount}</strong>/{currentTeam.maxPlayers}
-            </span>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[10px] text-slate-400 font-mono">
+                Squad: <strong className="text-emerald-400">{mySquad.length}</strong>/{currentTeam.maxPlayers}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowMySquadModal(true)}
+                className="px-1.5 py-0.5 rounded bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 font-black text-[9px] uppercase border border-amber-400/30 flex items-center gap-1 shadow-sm"
+              >
+                <Users className="w-2.5 h-2.5" />
+                <span>Squad ({mySquad.length})</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -528,6 +582,95 @@ export default function MobileBiddingPage() {
         </div>
 
       </main>
+
+      {/* MY SQUAD MODAL */}
+      {showMySquadModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-3">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h3 className="text-sm font-black uppercase text-white">
+                    {currentTeam.name} Squad
+                  </h3>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {mySquad.length} / {currentTeam.maxPlayers} Players • Total Spent: ₹{myTotalSpent.toLocaleString('en-IN')}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowMySquadModal(false)}
+                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {mySquad.length === 0 ? (
+                <div className="py-12 text-center text-slate-500">
+                  <Users className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                  <p className="text-xs font-bold">No players bought yet</p>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    When your team wins a bid in the live auction, players will be listed here.
+                  </p>
+                </div>
+              ) : (
+                mySquad.map((record, idx) => {
+                  const p = record.player;
+                  const photo =
+                    p.photoUrl ||
+                    playersQueue.find((pq) => pq.player?.registrationId === p.registrationId)?.player?.photoUrl;
+                  return (
+                    <div
+                      key={idx}
+                      className="p-2.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 overflow-hidden flex items-center justify-center shrink-0">
+                          {photo ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={photo} alt={p.fullName} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-xs font-black text-amber-400">
+                              {getInitials(p.fullName)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-black uppercase text-white truncate">
+                            {p.fullName}
+                          </h4>
+                          <span className="text-[9px] font-bold text-amber-400 uppercase bg-amber-400/10 px-1.5 py-0.2 rounded mt-0.5 inline-block">
+                            {p.role}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="text-xs font-black font-mono text-emerald-400 block">
+                          ₹{record.soldPrice.toLocaleString('en-IN')}
+                        </span>
+                        <span className="text-[8px] font-bold uppercase text-emerald-500 bg-emerald-500/10 px-1.5 py-0.2 rounded">
+                          BOUGHT
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="pt-3 mt-3 border-t border-slate-800 flex items-center justify-between text-xs">
+              <span className="text-slate-400">Purse Remaining:</span>
+              <span className="font-mono font-black text-amber-300">
+                ₹{currentTeam.remainingPurse.toLocaleString('en-IN')}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
