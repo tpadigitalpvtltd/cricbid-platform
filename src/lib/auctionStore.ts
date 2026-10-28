@@ -1035,15 +1035,36 @@ export async function executeAuctioneerAction(params: {
       saveAuctionPlayerState(newPState),
     ]).catch((err) => console.error('Save error:', err));
   } else if (action === 'NEXT_PLAYER' || action === 'PREV_PLAYER') {
-    const currentIndex = rawPlayers.findIndex((p) => p.registrationId === room.currentPlayerId);
-    let targetIndex = 0;
-    if (action === 'NEXT_PLAYER') {
-      targetIndex = currentIndex >= 0 && currentIndex < rawPlayers.length - 1 ? currentIndex + 1 : 0;
-    } else {
-      targetIndex = currentIndex > 0 ? currentIndex - 1 : rawPlayers.length - 1;
+    let nextPlayer: any = null;
+    if (payload?.playerId) {
+      nextPlayer = rawPlayers.find((p) => p.registrationId === payload.playerId);
     }
 
-    const nextPlayer = rawPlayers[targetIndex];
+    if (!nextPlayer) {
+      const currentIndex = rawPlayers.findIndex((p) => p.registrationId === room.currentPlayerId);
+      if (action === 'NEXT_PLAYER') {
+        // 1. Look forward for next un-auctioned (PENDING) player
+        nextPlayer = rawPlayers.slice(currentIndex + 1).find((p) => {
+          const st = playerStates[p.registrationId];
+          return !st || st.status === 'PENDING';
+        });
+        // 2. Wrap around from beginning for next un-auctioned player
+        if (!nextPlayer) {
+          nextPlayer = rawPlayers.find((p) => {
+            const st = playerStates[p.registrationId];
+            return (!st || st.status === 'PENDING') && p.registrationId !== room.currentPlayerId;
+          });
+        }
+        // 3. Fallback: next player in list
+        if (!nextPlayer && rawPlayers.length > 0) {
+          const targetIndex = currentIndex >= 0 && currentIndex < rawPlayers.length - 1 ? currentIndex + 1 : 0;
+          nextPlayer = rawPlayers[targetIndex];
+        }
+      } else {
+        const targetIndex = currentIndex > 0 ? currentIndex - 1 : rawPlayers.length - 1;
+        nextPlayer = rawPlayers[targetIndex];
+      }
+    }
     if (nextPlayer) {
       const playerCustomBase = playerStates[nextPlayer.registrationId]?.basePrice;
       const basePrice = (playerCustomBase && playerCustomBase > 0) ? playerCustomBase : (room.basePrice || 1000);

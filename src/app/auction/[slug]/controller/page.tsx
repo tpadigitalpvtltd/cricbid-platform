@@ -291,6 +291,30 @@ export default function AuctioneerControllerPage() {
   const [playerEditSoldPrice, setPlayerEditSoldPrice] = useState<number | string>('');
   const [playerEditSoldTeamId, setPlayerEditSoldTeamId] = useState<string>('');
 
+  // Auto-Next Player State & Timers
+  const [isAutoNextEnabled, setIsAutoNextEnabled] = useState<boolean>(true);
+  const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
+  const autoNextTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoNextIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const clearAutoNextTimers = () => {
+    if (autoNextTimerRef.current) {
+      clearTimeout(autoNextTimerRef.current);
+      autoNextTimerRef.current = null;
+    }
+    if (autoNextIntervalRef.current) {
+      clearInterval(autoNextIntervalRef.current);
+      autoNextIntervalRef.current = null;
+    }
+    setAutoNextCountdown(null);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearAutoNextTimers();
+    };
+  }, []);
+
   const executeAction = async (action: string, payload?: any) => {
     if (!slug) return;
     try {
@@ -373,6 +397,171 @@ export default function AuctioneerControllerPage() {
     }
   };
 
+  // 0ms INSTANT OPTIMISTIC PLAYER NAVIGATION (Prefers next un-auctioned PENDING player)
+  const handleNextPlayerOptimistic = (preferPending: boolean | any = true) => {
+    const isPrefer = typeof preferPending === 'boolean' ? preferPending : true;
+    clearAutoNextTimers();
+    if (playersQueue.length === 0) return;
+    const currId = currentPlayer?.registrationId;
+    const currIdx = playersQueue.findIndex((pq) => pq.player.registrationId === currId);
+
+    let nextItem: any = null;
+    if (isPrefer) {
+      // 1. Look forward for next PENDING player
+      nextItem = playersQueue.slice(currIdx + 1).find((pq) => pq.status === 'PENDING');
+      // 2. Wrap around from beginning for next PENDING player
+      if (!nextItem) {
+        nextItem = playersQueue.find((pq) => pq.status === 'PENDING' && pq.player.registrationId !== currId);
+      }
+    }
+
+    // Fallback if no pending player left or manual navigation
+    if (!nextItem && !preferPending) {
+      const nextIdx = currIdx >= 0 && currIdx < playersQueue.length - 1 ? currIdx + 1 : 0;
+      nextItem = playersQueue[nextIdx];
+    }
+
+    // If all players are already SOLD or UNSOLD, announce draft pool completion
+    if (!nextItem) {
+      const soldCount = playersQueue.filter((pq) => pq.status === 'SOLD').length;
+      const unsoldCount = playersQueue.filter((pq) => pq.status === 'UNSOLD').length;
+      setLastDecisionMsg({
+        type: 'SOLD',
+        text: `🏆 All ${playersQueue.length} players in the draft pool have been auctioned! (${soldCount} Sold, ${unsoldCount} Unsold)`,
+      });
+      return;
+    }
+
+    const basePrice = nextItem.basePrice || room.basePrice || 1000;
+    const now = Date.now();
+
+    // 0ms instant optimistic update
+    setState((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        currentPlayer: nextItem.player,
+        currentPlayerState: {
+          playerId: nextItem.player.registrationId,
+          tournamentSlug: slug,
+          status: 'IN_AUCTION',
+          basePrice,
+          updatedAt: new Date().toISOString(),
+        },
+        room: {
+          ...prev.room,
+          currentPlayerId: nextItem.player.registrationId,
+          currentBid: basePrice,
+          currentBiddingTeamId: null,
+          timerSeconds: 10,
+          timerRunning: prev.room.status === 'ACTIVE',
+          lastAction: 'NEXT',
+          lastActionTimestamp: now,
+        },
+        currentBiddingTeam: null,
+      };
+    });
+
+    executeAction('NEXT_PLAYER', { playerId: nextItem.player.registrationId }).catch((e) => console.error(e));
+  };
+
+  const handlePrevPlayerOptimistic = () => {
+    clearAutoNextTimers();
+    if (playersQueue.length === 0) return;
+    const currId = currentPlayer?.registrationId;
+    const currIdx = playersQueue.findIndex((pq) => pq.player.registrationId === currId);
+    const prevIdx = currIdx > 0 ? currIdx - 1 : playersQueue.length - 1;
+    const prevItem = playersQueue[prevIdx];
+    if (!prevItem) return;
+
+    const basePrice = prevItem.basePrice || room.basePrice || 1000;
+    const now = Date.now();
+
+    // 0ms instant optimistic update
+    setState((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        currentPlayer: prevItem.player,
+        currentPlayerState: {
+          playerId: prevItem.player.registrationId,
+          tournamentSlug: slug,
+          status: 'IN_AUCTION',
+          basePrice,
+          updatedAt: new Date().toISOString(),
+        },
+        room: {
+          ...prev.room,
+          currentPlayerId: prevItem.player.registrationId,
+          currentBid: basePrice,
+          currentBiddingTeamId: null,
+          timerSeconds: 10,
+          timerRunning: prev.room.status === 'ACTIVE',
+          lastAction: 'NEXT',
+          lastActionTimestamp: now,
+        },
+        currentBiddingTeam: null,
+      };
+    });
+
+    executeAction('PREV_PLAYER', { playerId: prevItem.player.registrationId }).catch((e) => console.error(e));
+  };
+
+  // Skip Player to Pool with instant optimistic transition
+  const handleSkipPlayer = async () => {
+    clearAutoNextTimers();
+    if (playersQueue.length === 0) return;
+    const currId = currentPlayer?.registrationId;
+    const currIdx = playersQueue.findIndex((pq) => pq.player.registrationId === currId);
+    let nextItem = playersQueue.slice(currIdx + 1).find((pq) => pq.status === 'PENDING');
+    if (!nextItem) {
+      nextItem = playersQueue.find((pq) => pq.status === 'PENDING' && pq.player.registrationId !== currId);
+    }
+    if (!nextItem) {
+      const nextIdx = currIdx >= 0 && currIdx < playersQueue.length - 1 ? currIdx + 1 : 0;
+      nextItem = playersQueue[nextIdx];
+    }
+    if (!nextItem) return;
+
+    const basePrice = nextItem.basePrice || room.basePrice || 1000;
+    const now = Date.now();
+
+    // 0ms instant optimistic update
+    setState((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        currentPlayer: nextItem.player,
+        currentPlayerState: {
+          playerId: nextItem.player.registrationId,
+          tournamentSlug: slug,
+          status: 'IN_AUCTION',
+          basePrice,
+          updatedAt: new Date().toISOString(),
+        },
+        room: {
+          ...prev.room,
+          currentPlayerId: nextItem.player.registrationId,
+          currentBid: basePrice,
+          currentBiddingTeamId: null,
+          timerSeconds: 10,
+          timerRunning: prev.room.status === 'ACTIVE',
+          lastAction: 'NEXT',
+          lastActionTimestamp: now,
+        },
+        currentBiddingTeam: null,
+      };
+    });
+
+    setLastDecisionMsg({
+      type: 'UNSOLD',
+      text: `⏩ Player skipped to draft pool.`,
+    });
+    setTimeout(() => setLastDecisionMsg(null), 4000);
+
+    executeAction('SKIP_PLAYER', { playerId: nextItem.player.registrationId }).catch((e) => console.error(e));
+  };
+
   // Decision Handler: SOLD
   const handleMarkSold = async () => {
     if (!currentPlayer) return;
@@ -380,6 +569,8 @@ export default function AuctioneerControllerPage() {
       alert('Cannot mark as SOLD: No franchise has placed a bid yet! Select a team and place at least one bid.');
       return;
     }
+    clearAutoNextTimers();
+
     const soldPrice = currentBid;
     const soldTeamName = currentBiddingTeam.name;
     const playerName = currentPlayer.fullName;
@@ -387,6 +578,17 @@ export default function AuctioneerControllerPage() {
     // Instant optimistic update on controller screen (0ms)
     setState((prev) => {
       if (!prev) return prev;
+      const updatedPlayersQueue = prev.playersQueue.map((pq) =>
+        pq.player.registrationId === currentPlayer.registrationId
+          ? {
+              ...pq,
+              status: 'SOLD' as const,
+              soldPrice,
+              soldToTeamId: currentBiddingTeam.id,
+              soldToTeamName: currentBiddingTeam.name,
+            }
+          : pq
+      );
       return {
         ...prev,
         room: {
@@ -394,6 +596,7 @@ export default function AuctioneerControllerPage() {
           lastAction: 'SOLD',
           timerRunning: false,
         },
+        playersQueue: updatedPlayersQueue,
         teams: prev.teams.map((t) =>
           t.id === currentBiddingTeam.id
             ? {
@@ -410,22 +613,52 @@ export default function AuctioneerControllerPage() {
       type: 'SOLD',
       text: `🎉 SOLD! ${playerName} sold to ${soldTeamName} for ₹${soldPrice.toLocaleString('en-IN')}!`,
     });
-    setTimeout(() => setLastDecisionMsg(null), 8000);
 
-    const res = await executeAction('MARK_SOLD');
-    if (!res?.success) {
-      fetchState();
+    executeAction('MARK_SOLD').catch((err) => console.error(err));
+
+    // Auto-advance to next un-auctioned player after 2.4 seconds
+    if (isAutoNextEnabled) {
+      setAutoNextCountdown(2);
+      autoNextIntervalRef.current = setInterval(() => {
+        setAutoNextCountdown((prev) => {
+          if (prev === null || prev <= 1) {
+            if (autoNextIntervalRef.current) clearInterval(autoNextIntervalRef.current);
+            return null;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      autoNextTimerRef.current = setTimeout(() => {
+        clearAutoNextTimers();
+        handleNextPlayerOptimistic(true);
+      }, 2400);
+    } else {
+      setTimeout(() => setLastDecisionMsg(null), 8000);
     }
   };
 
   // Decision Handler: UNSOLD
   const handleMarkUnsold = async () => {
     if (!currentPlayer) return;
+    clearAutoNextTimers();
+
     const playerName = currentPlayer.fullName;
 
     // Instant optimistic update on controller screen (0ms)
     setState((prev) => {
       if (!prev) return prev;
+      const updatedPlayersQueue = prev.playersQueue.map((pq) =>
+        pq.player.registrationId === currentPlayer.registrationId
+          ? {
+              ...pq,
+              status: 'UNSOLD' as const,
+              soldPrice: null,
+              soldToTeamId: null,
+              soldToTeamName: null,
+            }
+          : pq
+      );
       return {
         ...prev,
         room: {
@@ -434,6 +667,7 @@ export default function AuctioneerControllerPage() {
           timerRunning: false,
           currentBiddingTeamId: null,
         },
+        playersQueue: updatedPlayersQueue,
         currentBiddingTeam: null,
       };
     });
@@ -442,11 +676,28 @@ export default function AuctioneerControllerPage() {
       type: 'UNSOLD',
       text: `⚠️ ${playerName} marked as UNSOLD.`,
     });
-    setTimeout(() => setLastDecisionMsg(null), 6000);
 
-    const res = await executeAction('MARK_UNSOLD');
-    if (!res?.success) {
-      fetchState();
+    executeAction('MARK_UNSOLD').catch((err) => console.error(err));
+
+    // Auto-advance to next un-auctioned player after 1.8 seconds
+    if (isAutoNextEnabled) {
+      setAutoNextCountdown(2);
+      autoNextIntervalRef.current = setInterval(() => {
+        setAutoNextCountdown((prev) => {
+          if (prev === null || prev <= 1) {
+            if (autoNextIntervalRef.current) clearInterval(autoNextIntervalRef.current);
+            return null;
+          }
+          return prev - 1;
+        });
+      }, 900);
+
+      autoNextTimerRef.current = setTimeout(() => {
+        clearAutoNextTimers();
+        handleNextPlayerOptimistic(true);
+      }, 1800);
+    } else {
+      setTimeout(() => setLastDecisionMsg(null), 6000);
     }
   };
 
@@ -520,6 +771,7 @@ export default function AuctioneerControllerPage() {
 
   // Undo Last Sold Decision
   const handleUndoSold = async () => {
+    clearAutoNextTimers();
     if (confirm('Undo the last sold decision? This will refund the franchise purse and put the player back on the bidding stage.')) {
       const res = await executeAction('UNDO_SOLD');
       if (res?.success) {
@@ -598,143 +850,6 @@ export default function AuctioneerControllerPage() {
       });
       setTimeout(() => setLastDecisionMsg(null), 6000);
     }
-  };
-
-  // 0ms INSTANT OPTIMISTIC PLAYER NAVIGATION
-  const handleNextPlayerOptimistic = () => {
-    if (playersQueue.length === 0) return;
-    const currId = currentPlayer?.registrationId;
-    const currIdx = playersQueue.findIndex((pq) => pq.player.registrationId === currId);
-    const nextIdx = currIdx >= 0 && currIdx < playersQueue.length - 1 ? currIdx + 1 : 0;
-    const nextItem = playersQueue[nextIdx];
-    if (!nextItem) return;
-
-    const basePrice = nextItem.basePrice || room.basePrice || 1000;
-    const now = Date.now();
-
-    // 0ms instant optimistic update
-    setState((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        currentPlayer: nextItem.player,
-        currentPlayerState: {
-          playerId: nextItem.player.registrationId,
-          tournamentSlug: slug,
-          status: 'IN_AUCTION',
-          basePrice,
-          updatedAt: new Date().toISOString(),
-        },
-        room: {
-          ...prev.room,
-          currentPlayerId: nextItem.player.registrationId,
-          currentBid: basePrice,
-          currentBiddingTeamId: null,
-          timerSeconds: 10,
-          timerRunning: prev.room.status === 'ACTIVE',
-          lastAction: 'NEXT',
-          lastActionTimestamp: now,
-        },
-        currentBiddingTeam: null,
-      };
-    });
-
-    executeAction('NEXT_PLAYER').catch((e) => console.error(e));
-  };
-
-  const handlePrevPlayerOptimistic = () => {
-    if (playersQueue.length === 0) return;
-    const currId = currentPlayer?.registrationId;
-    const currIdx = playersQueue.findIndex((pq) => pq.player.registrationId === currId);
-    const prevIdx = currIdx > 0 ? currIdx - 1 : playersQueue.length - 1;
-    const prevItem = playersQueue[prevIdx];
-    if (!prevItem) return;
-
-    const basePrice = prevItem.basePrice || room.basePrice || 1000;
-    const now = Date.now();
-
-    // 0ms instant optimistic update
-    setState((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        currentPlayer: prevItem.player,
-        currentPlayerState: {
-          playerId: prevItem.player.registrationId,
-          tournamentSlug: slug,
-          status: 'IN_AUCTION',
-          basePrice,
-          updatedAt: new Date().toISOString(),
-        },
-        room: {
-          ...prev.room,
-          currentPlayerId: prevItem.player.registrationId,
-          currentBid: basePrice,
-          currentBiddingTeamId: null,
-          timerSeconds: 10,
-          timerRunning: prev.room.status === 'ACTIVE',
-          lastAction: 'NEXT',
-          lastActionTimestamp: now,
-        },
-        currentBiddingTeam: null,
-      };
-    });
-
-    executeAction('PREV_PLAYER').catch((e) => console.error(e));
-  };
-
-  // Skip Player to Pool with instant optimistic transition
-  const handleSkipPlayer = async () => {
-    if (playersQueue.length === 0) return;
-    const currId = currentPlayer?.registrationId;
-    const currIdx = playersQueue.findIndex((pq) => pq.player.registrationId === currId);
-    let nextItem = playersQueue.slice(currIdx + 1).find((pq) => pq.status === 'PENDING');
-    if (!nextItem) {
-      nextItem = playersQueue.find((pq) => pq.status === 'PENDING');
-    }
-    if (!nextItem) {
-      const nextIdx = currIdx >= 0 && currIdx < playersQueue.length - 1 ? currIdx + 1 : 0;
-      nextItem = playersQueue[nextIdx];
-    }
-    if (!nextItem) return;
-
-    const basePrice = nextItem.basePrice || room.basePrice || 1000;
-    const now = Date.now();
-
-    // 0ms instant optimistic update
-    setState((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        currentPlayer: nextItem.player,
-        currentPlayerState: {
-          playerId: nextItem.player.registrationId,
-          tournamentSlug: slug,
-          status: 'IN_AUCTION',
-          basePrice,
-          updatedAt: new Date().toISOString(),
-        },
-        room: {
-          ...prev.room,
-          currentPlayerId: nextItem.player.registrationId,
-          currentBid: basePrice,
-          currentBiddingTeamId: null,
-          timerSeconds: 10,
-          timerRunning: prev.room.status === 'ACTIVE',
-          lastAction: 'NEXT',
-          lastActionTimestamp: now,
-        },
-        currentBiddingTeam: null,
-      };
-    });
-
-    setLastDecisionMsg({
-      type: 'UNSOLD',
-      text: `⏩ Player skipped to draft pool.`,
-    });
-    setTimeout(() => setLastDecisionMsg(null), 4000);
-
-    executeAction('SKIP_PLAYER').catch((e) => console.error(e));
   };
 
   // Open modal for Adding a new team
@@ -1089,6 +1204,20 @@ export default function AuctioneerControllerPage() {
           >
             <RotateCcw className="w-3.5 h-3.5" /> Reset ({room.timerSeconds || 10}s)
           </button>
+
+          <button
+            type="button"
+            onClick={() => setIsAutoNextEnabled(!isAutoNextEnabled)}
+            className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm ${
+              isAutoNextEnabled
+                ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 ring-1 ring-emerald-500/30'
+                : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
+            }`}
+            title="Automatically load the next un-auctioned player after Sold/Unsold"
+          >
+            <Zap className={`w-3.5 h-3.5 ${isAutoNextEnabled ? 'text-emerald-400' : 'text-slate-500'}`} />
+            <span>Auto-Next: {isAutoNextEnabled ? 'ON' : 'OFF'}</span>
+          </button>
         </div>
       </header>
 
@@ -1121,7 +1250,7 @@ export default function AuctioneerControllerPage() {
                     <SkipBack className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={handleNextPlayerOptimistic}
+                    onClick={() => handleNextPlayerOptimistic(true)}
                     disabled={actionLoading}
                     className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
                     title="Next Player"
@@ -1147,6 +1276,11 @@ export default function AuctioneerControllerPage() {
                       <XCircle className="w-5 h-5 shrink-0" />
                     )}
                     <span>{lastDecisionMsg.text}</span>
+                    {autoNextCountdown !== null && (
+                      <span className="px-2 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-black uppercase tracking-wider animate-pulse flex items-center gap-1">
+                        <Zap className="w-3 h-3 text-yellow-300" /> Next in {autoNextCountdown}s...
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5">
                     <button
@@ -1160,11 +1294,12 @@ export default function AuctioneerControllerPage() {
                       Undo
                     </button>
                     <button
-                      onClick={handleNextPlayerOptimistic}
+                      onClick={() => handleNextPlayerOptimistic(true)}
                       disabled={actionLoading}
-                      className="px-3 py-1.5 rounded-xl bg-white text-slate-950 font-black text-xs uppercase tracking-wider shrink-0 hover:bg-slate-200 transition-colors shadow"
+                      className="px-3 py-1.5 rounded-xl bg-white text-slate-950 font-black text-xs uppercase tracking-wider shrink-0 hover:bg-slate-200 transition-colors shadow flex items-center gap-1"
                     >
-                      Next Player &rarr;
+                      <span>Next Player</span>
+                      <SkipForward className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
@@ -1225,7 +1360,7 @@ export default function AuctioneerControllerPage() {
                   <User className="w-10 h-10 mx-auto mb-2 opacity-50" />
                   <p className="text-xs">No active player loaded on auction block</p>
                   <button
-                    onClick={handleNextPlayerOptimistic}
+                    onClick={() => handleNextPlayerOptimistic(true)}
                     disabled={actionLoading}
                     className="mt-3 px-4 py-2 rounded-xl bg-amber-400 text-slate-950 text-xs font-black uppercase shadow-lg hover:bg-amber-300"
                   >
@@ -1279,7 +1414,7 @@ export default function AuctioneerControllerPage() {
             <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-800">
               <button
                 onClick={handleMarkSold}
-                disabled={actionLoading || !currentBiddingTeam}
+                disabled={actionLoading || !currentBiddingTeam || autoNextCountdown !== null}
                 className="py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 <CheckCircle2 className="w-5 h-5 stroke-[2.5]" />
@@ -1288,7 +1423,7 @@ export default function AuctioneerControllerPage() {
 
               <button
                 onClick={handleMarkUnsold}
-                disabled={actionLoading || !currentPlayer}
+                disabled={actionLoading || !currentPlayer || autoNextCountdown !== null}
                 className="py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 <XCircle className="w-5 h-5 stroke-[2.5]" />
