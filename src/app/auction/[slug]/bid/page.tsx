@@ -30,6 +30,82 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionState): FullAuctionState {
+  if (!prev) return incoming;
+
+  const currentQueue =
+    incoming.playersQueue && incoming.playersQueue.length > 0
+      ? incoming.playersQueue
+      : prev.playersQueue;
+
+  const hydratedSoldHistory = (incoming.soldHistory || []).map((sh: any) => {
+    if (!sh.player?.photoUrl) {
+      const matched = currentQueue?.find((pq: any) => pq.player?.registrationId === sh.player?.registrationId);
+      if (matched?.player?.photoUrl) {
+        return {
+          ...sh,
+          player: {
+            ...sh.player,
+            photoUrl: matched.player.photoUrl,
+          },
+        };
+      }
+    }
+    return sh;
+  });
+
+  const prevActionTime = prev.room?.lastActionTimestamp || 0;
+  const incomingActionTime = incoming.room?.lastActionTimestamp || 0;
+
+  let resolvedRoom = { ...incoming.room };
+  let resolvedCurrentPlayer = incoming.currentPlayer;
+  let resolvedCurrentPlayerState = incoming.currentPlayerState;
+  let resolvedBiddingTeam = incoming.currentBiddingTeam;
+
+  if (prevActionTime > incomingActionTime && prev.room?.lastAction !== 'INIT') {
+    resolvedRoom = {
+      ...incoming.room,
+      currentPlayerId: prev.room.currentPlayerId,
+      currentBid: prev.room.currentBid,
+      currentBiddingTeamId: prev.room.currentBiddingTeamId,
+      timerSeconds: prev.room.timerSeconds,
+      timerRunning: prev.room.timerRunning,
+      lastAction: prev.room.lastAction,
+      lastActionTimestamp: prev.room.lastActionTimestamp,
+    };
+    resolvedCurrentPlayer = prev.currentPlayer;
+    resolvedCurrentPlayerState = prev.currentPlayerState;
+    resolvedBiddingTeam = prev.currentBiddingTeam;
+  } else {
+    const isSamePlayer =
+      prev.room?.currentPlayerId &&
+      incoming.room?.currentPlayerId &&
+      prev.room.currentPlayerId === incoming.room.currentPlayerId;
+
+    if (
+      isSamePlayer &&
+      incoming.room.currentBid < prev.room.currentBid &&
+      incoming.room.lastAction !== 'UNDO' &&
+      incoming.room.lastAction !== 'RESET' &&
+      incoming.room.lastAction !== 'NEXT'
+    ) {
+      resolvedRoom.currentBid = prev.room.currentBid;
+      resolvedRoom.currentBiddingTeamId = prev.room.currentBiddingTeamId;
+      resolvedBiddingTeam = prev.currentBiddingTeam || incoming.currentBiddingTeam;
+    }
+  }
+
+  return {
+    ...incoming,
+    room: resolvedRoom,
+    currentPlayer: resolvedCurrentPlayer,
+    currentPlayerState: resolvedCurrentPlayerState,
+    currentBiddingTeam: resolvedBiddingTeam,
+    playersQueue: currentQueue,
+    soldHistory: hydratedSoldHistory,
+  };
+}
+
 export default function MobileBiddingPage() {
   const params = useParams();
   const slug = params?.slug as string;
@@ -69,10 +145,10 @@ export default function MobileBiddingPage() {
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.state) {
-          setState(json.state);
+          setState((prev) => mergeStateSafe(prev, json.state));
           // Sync current team purse
           if (currentTeam) {
-            const updated = json.state.teams.find((t: TournamentTeam) => t.id === currentTeam.id);
+            const updated = json.state.teams?.find((t: TournamentTeam) => t.id === currentTeam.id);
             if (updated) {
               setCurrentTeam(updated);
               localStorage.setItem(`cricbid_team_session_${slug}`, JSON.stringify(updated));
@@ -104,36 +180,7 @@ export default function MobileBiddingPage() {
     const channel = supabase.channel(`auction_${slug.toLowerCase()}`);
     channel.on('broadcast', { event: '*' }, (msg: any) => {
       if (msg?.payload?.state) {
-        const incoming = msg.payload.state;
-        setState((prev) => {
-          if (!prev) return incoming;
-          const currentQueue =
-            incoming.playersQueue && incoming.playersQueue.length > 0
-              ? incoming.playersQueue
-              : prev.playersQueue;
-
-          const hydratedSoldHistory = (incoming.soldHistory || []).map((sh: any) => {
-            if (!sh.player?.photoUrl) {
-              const matched = currentQueue?.find((pq: any) => pq.player?.registrationId === sh.player?.registrationId);
-              if (matched?.player?.photoUrl) {
-                return {
-                  ...sh,
-                  player: {
-                    ...sh.player,
-                    photoUrl: matched.player.photoUrl,
-                  },
-                };
-              }
-            }
-            return sh;
-          });
-
-          return {
-            ...incoming,
-            playersQueue: currentQueue,
-            soldHistory: hydratedSoldHistory,
-          };
-        });
+        setState((prev) => mergeStateSafe(prev, msg.payload.state));
 
         if (currentTeam) {
           const updated = msg.payload.state.teams?.find((t: TournamentTeam) => t.id === currentTeam.id);
@@ -203,7 +250,8 @@ export default function MobileBiddingPage() {
       navigator.vibrate(60);
     }
 
-    // Instant optimistic feedback
+    // Instant optimistic feedback in 0ms!
+    const now = Date.now();
     setState((prev) => {
       if (!prev) return prev;
       return {
@@ -214,6 +262,8 @@ export default function MobileBiddingPage() {
           currentBiddingTeamId: currentTeam.id,
           timerSeconds: 10,
           timerRunning: true,
+          lastAction: 'NEW_BID',
+          lastActionTimestamp: now,
         },
         currentBiddingTeam: currentTeam,
       };
@@ -236,7 +286,7 @@ export default function MobileBiddingPage() {
         setBidError(json.error || 'Bid rejected');
         fetchState();
       } else if (json.state) {
-        setState(json.state);
+        setState((prev) => mergeStateSafe(prev, json.state));
       }
     } catch (e: any) {
       setBidError(e.message || 'Bidding error');

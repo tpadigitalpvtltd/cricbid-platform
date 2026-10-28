@@ -230,11 +230,33 @@ export async function broadcastAuctionUpdate(slug: string, event: string, payloa
   }
 }
 
+const PLAYERS_CACHE: Record<string, { data: RegistrationSubmission[]; timestamp: number }> = {};
+
+export async function getAuctionTournamentPlayers(slug: string): Promise<RegistrationSubmission[]> {
+  const cleanSlug = slug.toLowerCase();
+  const cached = PLAYERS_CACHE[cleanSlug];
+  // 30-second memory cache for instant sub-millisecond retrieval during live auction
+  if (cached && Date.now() - cached.timestamp < 30000 && cached.data.length > 0) {
+    return cached.data;
+  }
+  const players = await getPlayersByTournamentAsync(cleanSlug);
+  if (players && players.length > 0) {
+    PLAYERS_CACHE[cleanSlug] = { data: players, timestamp: Date.now() };
+  }
+  return players;
+}
+
+export function invalidateAuctionPlayersCache(slug: string): void {
+  delete PLAYERS_CACHE[slug.toLowerCase()];
+}
+
 /**
  * Retrieve or initialize the Auction Room for a tournament
  */
 export async function getAuctionRoom(slug: string): Promise<AuctionRoom> {
   const cleanSlug = slug.toLowerCase();
+  const local = readLocalData();
+  const cachedRoom = local.rooms[cleanSlug];
 
   // 1. Try Supabase
   try {
@@ -245,13 +267,25 @@ export async function getAuctionRoom(slug: string): Promise<AuctionRoom> {
       .maybeSingle();
 
     if (!error && data) {
+      const dbBid = Number(data.current_bid) || 0;
+      const dbPlayerId = data.current_player_id;
+      const dbTimestamp = Number(data.last_action_timestamp) || 0;
+
+      // Bid Protection: If local memory room has a higher bid for the same player, use local memory!
+      if (cachedRoom && cachedRoom.currentPlayerId === dbPlayerId && cachedRoom.currentBid > dbBid) {
+        return cachedRoom;
+      }
+      if (cachedRoom && (cachedRoom.lastActionTimestamp || 0) > dbTimestamp) {
+        return cachedRoom;
+      }
+
       return {
         id: data.id,
         tournamentId: data.tournament_id,
         tournamentSlug: data.tournament_slug,
         status: data.status as AuctionRoomStatus,
         currentPlayerId: data.current_player_id,
-        currentBid: Number(data.current_bid) || 0,
+        currentBid: dbBid,
         currentBiddingTeamId: data.current_bidding_team_id,
         timerSeconds: Number(data.timer_seconds) || 10,
         timerRunning: Boolean(data.timer_running),
@@ -259,16 +293,15 @@ export async function getAuctionRoom(slug: string): Promise<AuctionRoom> {
         basePrice: Number(data.base_price) || 1000,
         bidIncrement: Number(data.bid_increment) || 500,
         lastAction: data.last_action,
-        lastActionTimestamp: data.last_action_timestamp ? Number(data.last_action_timestamp) : Date.now(),
+        lastActionTimestamp: dbTimestamp || Date.now(),
         updatedAt: data.updated_at || new Date().toISOString(),
       };
     }
   } catch (err) {}
 
   // 2. Try Local Store
-  const local = readLocalData();
-  if (local.rooms[cleanSlug]) {
-    return local.rooms[cleanSlug];
+  if (cachedRoom) {
+    return cachedRoom;
   }
 
   // 3. Create initial room
@@ -754,7 +787,7 @@ export async function getFullAuctionState(slug: string): Promise<FullAuctionStat
   const [room, teams, rawPlayers, playerStates, bids] = await Promise.all([
     getAuctionRoom(cleanSlug),
     getTournamentTeams(cleanSlug),
-    getPlayersByTournamentAsync(cleanSlug),
+    getAuctionTournamentPlayers(cleanSlug),
     getAuctionPlayerStates(cleanSlug),
     getAuctionBids(cleanSlug, 15),
   ]);
@@ -784,7 +817,7 @@ export async function placeAuctionBid(params: {
   const [room, teams, rawPlayers] = await Promise.all([
     getAuctionRoom(cleanSlug),
     getTournamentTeams(cleanSlug),
-    getPlayersByTournamentAsync(cleanSlug),
+    getAuctionTournamentPlayers(cleanSlug),
   ]);
 
   if (room.status !== 'ACTIVE') {
@@ -856,6 +889,13 @@ export async function placeAuctionBid(params: {
     createdAt: new Date().toISOString(),
   };
 
+  // Instantly save to local memory store in 0ms so subsequent reads never see a stale/lower bid!
+  const local = readLocalData();
+  local.rooms[cleanSlug] = room;
+  if (!local.bids[cleanSlug]) local.bids[cleanSlug] = [];
+  local.bids[cleanSlug].unshift(bidRecord);
+  saveLocalData(local);
+
   const [playerStates, recentBids] = await Promise.all([
     getAuctionPlayerStates(cleanSlug),
     getAuctionBids(cleanSlug, 14),
@@ -922,7 +962,7 @@ export async function executeAuctioneerAction(params: {
   const [room, teams, rawPlayers, playerStates] = await Promise.all([
     getAuctionRoom(cleanSlug),
     getTournamentTeams(cleanSlug),
-    getPlayersByTournamentAsync(cleanSlug),
+    getAuctionTournamentPlayers(cleanSlug),
     getAuctionPlayerStates(cleanSlug),
   ]);
 
