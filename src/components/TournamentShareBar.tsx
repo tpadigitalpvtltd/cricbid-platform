@@ -35,16 +35,21 @@ export const TournamentShareBar: React.FC<TournamentShareBarProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
-
-  // Get full tournament registration link
-  const getShareUrl = () => {
+  const [shareUrl, setShareUrl] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       return `${window.location.origin}/tournament/${slug}/register`;
     }
-    return `https://cricbid-platform.vercel.app/tournament/${slug}/register`;
-  };
+    const envUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '');
+    return envUrl
+      ? `${envUrl}/tournament/${slug}/register`
+      : `https://cricbid-platform-zeta.vercel.app/tournament/${slug}/register`;
+  });
 
-  const shareUrl = getShareUrl();
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setShareUrl(`${window.location.origin}/tournament/${slug}/register`);
+    }
+  }, [slug]);
 
   // WhatsApp pre-formatted viral share message
   const whatsappMessage =

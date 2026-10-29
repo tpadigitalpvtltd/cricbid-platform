@@ -23,10 +23,21 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Tournament not found' }, { status: 404 });
     }
 
-    // Bandwidth Optimization: Neither Live Stream nor Team Bidder pages need the massive playersQueue
-    // (which contains all player base64 photos). Stripping it reduces response size from 3MB down to ~30KB (99% reduction).
+    // Bandwidth Optimization:
+    // 1. Neither Live Stream nor Team Bidder pages need the playersQueue.
+    // 2. For Controller Desk, strip huge base64 photos from queue list items (controller caches initial photos).
+    // This reduces response size from 15MB down to ~15KB (99.9% bandwidth saving to stay well within free limits).
     if (view === 'live' || view === 'bid') {
       state.playersQueue = [];
+    } else if (Array.isArray(state.playersQueue)) {
+      state.playersQueue = state.playersQueue.map((item) => ({
+        ...item,
+        player: {
+          ...item.player,
+          // Strip heavy base64 strings from queue list to prevent origin bandwidth exhaustion
+          photoUrl: item.player?.photoUrl?.startsWith('data:image/') ? '' : (item.player?.photoUrl || ''),
+        },
+      }));
     }
 
     return NextResponse.json(

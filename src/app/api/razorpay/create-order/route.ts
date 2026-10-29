@@ -150,7 +150,8 @@ export async function POST(request: Request) {
       const originHeader =
         request.headers.get('origin') ||
         request.headers.get('referer') ||
-        'https://cricbid-platform.vercel.app';
+        process.env.NEXT_PUBLIC_APP_URL ||
+        'https://cricbid-platform-zeta.vercel.app';
       const cleanOrigin = originHeader.split('/tournament')[0].replace(/\/$/, '');
 
       const digitsOnly = (phone || '').replace(/[^0-9]/g, '');
