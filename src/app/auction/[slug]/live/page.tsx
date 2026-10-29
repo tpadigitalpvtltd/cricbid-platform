@@ -237,104 +237,128 @@ export default function MobileSpectatorLivePage() {
         {activeTab === 'stage' && (
           <div>
             {currentPlayer ? (
-              <div className="bg-slate-900/90 rounded-3xl border border-slate-800 p-5 shadow-2xl">
+              <div className="bg-slate-900/90 rounded-3xl border border-slate-800 p-4 sm:p-5 shadow-2xl space-y-4">
                 
-                {/* Active Player Card */}
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-24 h-24 rounded-2xl p-[2px] bg-gradient-to-tr from-amber-400 via-yellow-300 to-emerald-400 shrink-0">
-                    <div className="w-full h-full rounded-[14px] bg-slate-950 overflow-hidden flex items-center justify-center">
-                      {currentPlayer.photoUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={currentPlayer.photoUrl} alt={currentPlayer.fullName} className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="font-black text-amber-400 text-2xl">{getInitials(currentPlayer.fullName)}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-amber-400 text-slate-950">
-                      {currentPlayer.role}
+                {/* 5-SECOND FINAL CALL ALERT */}
+                {room.lastAction === 'HAMMER_5S' && (
+                  <div className="bg-red-950 border-2 border-amber-400 rounded-2xl p-3 text-center shadow-lg animate-pulse">
+                    <span className="text-xs font-black uppercase text-amber-300 tracking-widest block">
+                      ⚡ FINAL CALL! 5s HAMMER DOWN!
                     </span>
-                    <h3 className="text-xl font-black uppercase text-white truncate mt-1">
-                      {currentPlayer.fullName}
-                    </h3>
-                    <p className="text-xs text-slate-400">
-                      Age: {currentPlayer.age} yrs • {currentPlayer.battingStyle}
-                      {!isPureBatsman && currentPlayer.bowlingStyle && currentPlayer.bowlingStyle !== 'None' ? ` • ${currentPlayer.bowlingStyle}` : ''}
-                    </p>
-                    <span className="text-[11px] text-amber-300 font-mono font-bold block mt-1">
-                      Base Price: ₹ {room.basePrice.toLocaleString('en-IN')}
+                    <span className="text-[11px] text-slate-300">
+                      Going once, going twice... place final bid now!
                     </span>
-                  </div>
-                </div>
-
-                {/* Current Bid Display OR Sold Celebration Banner */}
-                {room.lastAction === 'SOLD' && currentBiddingTeam ? (
-                  <div className="bg-gradient-to-b from-emerald-950/90 via-slate-950 to-emerald-950/90 p-5 rounded-2xl border-2 border-emerald-500 text-center mb-4 shadow-2xl animate-in zoom-in-95">
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[11px] font-black uppercase tracking-wider mb-2">
-                      <Sparkles className="w-3.5 h-3.5 animate-spin" /> SOLD!
-                    </div>
-                    <div className="text-4xl sm:text-5xl font-black text-emerald-400 font-mono drop-shadow-md">
-                      ₹ {currentBid.toLocaleString('en-IN')}
-                    </div>
-                    <div className="mt-3 pt-3 border-t border-emerald-500/30 flex items-center justify-center gap-2">
-                      <div
-                        className="w-6 h-6 rounded-md overflow-hidden flex items-center justify-center font-black text-[9px] text-slate-950"
-                        style={{ backgroundColor: currentBiddingTeam.color || '#10b981' }}
-                      >
-                        {currentBiddingTeam.logoUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={currentBiddingTeam.logoUrl} alt={currentBiddingTeam.name} className="w-full h-full object-cover" />
-                        ) : (
-                          currentBiddingTeam.shortName || 'TM'
-                        )}
-                      </div>
-                      <span className="text-sm font-black uppercase text-white">
-                        SOLD TO {currentBiddingTeam.name}
-                      </span>
-                    </div>
-                  </div>
-                ) : room.lastAction === 'UNSOLD' ? (
-                  <div className="bg-gradient-to-b from-rose-950/80 via-slate-950 to-rose-950/80 p-5 rounded-2xl border-2 border-rose-500 text-center mb-4 shadow-2xl animate-in zoom-in-95">
-                    <span className="text-xs font-black uppercase tracking-widest text-rose-400 block mb-1">
-                      ⚠️ AUCTION RESULT
-                    </span>
-                    <div className="text-3xl font-black text-rose-400 font-mono tracking-wider">
-                      PLAYER UNSOLD
-                    </div>
-                    <p className="text-xs text-slate-400 mt-2">Returned to draft pool</p>
-                  </div>
-                ) : (
-                  <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 text-center mb-4 transition-all">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 block mb-1">
-                      CURRENT STAGE BID
-                    </span>
-                    <div key={currentBid} className="text-4xl font-black text-amber-400 font-mono drop-shadow animate-in zoom-in-95">
-                      ₹ {currentBid.toLocaleString('en-IN')}
-                    </div>
-
-                    {/* Leading Franchise */}
-                    <div className="mt-4 pt-3 border-t border-slate-900 flex items-center justify-center gap-2">
-                      {currentBiddingTeam ? (
-                        <>
-                          <span className="text-xs text-slate-400">Held by:</span>
-                          <span className="text-xs font-black uppercase text-white bg-slate-900 px-3 py-1 rounded-xl border border-amber-400/30 flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                            {currentBiddingTeam.name}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-xs text-slate-500 italic">No bids placed yet</span>
-                      )}
-                    </div>
                   </div>
                 )}
 
-                {/* Achievements note */}
-                {currentPlayer.stats && currentPlayer.stats !== 'No previous achievements provided' && (
-                  <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-xs text-slate-300 italic">
-                    &ldquo;{currentPlayer.stats}&rdquo;
+                {/* Hero Player Frame with Caution Tape Bidding Bar */}
+                <div className="w-full h-80 sm:h-96 rounded-2xl border-2 border-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.3)] relative overflow-hidden bg-slate-950 flex flex-col justify-end">
+                  {/* Photo */}
+                  {currentPlayer.photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={currentPlayer.photoUrl}
+                      alt={currentPlayer.fullName}
+                      className="absolute inset-0 w-full h-full object-cover object-top"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-950 to-amber-950 flex items-center justify-center font-black text-amber-400 text-6xl">
+                      {getInitials(currentPlayer.fullName)}
+                    </div>
+                  )}
+
+                  {/* Gradient overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-90 pointer-events-none" />
+
+                  {/* Top Badges */}
+                  <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-20 pointer-events-none">
+                    <span className="px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 font-black text-[10px] uppercase shadow">
+                      {currentPlayer.role}
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg bg-slate-950/90 border border-amber-400/50 text-amber-300 font-mono text-[10px] font-black">
+                      ₹{room.basePrice.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+
+                  {/* Caution-Tape Bidding Ribbon Across Lower Portion */}
+                  <div className="relative z-20 w-full border-t-2 border-amber-400 bg-slate-950/95 backdrop-blur-md p-3 shadow-lg">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block">
+                          CURRENT BID
+                        </span>
+                        <div className="text-2xl sm:text-3xl font-black text-amber-400 font-mono">
+                          ₹ {currentBid.toLocaleString('en-IN')}
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block">
+                          HOLDING TEAM
+                        </span>
+                        {currentBiddingTeam ? (
+                          <div className="flex items-center gap-1.5 justify-end mt-0.5">
+                            <span className="text-xs font-black uppercase text-white bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 rounded-lg text-emerald-300">
+                              {currentBiddingTeam.name}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-amber-300 font-bold">Awaiting Bid</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Player Identity Info */}
+                <div className="px-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="text-xl font-black uppercase text-white truncate">
+                      {currentPlayer.fullName}
+                    </h3>
+                    <span className="text-xs font-mono text-amber-400 font-bold">
+                      {currentPlayer.age} YRS
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+                    <span className="px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-[11px] font-bold text-amber-300">
+                      {currentPlayer.battingStyle}
+                    </span>
+                    {!isPureBatsman && currentPlayer.bowlingStyle && currentPlayer.bowlingStyle !== 'None' && (
+                      <span className="px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-[11px] font-bold text-emerald-300">
+                        {currentPlayer.bowlingStyle}
+                      </span>
+                    )}
+                  </div>
+
+                  {currentPlayer.stats && currentPlayer.stats !== 'No previous achievements provided' && (
+                    <div className="mt-2.5 p-2.5 bg-slate-950/70 rounded-xl border border-slate-800 text-xs text-slate-300 italic">
+                      &ldquo;{currentPlayer.stats}&rdquo;
+                    </div>
+                  )}
+                </div>
+
+                {/* Sold / Unsold Notification Banner */}
+                {room.lastAction === 'SOLD' && currentBiddingTeam && (
+                  <div className="bg-emerald-950/90 border-2 border-emerald-400 p-3 rounded-2xl text-center shadow-lg animate-in zoom-in-95">
+                    <span className="text-[10px] font-black uppercase bg-emerald-400 text-slate-950 px-2 py-0.5 rounded-full inline-block mb-1">
+                      OFFICIALLY SOLD
+                    </span>
+                    <h4 className="text-base font-black text-white uppercase">
+                      {currentPlayer.fullName} &rarr; {currentBiddingTeam.name}
+                    </h4>
+                    <span className="text-lg font-mono font-black text-amber-400">
+                      ₹ {currentBid.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                )}
+
+                {room.lastAction === 'UNSOLD' && (
+                  <div className="bg-rose-950/90 border-2 border-rose-500 p-3 rounded-2xl text-center shadow-lg animate-in zoom-in-95">
+                    <span className="text-xs font-black uppercase text-rose-300">
+                      PLAYER UNSOLD
+                    </span>
                   </div>
                 )}
 

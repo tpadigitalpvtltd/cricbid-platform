@@ -177,6 +177,7 @@ export default function AuctioneerControllerPage() {
   // Manual bid amount
   const [customBidAmount, setCustomBidAmount] = useState<number | ''>('');
   const [selectedTeamForBid, setSelectedTeamForBid] = useState<string>('');
+  const [selectedIncrement, setSelectedIncrement] = useState<number>(1000);
 
   // Individual player base price editing map { playerId: price }
   const [playerBasePrices, setPlayerBasePrices] = useState<Record<string, number>>({});
@@ -297,6 +298,54 @@ export default function AuctioneerControllerPage() {
   const autoNextTimerRef = useRef<NodeJS.Timeout | null>(null);
   const autoNextIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // 5-Second Final Call Hammer Countdown State
+  const [hammerSecondsLeft, setHammerSecondsLeft] = useState<number | null>(null);
+  const hammerTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const cancelHammerCountdown = () => {
+    if (hammerTimerRef.current) {
+      clearInterval(hammerTimerRef.current);
+      hammerTimerRef.current = null;
+    }
+    setHammerSecondsLeft(null);
+    executeAction('CANCEL_HAMMER').catch(() => {});
+  };
+
+  const startHammerCountdown = () => {
+    if (!currentPlayer) {
+      alert('Please load an active player on stage first.');
+      return;
+    }
+    if (hammerTimerRef.current) {
+      cancelHammerCountdown();
+      return;
+    }
+
+    setHammerSecondsLeft(5);
+    executeAction('START_HAMMER_5S').catch(() => {});
+
+    let count = 5;
+    hammerTimerRef.current = setInterval(() => {
+      count -= 1;
+      if (count <= 0) {
+        if (hammerTimerRef.current) {
+          clearInterval(hammerTimerRef.current);
+          hammerTimerRef.current = null;
+        }
+        setHammerSecondsLeft(null);
+
+        // Auto action on 0s:
+        if (currentBiddingTeam) {
+          handleMarkSold();
+        } else {
+          handleMarkUnsold();
+        }
+      } else {
+        setHammerSecondsLeft(count);
+      }
+    }, 1000);
+  };
+
   const clearAutoNextTimers = () => {
     if (autoNextTimerRef.current) {
       clearTimeout(autoNextTimerRef.current);
@@ -307,6 +356,11 @@ export default function AuctioneerControllerPage() {
       autoNextIntervalRef.current = null;
     }
     setAutoNextCountdown(null);
+    if (hammerTimerRef.current) {
+      clearInterval(hammerTimerRef.current);
+      hammerTimerRef.current = null;
+      setHammerSecondsLeft(null);
+    }
   };
 
   useEffect(() => {
@@ -354,6 +408,13 @@ export default function AuctioneerControllerPage() {
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
         navigator.vibrate(40);
       }
+      // Cancel any running 5-second hammer countdown on new bid
+      if (hammerTimerRef.current) {
+        clearInterval(hammerTimerRef.current);
+        hammerTimerRef.current = null;
+        setHammerSecondsLeft(null);
+      }
+
       // Instant optimistic feedback in 0ms!
       const now = Date.now();
       setState((prev) => {
@@ -366,7 +427,7 @@ export default function AuctioneerControllerPage() {
             currentBid: amount,
             currentBiddingTeamId: teamId,
             timerSeconds: 10,
-            timerRunning: true,
+            timerRunning: false,
             lastAction: 'NEW_BID',
             lastActionTimestamp: now,
           },
@@ -395,6 +456,29 @@ export default function AuctioneerControllerPage() {
       alert(e.message || 'Error placing bid');
       fetchState();
     }
+  };
+
+  // Instant 1-Tap Direct Team Bidding
+  const handleDirectTeamBid = async (teamId: string) => {
+    if (!currentPlayer) {
+      alert('Please load a player on stage first.');
+      return;
+    }
+    setSelectedTeamForBid(teamId);
+    const team = teams.find((t) => t.id === teamId);
+    if (!team) return;
+
+    // Direct tap logic:
+    // If no bid placed yet -> Opening bid is base price (e.g. ₹1,000)
+    // If bid already placed -> currentBid + currentIncrement
+    let bidAmount: number;
+    if (!currentBiddingTeam || currentBid === 0) {
+      bidAmount = state?.currentPlayerState?.basePrice || room.basePrice || 1000;
+    } else {
+      bidAmount = currentBid + currentIncrement;
+    }
+
+    await handlePlaceFloorBid(teamId, bidAmount);
   };
 
   // 0ms INSTANT OPTIMISTIC PLAYER NAVIGATION (Prefers next un-auctioned PENDING player)
@@ -1077,7 +1161,7 @@ export default function AuctioneerControllerPage() {
   };
 
   const currentBid = room.currentBid || room.basePrice || 1000;
-  const currentIncrement = room.bidIncrement || 500;
+  const currentIncrement = selectedIncrement || room.bidIncrement || 1000;
   const quickIncrements = [100, 500, 1000, 2000, 5000, 10000];
 
   // Filtered queue
@@ -1410,8 +1494,35 @@ export default function AuctioneerControllerPage() {
               </div>
             </div>
 
+            {/* 5-SECOND FINAL CALL HAMMER BUTTON */}
+            <div className="pt-4 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={hammerSecondsLeft !== null ? cancelHammerCountdown : startHammerCountdown}
+                disabled={actionLoading || !currentPlayer || autoNextCountdown !== null}
+                className={`w-full py-4 px-4 rounded-2xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2.5 transition-all shadow-xl active:scale-95 cursor-pointer ${
+                  hammerSecondsLeft !== null
+                    ? 'bg-rose-600 hover:bg-rose-500 text-white animate-pulse border-2 border-amber-300 shadow-[0_0_30px_rgba(244,63,94,0.6)]'
+                    : 'bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.3)]'
+                }`}
+              >
+                <Gavel className="w-5 h-5 stroke-[2.5]" />
+                {hammerSecondsLeft !== null ? (
+                  <span className="flex items-center gap-2">
+                    <span>⚠️ FINAL CALL ACTIVE:</span>
+                    <span className="px-2 py-0.5 rounded-md bg-black text-amber-400 font-mono text-sm font-black">
+                      {hammerSecondsLeft}s
+                    </span>
+                    <span className="text-[11px] underline ml-1">(CLICK TO CANCEL)</span>
+                  </span>
+                ) : (
+                  <span>⚡ 5s FINAL CALL &rarr; AUTO SOLD (GOING ONCE, TWICE...)</span>
+                )}
+              </button>
+            </div>
+
             {/* BIG DECISION BUTTONS: MARK SOLD / UNSOLD */}
-            <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-800">
+            <div className="grid grid-cols-2 gap-3 pt-3">
               <button
                 onClick={handleMarkSold}
                 disabled={actionLoading || !currentBiddingTeam || autoNextCountdown !== null}
@@ -1485,106 +1596,109 @@ export default function AuctioneerControllerPage() {
                 </span>
               </div>
 
-              {/* Team Selector Grid */}
+              {/* 1. Quick Increment Selector */}
               <div className="mb-4">
-                <label className="text-[11px] font-black uppercase text-slate-400 block mb-2">
-                  1. Select Bidding Team
-                </label>
-                {teams.length === 0 ? (
-                  <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-center text-xs text-slate-500">
-                    No franchises registered yet. Go to <strong className="text-amber-400">Franchises & Purse</strong> tab to add teams.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
-                    {teams.map((t) => {
-                      const isSelected = selectedTeamForBid === t.id;
-                      const isCurrentHolding = currentBiddingTeam?.id === t.id;
-                      const canAfford = t.remainingPurse >= currentBid + currentIncrement;
-
-                      return (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => setSelectedTeamForBid(t.id)}
-                          className={`p-2.5 rounded-xl border text-left transition-all relative ${
-                            isSelected
-                              ? 'border-amber-400 bg-amber-400/20 ring-2 ring-amber-400/30'
-                              : isCurrentHolding
-                              ? 'border-emerald-500 bg-emerald-500/10'
-                              : 'border-slate-800 bg-slate-950 hover:border-slate-700'
-                          } ${!canAfford ? 'opacity-40' : ''}`}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <div
-                              className="w-5 h-5 rounded-md overflow-hidden flex items-center justify-center font-black text-[9px] text-slate-950 shrink-0"
-                              style={{ backgroundColor: t.color || '#f59e0b' }}
-                            >
-                              {t.logoUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={t.logoUrl} alt={t.name} className="w-full h-full object-cover" />
-                              ) : (
-                                t.shortName || 'TM'
-                              )}
-                            </div>
-                            <span className="text-xs font-bold text-white truncate flex-1">
-                              {t.name}
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-amber-300/80 font-mono block">
-                            Purse: ₹{t.remainingPurse.toLocaleString('en-IN')}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Quick Increment Bid Buttons */}
-              <div className="mb-4">
-                <label className="text-[11px] font-black uppercase text-slate-400 block mb-2">
-                  2. One-Tap Quick Increments
-                </label>
-
-                {/* Primary Raise Increment Button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!selectedTeamForBid) {
-                      alert('Please select a franchise first from the team grid above.');
-                      return;
-                    }
-                    handlePlaceFloorBid(selectedTeamForBid, currentBid + currentIncrement);
-                  }}
-                  disabled={actionLoading || !selectedTeamForBid}
-                  className="w-full py-3 mb-2.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg hover:from-amber-300 hover:to-yellow-300 disabled:opacity-40 transition-all flex items-center justify-center gap-2"
-                >
-                  <Coins className="w-4 h-4" />
-                  <span>
-                    Raise Bid (+₹{currentIncrement.toLocaleString('en-IN')}) &rarr; ₹{(currentBid + currentIncrement).toLocaleString('en-IN')}
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[11px] font-black uppercase text-slate-400 block">
+                    1. Select Bid Step / Increment
+                  </label>
+                  <span className="text-[10px] text-amber-400 font-mono font-bold">
+                    Active Step: +₹{currentIncrement.toLocaleString('en-IN')}
                   </span>
-                </button>
-
-                {/* Secondary Quick Increase Pill Grid */}
+                </div>
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                   {quickIncrements.map((inc) => (
                     <button
                       key={inc}
                       type="button"
-                      onClick={() => {
-                        if (!selectedTeamForBid) {
-                          alert('Please select a franchise first from the team grid above.');
-                          return;
-                        }
-                        handlePlaceFloorBid(selectedTeamForBid, currentBid + inc);
-                      }}
-                      disabled={actionLoading || !selectedTeamForBid}
-                      className="py-2 rounded-xl bg-slate-950 border border-slate-700 hover:border-amber-400 text-amber-400 hover:text-white text-xs font-mono font-bold text-center transition-all disabled:opacity-30"
+                      onClick={() => setSelectedIncrement(inc)}
+                      className={`py-2 rounded-xl text-xs font-mono font-black text-center transition-all ${
+                        currentIncrement === inc
+                          ? 'bg-amber-400 text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.5)] ring-2 ring-amber-300'
+                          : 'bg-slate-950 border border-slate-700 hover:border-slate-500 text-slate-300 hover:text-white'
+                      }`}
                     >
                       +₹{inc >= 1000 ? `${inc / 1000}k` : inc}
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* 2. Direct 1-Tap Team Bidding Grid */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[11px] font-black uppercase text-slate-400 block">
+                    2. Franchises (Tap Any Team to Place Bid Instantly)
+                  </label>
+                  <span className="text-[10px] text-emerald-400 font-bold animate-pulse">
+                    ⚡ 1-Tap Bid Enabled
+                  </span>
+                </div>
+                {teams.length === 0 ? (
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-center text-xs text-slate-500">
+                    No franchises registered yet. Go to <strong className="text-amber-400">Franchises & Purse</strong> tab to add teams.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-60 overflow-y-auto pr-1 scrollbar-thin">
+                    {teams.map((t) => {
+                      const isCurrentHolding = currentBiddingTeam?.id === t.id;
+                      const nextAmount = !currentBiddingTeam || currentBid === 0
+                        ? (state?.currentPlayerState?.basePrice || room.basePrice || 1000)
+                        : (currentBid + currentIncrement);
+                      const canAfford = t.remainingPurse >= nextAmount;
+
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => handleDirectTeamBid(t.id)}
+                          disabled={actionLoading || !canAfford || !currentPlayer}
+                          className={`p-3 rounded-2xl border text-left transition-all relative transform active:scale-95 cursor-pointer shadow-md flex flex-col justify-between ${
+                            isCurrentHolding
+                              ? 'border-emerald-400 bg-emerald-500/20 ring-2 ring-emerald-400/50 shadow-[0_0_20px_rgba(16,185,129,0.25)]'
+                              : 'border-slate-800 bg-slate-950 hover:border-amber-400 hover:bg-slate-900'
+                          } ${!canAfford || !currentPlayer ? 'opacity-35 cursor-not-allowed' : ''}`}
+                        >
+                          <div>
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <div
+                                className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center font-black text-[10px] text-slate-950 shrink-0 shadow"
+                                style={{ backgroundColor: t.color || '#f59e0b' }}
+                              >
+                                {t.logoUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={t.logoUrl} alt={t.name} className="w-full h-full object-cover" />
+                                ) : (
+                                  t.shortName || 'TM'
+                                )}
+                              </div>
+                              <span className="text-xs font-black text-white truncate flex-1">
+                                {t.name}
+                              </span>
+                            </div>
+
+                            <span className="text-[10px] text-slate-400 font-mono block mb-2">
+                              Purse: <strong className="text-amber-300">₹{t.remainingPurse.toLocaleString('en-IN')}</strong>
+                            </span>
+                          </div>
+
+                          {/* Direct Tap Action Pill */}
+                          <div className="pt-1.5 border-t border-slate-800/80">
+                            {isCurrentHolding ? (
+                              <span className="w-full py-1 rounded-lg text-[10px] font-black uppercase bg-emerald-500 text-slate-950 flex items-center justify-center gap-1 shadow">
+                                <CheckCircle2 className="w-3 h-3 stroke-[2.5]" /> Leading Bidder
+                              </span>
+                            ) : (
+                              <span className="w-full py-1 rounded-lg text-[10px] font-black uppercase bg-amber-400 hover:bg-amber-300 text-slate-950 flex items-center justify-center gap-1 shadow">
+                                {!currentBiddingTeam ? `Bid ₹${nextAmount.toLocaleString('en-IN')}` : `+ Bid ₹${nextAmount.toLocaleString('en-IN')}`}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Custom Bid Input */}

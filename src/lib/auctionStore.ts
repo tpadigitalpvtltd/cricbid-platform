@@ -870,8 +870,9 @@ export async function placeAuctionBid(params: {
   // Update room state
   room.currentBid = amount;
   room.currentBiddingTeamId = team.id;
-  room.timerSeconds = 10; // Reset 10s countdown on new bid
-  room.timerRunning = true;
+  room.timerSeconds = 10;
+  room.timerExpiresAt = null;
+  room.timerRunning = false;
   room.lastAction = 'NEW_BID';
   room.lastActionTimestamp = Date.now();
 
@@ -953,7 +954,9 @@ export async function executeAuctioneerAction(params: {
     | 'UPDATE_PLAYER_BASE_PRICE'
     | 'SAVE_TEAM'
     | 'DELETE_TEAM'
-    | 'UPDATE_ALL_TEAMS';
+    | 'UPDATE_ALL_TEAMS'
+    | 'START_HAMMER_5S'
+    | 'CANCEL_HAMMER';
   payload?: any;
 }): Promise<{ success: boolean; error?: string; state?: FullAuctionState }> {
   const { slug, action, payload } = params;
@@ -987,8 +990,22 @@ export async function executeAuctioneerAction(params: {
     saveAuctionRoom(room).catch((e) => console.error(e));
   } else if (action === 'RESET_TIMER') {
     room.timerSeconds = 10;
-    room.timerRunning = true;
+    room.timerRunning = false;
+    room.timerExpiresAt = null;
     room.lastAction = 'RESET';
+    room.lastActionTimestamp = Date.now();
+    saveAuctionRoom(room).catch((e) => console.error(e));
+  } else if (action === 'START_HAMMER_5S') {
+    room.timerSeconds = 5;
+    room.timerRunning = true;
+    room.timerExpiresAt = Date.now() + 5200;
+    room.lastAction = 'HAMMER_5S';
+    room.lastActionTimestamp = Date.now();
+    saveAuctionRoom(room).catch((e) => console.error(e));
+  } else if (action === 'CANCEL_HAMMER') {
+    room.timerRunning = false;
+    room.timerExpiresAt = null;
+    room.lastAction = 'CANCEL_HAMMER';
     room.lastActionTimestamp = Date.now();
     saveAuctionRoom(room).catch((e) => console.error(e));
   } else if (action === 'SET_PLAYER' || action === 'REAUCTION_PLAYER') {
