@@ -11,17 +11,25 @@ import {
 
 // In-memory debounce map to prevent calling Razorpay API on every sub-second request
 const lastSyncMap = new Map<string, number>();
+const isReconcilingMap = new Map<string, boolean>();
 const SYNC_INTERVAL_MS = 15000; // 15 seconds debounce per tournament
 
 export async function reconcileMissingTournamentPayments(slug: string): Promise<number> {
   if (!slug) return 0;
 
+  const cleanSlug = slug.toLowerCase();
+  if (isReconcilingMap.get(cleanSlug)) {
+    return 0; // Concurrency lock: already running for this tournament
+  }
+
   const now = Date.now();
-  const lastSync = lastSyncMap.get(slug.toLowerCase()) || 0;
+  const lastSync = lastSyncMap.get(cleanSlug) || 0;
   if (now - lastSync < SYNC_INTERVAL_MS) {
     return 0; // Throttled to maintain high speed & stay within API limits
   }
-  lastSyncMap.set(slug.toLowerCase(), now);
+
+  isReconcilingMap.set(cleanSlug, true);
+  lastSyncMap.set(cleanSlug, now);
 
   try {
     const keyId =
@@ -167,19 +175,70 @@ export async function reconcileMissingTournamentPayments(slug: string): Promise<
         amount: pay.amount ? Number(pay.amount) / 100 : Number(tournament.entryFee) || 0,
       };
 
-      // Double check Supabase right before saving to prevent race conditions with returning checkout
-      const { data: alreadyInserted } = await supabase
+      // Strict checks right before saving to prevent race conditions and duplicate rows
+      // 1. Strict Payment ID Check
+      const { data: existingByPayId } = await supabase
         .from('players')
-        .select('registration_id')
-        .or(`payment_id.eq.${pay.id}${playerPhone ? `,phone.ilike.%${playerPhone}%` : ''}`)
-        .ilike('tournament_slug', tournament.slug)
+        .select('registration_id, photo_url')
+        .eq('payment_id', pay.id)
         .neq('payment_status', 'PENDING_PAYMENT')
         .maybeSingle();
 
-      if (alreadyInserted) {
+      if (existingByPayId) {
         existingPaymentIds.add(pay.id);
         if (playerPhone) existingPhones.add(playerPhone);
+        if (!existingByPayId.photo_url && resolvedPhoto) {
+          await supabase
+            .from('players')
+            .update({ photo_url: resolvedPhoto })
+            .eq('registration_id', existingByPayId.registration_id);
+        }
         continue;
+      }
+
+      // 2. Strict Order ID Check
+      if (pay.order_id) {
+        const { data: existingByOrder } = await supabase
+          .from('players')
+          .select('registration_id, photo_url')
+          .eq('order_id', pay.order_id)
+          .neq('payment_status', 'PENDING_PAYMENT')
+          .maybeSingle();
+
+        if (existingByOrder) {
+          existingPaymentIds.add(pay.id);
+          if (playerPhone) existingPhones.add(playerPhone);
+          if (!existingByOrder.photo_url && resolvedPhoto) {
+            await supabase
+              .from('players')
+              .update({ photo_url: resolvedPhoto })
+              .eq('registration_id', existingByOrder.registration_id);
+          }
+          continue;
+        }
+      }
+
+      // 3. Strict Phone Check for this tournament
+      if (playerPhone) {
+        const { data: existingByPhone } = await supabase
+          .from('players')
+          .select('registration_id, photo_url')
+          .ilike('tournament_slug', tournament.slug)
+          .ilike('phone', `%${playerPhone}%`)
+          .neq('payment_status', 'PENDING_PAYMENT')
+          .maybeSingle();
+
+        if (existingByPhone) {
+          existingPaymentIds.add(pay.id);
+          existingPhones.add(playerPhone);
+          if (!existingByPhone.photo_url && resolvedPhoto) {
+            await supabase
+              .from('players')
+              .update({ photo_url: resolvedPhoto })
+              .eq('registration_id', existingByPhone.registration_id);
+          }
+          continue;
+        }
       }
 
       await savePlayerRegistrationAsync(newRecord);
@@ -196,5 +255,7 @@ export async function reconcileMissingTournamentPayments(slug: string): Promise<
   } catch (err) {
     console.error('[Auto-Recovery] Error reconciling payments:', err);
     return 0;
+  } finally {
+    isReconcilingMap.set(cleanSlug, false);
   }
 }

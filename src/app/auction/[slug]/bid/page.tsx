@@ -165,12 +165,12 @@ export default function MobileBiddingPage() {
 
   useEffect(() => {
     fetchState();
-    // 7s fallback polling when tab is active (Supabase WebSocket handles sub-50ms instant updates)
+    // 1200ms lightweight fallback polling when tab is active (Supabase WebSocket handles sub-30ms instant updates)
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && !document.hidden) {
         fetchState();
       }
-    }, 7000);
+    }, 1200);
     return () => clearInterval(interval);
   }, [slug, currentTeam?.id]);
 

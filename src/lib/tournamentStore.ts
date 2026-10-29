@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import { Tournament, RegistrationSubmission } from './types';
 import { supabase } from './supabase';
+import { clean10DigitPhone } from './utils';
 
 export const MASTER_GOOGLE_SHEET_URL =
   process.env.GOOGLE_SHEET_SCRIPT_URL ||
@@ -597,6 +598,48 @@ export function getPlayersByTournament(slug: string): RegistrationSubmission[] {
   );
 }
 
+function deduplicatePlayers(players: RegistrationSubmission[]): RegistrationSubmission[] {
+  const seenPayments = new Map<string, RegistrationSubmission>();
+  const seenOrders = new Map<string, RegistrationSubmission>();
+  const seenPhones = new Map<string, RegistrationSubmission>();
+  const result: RegistrationSubmission[] = [];
+
+  for (const player of players) {
+    const payId = player.paymentId && player.paymentId !== 'FREE_ENTRY' && player.paymentId !== 'ADMIN_MANUAL' && player.paymentId !== 'PENDING'
+      ? player.paymentId
+      : null;
+    const orderId = player.orderId && player.orderId !== 'AUTO_RECONCILED' && player.orderId !== 'ADMIN_MANUAL' && player.orderId !== 'N/A'
+      ? player.orderId
+      : null;
+    const phone = player.phone ? clean10DigitPhone(player.phone) : null;
+
+    if (payId && seenPayments.has(payId)) {
+      const existing = seenPayments.get(payId)!;
+      if (!existing.photoUrl && player.photoUrl) existing.photoUrl = player.photoUrl;
+      continue;
+    }
+
+    if (orderId && seenOrders.has(orderId)) {
+      const existing = seenOrders.get(orderId)!;
+      if (!existing.photoUrl && player.photoUrl) existing.photoUrl = player.photoUrl;
+      continue;
+    }
+
+    if (phone && seenPhones.has(phone)) {
+      const existing = seenPhones.get(phone)!;
+      if (!existing.photoUrl && player.photoUrl) existing.photoUrl = player.photoUrl;
+      continue;
+    }
+
+    if (payId) seenPayments.set(payId, player);
+    if (orderId) seenOrders.set(orderId, player);
+    if (phone) seenPhones.set(phone, player);
+    result.push(player);
+  }
+
+  return result;
+}
+
 export async function getPlayersByTournamentAsync(slug: string): Promise<RegistrationSubmission[]> {
   try {
     const { data, error } = await supabase
@@ -608,15 +651,15 @@ export async function getPlayersByTournamentAsync(slug: string): Promise<Registr
 
     if (!error && Array.isArray(data)) {
       const mapped = data.map(mapDbPlayerToModel);
-      return mapped;
+      return deduplicatePlayers(mapped);
     }
   } catch (err) {}
 
-  return getPlayersByTournament(slug);
+  return deduplicatePlayers(getPlayersByTournament(slug));
 }
 
 export function getAllPlayers(): RegistrationSubmission[] {
-  return readPlayersFromFile();
+  return deduplicatePlayers(readPlayersFromFile());
 }
 
 export async function getAllPlayersAsync(): Promise<RegistrationSubmission[]> {
@@ -630,11 +673,11 @@ export async function getAllPlayersAsync(): Promise<RegistrationSubmission[]> {
     if (!error && Array.isArray(data)) {
       const mapped = data.map(mapDbPlayerToModel);
       savePlayersToFile(mapped);
-      return mapped;
+      return deduplicatePlayers(mapped);
     }
   } catch (err) {}
 
-  return readPlayersFromFile();
+  return deduplicatePlayers(readPlayersFromFile());
 }
 
 export async function updatePlayerAsync(

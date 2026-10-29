@@ -176,14 +176,14 @@ export default function ProjectorAuctionPage() {
     });
   };
 
-  // Polling fallback
+  // Polling fallback (lightweight 1200ms sync with <30KB payload)
   useEffect(() => {
     fetchState();
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && !document.hidden) {
         fetchState();
       }
-    }, 7000);
+    }, 1200);
     return () => clearInterval(interval);
   }, [slug]);
 
