@@ -49,7 +49,11 @@ export const LiveCounterWidget: React.FC<LiveCounterWidgetProps> = ({
   useEffect(() => {
     fetchLiveCount();
     // Refresh every 20 seconds for real-time auction draft hype
-    const interval = setInterval(fetchLiveCount, 20000);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        fetchLiveCount();
+      }
+    }, 30000);
     return () => clearInterval(interval);
   }, [tournamentSlug]);
 

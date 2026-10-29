@@ -143,10 +143,14 @@ export default function ProjectorAuctionPage() {
     });
   };
 
-  // Initial load & Polling fallback
+  // Initial load & Polling fallback (reduced frequency to prevent serverless function quota drain)
   useEffect(() => {
     fetchState();
-    const interval = setInterval(fetchState, 2000);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        fetchState();
+      }
+    }, 7000);
     return () => clearInterval(interval);
   }, [slug]);
 
@@ -157,8 +161,12 @@ export default function ProjectorAuctionPage() {
     const channel = supabase.channel(channelName);
 
     channel
-      .on('broadcast', { event: '*' }, (payload) => {
-        fetchState();
+      .on('broadcast', { event: '*' }, (msg: any) => {
+        if (msg?.payload?.state) {
+          handleIncomingState(msg.payload.state);
+        } else {
+          fetchState();
+        }
       })
       .subscribe();
 
