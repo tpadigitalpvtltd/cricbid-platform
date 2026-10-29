@@ -25,8 +25,18 @@ export async function GET(
 
     // Bandwidth Optimization:
     // 1. Neither Live Stream nor Team Bidder pages need the playersQueue.
-    // 2. For Controller Desk, strip huge base64 photos from queue list items (controller caches initial photos).
-    // This reduces response size from 15MB down to ~15KB (99.9% bandwidth saving to stay well within free limits).
+    // 2. Instead of streaming massive base64 strings (15MB) on every poll,
+    //    we transform base64 photos into CDN-cacheable image URLs (/api/player-photo/[id]).
+    //    This keeps the JSON payload under 15KB while ensuring EVERY player's photo is rendered and cached by the browser!
+    const optimizePhotoUrl = (player: any) => {
+      if (!player) return '';
+      const photo = player.photoUrl || '';
+      if (typeof photo === 'string' && photo.startsWith('data:image/') && player.registrationId) {
+        return `/api/player-photo/${encodeURIComponent(player.registrationId)}`;
+      }
+      return photo;
+    };
+
     if (view === 'live' || view === 'bid') {
       state.playersQueue = [];
     } else if (Array.isArray(state.playersQueue)) {
@@ -34,9 +44,27 @@ export async function GET(
         ...item,
         player: {
           ...item.player,
-          // Strip heavy base64 strings from queue list to prevent origin bandwidth exhaustion
-          photoUrl: item.player?.photoUrl?.startsWith('data:image/') ? '' : (item.player?.photoUrl || ''),
+          photoUrl: optimizePhotoUrl(item.player),
         },
+      }));
+    }
+
+    if (state.currentPlayer) {
+      state.currentPlayer = {
+        ...state.currentPlayer,
+        photoUrl: optimizePhotoUrl(state.currentPlayer),
+      };
+    }
+
+    if (Array.isArray(state.soldHistory)) {
+      state.soldHistory = state.soldHistory.map((sh) => ({
+        ...sh,
+        player: sh.player
+          ? {
+              ...sh.player,
+              photoUrl: optimizePhotoUrl(sh.player),
+            }
+          : sh.player,
       }));
     }
 

@@ -1730,7 +1730,12 @@ export default function AuctioneerControllerPage() {
                         <div className="w-14 h-14 rounded-xl bg-slate-900 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center shadow">
                           {player.photoUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={player.photoUrl} alt={player.fullName} className="w-full h-full object-cover" />
+                            <img
+                              src={player.photoUrl}
+                              alt={player.fullName}
+                              loading="lazy"
+                              className="w-full h-full object-cover"
+                            />
                           ) : (
                             <span className="font-black text-amber-400 text-xs">{getInitials(player.fullName)}</span>
                           )}

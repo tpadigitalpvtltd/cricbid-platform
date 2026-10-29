@@ -55,7 +55,10 @@ export async function GET(
         bowlingStyle: player.bowlingStyle,
         age: player.age,
         stats: player.stats,
-        photoUrl: player.photoUrl,
+        photoUrl:
+          typeof player.photoUrl === 'string' && player.photoUrl.startsWith('data:image/') && player.registrationId
+            ? `/api/player-photo/${encodeURIComponent(player.registrationId)}`
+            : (player.photoUrl || ''),
         paymentStatus: player.paymentStatus,
         maskedPhone,
         timestamp: player.timestamp,
