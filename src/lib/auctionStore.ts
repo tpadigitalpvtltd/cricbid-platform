@@ -518,7 +518,7 @@ export async function getAuctionRoom(slug: string): Promise<AuctionRoom> {
 
   // Sync with Supabase in background
   try {
-    await supabase.from('auction_rooms').upsert({
+    await withTimeout(supabase.from('auction_rooms').upsert({
       id: newRoom.id,
       tournament_slug: newRoom.tournamentSlug,
       status: newRoom.status,
@@ -532,7 +532,7 @@ export async function getAuctionRoom(slug: string): Promise<AuctionRoom> {
       last_action: newRoom.lastAction,
       last_action_timestamp: newRoom.lastActionTimestamp,
       updated_at: newRoom.updatedAt,
-    });
+    }), 2000).catch(() => ({ error: 'timeout' }));
   } catch (e) {}
 
   return newRoom;
@@ -672,7 +672,7 @@ export async function saveTournamentTeams(slug: string, teams: TournamentTeam[])
       }));
 
       // Single bulk upsert instead of sequential loop!
-      await supabase.from('tournament_teams').upsert(records);
+      await withTimeout(supabase.from('tournament_teams').upsert(records), 2000).catch(() => ({ error: 'timeout' }));
 
       // Clean up deleted teams if any
       const { data: currentDbTeams } = await supabase
@@ -747,7 +747,7 @@ export async function recordAuctionBid(bid: AuctionBid): Promise<void> {
   saveLocalData(local);
 
   try {
-    await supabase.from('auction_bids').insert({
+    await withTimeout(supabase.from('auction_bids').insert({
       id: bid.id,
       auction_id: bid.auctionId,
       tournament_slug: cleanSlug,
@@ -758,7 +758,7 @@ export async function recordAuctionBid(bid: AuctionBid): Promise<void> {
       team_logo_url: bid.teamLogoUrl || '',
       amount: bid.amount,
       created_at: bid.createdAt,
-    });
+    }), 2000).catch(() => ({ error: 'timeout' }));
   } catch (err) {}
 }
 
@@ -809,7 +809,7 @@ export async function saveAuctionPlayerState(state: AuctionPlayerState): Promise
   saveLocalData(local);
 
   try {
-    await supabase.from('auction_players').upsert({
+    await withTimeout(supabase.from('auction_players').upsert({
       id: `${cleanSlug}_${state.playerId}`,
       tournament_slug: cleanSlug,
       player_id: state.playerId,
@@ -820,7 +820,7 @@ export async function saveAuctionPlayerState(state: AuctionPlayerState): Promise
       sold_to_team_name: state.soldToTeamName,
       sold_to_team_logo: state.soldToTeamLogo,
       updated_at: new Date().toISOString(),
-    });
+    }), 2000).catch(() => ({ error: 'timeout' }));
   } catch (err) {}
 }
 
