@@ -12,7 +12,14 @@ import {
   AuctionRoomStatus,
   PlayerAuctionStatus,
 } from './auctionTypes';
-import { getPlayersByTournamentAsync, getTournamentBySlugAsync , savePlayerRegistrationAsync, incrementRegistrationCountAsync } from './tournamentStore';
+import {
+  getPlayersByTournamentAsync,
+  getTournamentBySlugAsync,
+  savePlayerRegistrationAsync,
+  savePlayerRegistration,
+  incrementRegistrationCountAsync,
+  incrementRegistrationCount,
+} from './tournamentStore';
 import { RegistrationSubmission } from './types';
 
 const isServerless = Boolean(
@@ -1655,11 +1662,11 @@ export async function executeAuctioneerAction(params: {
       amount: 0,
     };
 
-    // 1. Save to registrations store (memory + disk + Supabase) so player appears in /players and /admin
-    await savePlayerRegistrationAsync(newPlayerSub);
+    // 1. Save to registrations store (memory + disk) instantly and sync to Supabase in background
+    savePlayerRegistration(newPlayerSub);
 
-    // 2. Increment registration count
-    await incrementRegistrationCountAsync(cleanSlug);
+    // 2. Increment registration count instantly in memory and disk
+    incrementRegistrationCount(cleanSlug);
 
     // 3. Save initial player auction state (status: PENDING)
     const newPlayerState: AuctionPlayerState = {
@@ -1670,7 +1677,7 @@ export async function executeAuctioneerAction(params: {
       updatedAt: new Date().toISOString(),
     };
     playerStates[regId] = newPlayerState;
-    await saveAuctionPlayerState(newPlayerState);
+    saveAuctionPlayerState(newPlayerState);
 
     // 4. Invalidate cache and update memory queue
     invalidateAuctionPlayersCache(cleanSlug);
