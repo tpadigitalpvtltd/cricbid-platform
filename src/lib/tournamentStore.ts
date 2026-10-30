@@ -222,7 +222,13 @@ export async function getAllTournamentsAsync(): Promise<Tournament[]> {
     const { data, error } = await withTimeout(query, 2500);
 
     if (!error && Array.isArray(data) && data.length > 0) {
-      const mapped = data.map(mapDbTournamentToModel);
+      const mapped = data
+        .filter((row) => !row.slug?.toLowerCase().startsWith('public-injected-paid-tournament'))
+        .map((row) => {
+          const m = mapDbTournamentToModel(row);
+          m.bannerUrl = `/api/tournament-banner/${encodeURIComponent(m.slug)}`;
+          return m;
+        });
       saveTournamentsToFile(mapped);
       return mapped;
     }
@@ -230,7 +236,13 @@ export async function getAllTournamentsAsync(): Promise<Tournament[]> {
     console.warn('Supabase tournaments fetch notice (using instant cache):', err);
   }
 
-  return readTournamentsFromFile();
+  const fileTournaments = readTournamentsFromFile();
+  return fileTournaments
+    .filter((t) => !t.slug?.toLowerCase().startsWith('public-injected-paid-tournament'))
+    .map((t) => ({
+      ...t,
+      bannerUrl: t.bannerUrl || `/api/tournament-banner/${encodeURIComponent(t.slug)}`,
+    }));
 }
 
 export function getTournamentBySlug(slug: string): Tournament | null {
@@ -253,12 +265,14 @@ export async function getTournamentBySlugAsync(slug: string): Promise<Tournament
       .ilike('tournament_slug', cleanSlug)
       .neq('payment_status', 'PENDING_PAYMENT');
 
-    const [tRes, pRes] = await withTimeout(Promise.all([tQuery, pQuery]), 2500);
+    const [tRes, pRes] = await withTimeout(Promise.all([tQuery, pQuery]), 3500);
 
     if (tRes && !tRes.error && tRes.data) {
       const model = mapDbTournamentToModel(tRes.data);
-      if (pRes && !pRes.error && Array.isArray(pRes.data)) {
-        model.registeredCount = pRes.data.length;
+      const playerCount = Array.isArray(pRes?.data) ? pRes.data.length : 0;
+      model.registeredCount = Math.max(Number(tRes.data.registered_count) || 0, playerCount);
+      if (!model.bannerUrl || model.bannerUrl.startsWith('data:image/')) {
+        model.bannerUrl = `/api/tournament-banner/${encodeURIComponent(model.slug)}`;
       }
       return model;
     }
@@ -273,7 +287,11 @@ export async function getTournamentBySlugAsync(slug: string): Promise<Tournament
     const count = localPlayers.filter(
       (p) => p.tournamentSlug?.toLowerCase() === cleanSlug && p.paymentStatus !== 'PENDING_PAYMENT' && p.paymentStatus !== 'PENDING'
     ).length;
-    return { ...found, registeredCount: count > 0 ? count : (found.registeredCount || 0) };
+    return {
+      ...found,
+      registeredCount: Math.max(found.registeredCount || 0, count),
+      bannerUrl: found.bannerUrl || `/api/tournament-banner/${encodeURIComponent(found.slug)}`,
+    };
   }
   return null;
 }
@@ -600,9 +618,12 @@ function deduplicatePlayers(players: RegistrationSubmission[]): RegistrationSubm
   const seenPayments = new Map<string, RegistrationSubmission>();
   const seenOrders = new Map<string, RegistrationSubmission>();
   const seenPhones = new Map<string, RegistrationSubmission>();
+  const seenIds = new Set<string>();
   const result: RegistrationSubmission[] = [];
 
   for (const player of players) {
+    if (!player.registrationId || seenIds.has(player.registrationId)) continue;
+
     const payId = player.paymentId && player.paymentId !== 'FREE_ENTRY' && player.paymentId !== 'ADMIN_MANUAL' && player.paymentId !== 'PENDING'
       ? player.paymentId
       : null;
@@ -625,10 +646,15 @@ function deduplicatePlayers(players: RegistrationSubmission[]): RegistrationSubm
 
     if (phone && seenPhones.has(phone)) {
       const existing = seenPhones.get(phone)!;
-      if (!existing.photoUrl && player.photoUrl) existing.photoUrl = player.photoUrl;
-      continue;
+      const cleanName1 = (existing.fullName || '').trim().toLowerCase();
+      const cleanName2 = (player.fullName || '').trim().toLowerCase();
+      if (cleanName1 === cleanName2 || cleanName1.includes(cleanName2) || cleanName2.includes(cleanName1)) {
+        if (!existing.photoUrl && player.photoUrl) existing.photoUrl = player.photoUrl;
+        continue;
+      }
     }
 
+    seenIds.add(player.registrationId);
     if (payId) seenPayments.set(payId, player);
     if (orderId) seenOrders.set(orderId, player);
     if (phone) seenPhones.set(phone, player);
@@ -642,15 +668,19 @@ export async function getPlayersByTournamentAsync(slug: string): Promise<Registr
   try {
     const query = supabase
       .from('players')
-      .select('*')
+      .select('registration_id, tournament_slug, tournament_title, full_name, phone, age, role, batting_style, bowling_style, stats, payment_id, order_id, payment_status, amount, timestamp, created_at')
       .ilike('tournament_slug', slug)
       .neq('payment_status', 'PENDING_PAYMENT')
       .order('created_at', { ascending: false });
 
-    const { data, error } = await withTimeout(query, 2500);
+    const { data, error } = await withTimeout(query, 4000);
 
     if (!error && Array.isArray(data) && data.length > 0) {
-      const mapped = data.map(mapDbPlayerToModel);
+      const mapped = data.map((row) => ({
+        ...mapDbPlayerToModel(row),
+        photoUrl: `/api/player-photo/${encodeURIComponent(row.registration_id)}`,
+      }));
+      savePlayersToFile(mapped);
       return deduplicatePlayers(mapped);
     }
   } catch (err) {}
@@ -666,14 +696,17 @@ export async function getAllPlayersAsync(): Promise<RegistrationSubmission[]> {
   try {
     const query = supabase
       .from('players')
-      .select('*')
+      .select('registration_id, tournament_slug, tournament_title, full_name, phone, age, role, batting_style, bowling_style, stats, payment_id, order_id, payment_status, amount, timestamp, created_at')
       .neq('payment_status', 'PENDING_PAYMENT')
       .order('created_at', { ascending: false });
 
-    const { data, error } = await withTimeout(query, 2500);
+    const { data, error } = await withTimeout(query, 4000);
 
     if (!error && Array.isArray(data) && data.length > 0) {
-      const mapped = data.map(mapDbPlayerToModel);
+      const mapped = data.map((row) => ({
+        ...mapDbPlayerToModel(row),
+        photoUrl: `/api/player-photo/${encodeURIComponent(row.registration_id)}`,
+      }));
       savePlayersToFile(mapped);
       return deduplicatePlayers(mapped);
     }

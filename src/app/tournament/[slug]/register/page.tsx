@@ -480,9 +480,13 @@ export default function TournamentRegistrationPage() {
           <div className="h-36 sm:h-48 w-full relative">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={tournament?.bannerUrl}
+              src={tournament?.bannerUrl || `/api/tournament-banner/${encodeURIComponent(slug)}`}
               alt={tournament?.title}
               className="w-full h-full object-cover object-center"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src =
+                  'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?q=80&w=1200&auto=format&fit=crop';
+              }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-[#080d1a] via-[#080d1a]/70 to-transparent" />
           </div>

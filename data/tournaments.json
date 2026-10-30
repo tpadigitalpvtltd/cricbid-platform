@@ -6,7 +6,7 @@
     "tagline": "Tennis Ball Tournament",
     "city": "Yavatmal",
     "venue": "Jaiswal Ground, Yavatmal",
-    "bannerUrl": "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?q=80&w=1200&auto=format&fit=crop",
+    "bannerUrl": "/api/tournament-banner/ympl-season-2-organised-by-sr11-kqel",
     "registrationDeadline": "2026-11-05",
     "auctionDate": "2026-11-05",
     "isPaid": true,
@@ -14,7 +14,7 @@
     "googleSheetUrl": "",
     "organizerName": "Mohammad Shahrukh",
     "organizerContact": "9588487791",
-    "registeredCount": 10,
+    "registeredCount": 85,
     "createdAt": "2026-10-23T08:52:19.614673+00:00"
   },
   {

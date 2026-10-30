@@ -223,9 +223,13 @@ export default function HomePage() {
                   <div className="relative h-44 w-full overflow-hidden">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={tournament.bannerUrl}
+                      src={tournament.bannerUrl || `/api/tournament-banner/${encodeURIComponent(tournament.slug)}`}
                       alt={tournament.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src =
+                          'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?q=80&w=1200&auto=format&fit=crop';
+                      }}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
 
