@@ -151,7 +151,7 @@ export async function POST(request: Request) {
         request.headers.get('origin') ||
         request.headers.get('referer') ||
         process.env.NEXT_PUBLIC_APP_URL ||
-        'https://cricbid-platform-zeta.vercel.app';
+        'https://cricbidauction.netlify.app';
       const cleanOrigin = originHeader.split('/tournament')[0].replace(/\/$/, '');
 
       const digitsOnly = (phone || '').replace(/[^0-9]/g, '');

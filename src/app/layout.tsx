@@ -44,6 +44,9 @@ export default function RootLayout({
           strategy="lazyOnload"
         />
         {children}
+        {/* Suppress Netlify HUD / "Powered by Netlify" floating badge */}
+        <div id="nl-badge-frame" style={{ display: 'none' }} aria-hidden="true" />
+        <div id="nl-hud-frame" style={{ display: 'none' }} aria-hidden="true" />
       </body>
     </html>
   );

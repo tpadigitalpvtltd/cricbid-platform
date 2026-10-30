@@ -100,3 +100,33 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #f59e0b;
 }
+
+/* ==========================================================
+   Netlify Badge, Watermark & HUD Frame Suppression
+   Completely removes floating "Powered by Netlify" pill & drawer
+   ========================================================== */
+#nl-badge-frame,
+#nl-hud-frame,
+iframe#nl-badge-frame,
+iframe#nl-hud-frame,
+iframe[id*="nl-"],
+iframe[title*="Netlify"],
+iframe[title*="Powered by Netlify"],
+iframe[src*="netlify"],
+#netlify-badge,
+.netlify-badge,
+#netlify-drawer-widget,
+[data-netlify-deploy-preview-badge] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  position: absolute !important;
+  top: -9999px !important;
+  left: -9999px !important;
+  z-index: -9999 !important;
+}
