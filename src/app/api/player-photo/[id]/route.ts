@@ -39,8 +39,21 @@ export async function GET(
       .ilike('registration_id', registrationId)
       .maybeSingle();
 
-    if (error || !data || !data.photo_url || typeof data.photo_url !== 'string') {
-      return new Response('Photo not found', { status: 404 });
+    if (error || !data || !data.photo_url || typeof data.photo_url !== 'string' || !data.photo_url.trim()) {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+  <rect width="200" height="200" fill="#0b1329"/>
+  <circle cx="100" cy="75" r="42" fill="#1e293b"/>
+  <path d="M35 185 C35 130 65 115 100 115 C135 115 165 130 165 185 Z" fill="#1e293b"/>
+  <circle cx="100" cy="75" r="35" fill="#f59e0b" opacity="0.85"/>
+  <path d="M45 185 C45 140 70 125 100 125 C130 125 155 140 155 185 Z" fill="#f59e0b" opacity="0.65"/>
+</svg>`;
+      return new Response(svg, {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/svg+xml',
+          'Cache-Control': 'public, max-age=60',
+        },
+      });
     }
 
     const photoUrl = data.photo_url.trim();

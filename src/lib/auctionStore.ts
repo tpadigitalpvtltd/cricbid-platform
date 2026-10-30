@@ -19,6 +19,7 @@ import {
   savePlayerRegistration,
   incrementRegistrationCountAsync,
   incrementRegistrationCount,
+  updatePlayer,
 } from './tournamentStore';
 import { RegistrationSubmission } from './types';
 
@@ -1543,6 +1544,15 @@ export async function executeAuctioneerAction(params: {
     }
 
     saveAuctionPlayerState(updatedState).catch((e) => console.error(e));
+
+    // Also update player photo or details in registrations store and Supabase if provided
+    if (payload?.photoUrl || payload?.fullName || payload?.role) {
+      const playerUpdates: Partial<RegistrationSubmission> = {};
+      if (payload.photoUrl) playerUpdates.photoUrl = payload.photoUrl;
+      if (payload.fullName) playerUpdates.fullName = payload.fullName;
+      if (payload.role) playerUpdates.role = payload.role;
+      updatePlayer(targetPlayerId, playerUpdates);
+    }
   } else if (action === 'SEED_TEAMS') {
     const defaultTeams = getDefaultSeedTeams(cleanSlug);
     await saveTournamentTeams(cleanSlug, defaultTeams);

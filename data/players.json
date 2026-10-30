@@ -1,5 +1,41 @@
 [
   {
+    "registrationId": "CRIC-2026-G05NO",
+    "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+    "tournamentTitle": "ympl-season-2-organised-by-sr11-kqel",
+    "fullName": "Tabish",
+    "phone": "9876543210",
+    "age": "24",
+    "role": "Batting All-Rounder",
+    "battingStyle": "Right-hand",
+    "bowlingStyle": "Right-arm Fast",
+    "stats": "Added by Admin",
+    "photoUrl": "/api/player-photo/CRIC-2026-G05NO",
+    "paymentId": "ADMIN_MANUAL",
+    "orderId": "ADMIN_MANUAL",
+    "paymentStatus": "PAID",
+    "amount": 0,
+    "timestamp": "30 Oct 2026, 1:16:55 pm"
+  },
+  {
+    "registrationId": "CRIC-2026-ZGQNH",
+    "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+    "tournamentTitle": "YMPL season 2 Organised By SR11",
+    "fullName": "Danish shsh",
+    "phone": "9370409202",
+    "age": "22",
+    "role": "Pure Batsman",
+    "battingStyle": "Right-hand",
+    "bowlingStyle": "Right-arm Fast",
+    "stats": "Auto-reconciled via Razorpay Gateway",
+    "photoUrl": "/api/player-photo/CRIC-2026-ZGQNH",
+    "paymentId": "pay_Tu2bx125wh8xRg",
+    "orderId": "order_Tu2biPq1dEOUJf",
+    "paymentStatus": "PAID",
+    "amount": 150,
+    "timestamp": "30 Oct 2026, 1:12:34 pm"
+  },
+  {
     "registrationId": "CRIC-2026-2P6P8",
     "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
     "tournamentTitle": "YMPL season 2 Organised By SR11",
@@ -32,7 +68,7 @@
     "paymentId": "ADMIN_MANUAL",
     "orderId": "ADMIN_MANUAL",
     "paymentStatus": "PAID",
-    "amount": 150,
+    "amount": 0,
     "timestamp": "30 Oct 2026, 10:39:34 am"
   },
   {

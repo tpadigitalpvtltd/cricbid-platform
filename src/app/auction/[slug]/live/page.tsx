@@ -260,12 +260,22 @@ export default function MobileSpectatorLivePage() {
                       src={currentPlayer.photoUrl}
                       alt={currentPlayer.fullName}
                       className="absolute inset-0 w-full h-full object-cover object-top"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                        const parent = (e.target as HTMLElement).parentElement;
+                        if (parent) {
+                          const fallback = parent.querySelector('.live-initials-badge');
+                          if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                        }
+                      }}
                     />
-                  ) : (
-                    <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-950 to-amber-950 flex items-center justify-center font-black text-amber-400 text-6xl">
-                      {getInitials(currentPlayer.fullName)}
-                    </div>
-                  )}
+                  ) : null}
+                  <div
+                    className="live-initials-badge absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-950 to-amber-950 flex items-center justify-center font-black text-amber-400 text-6xl"
+                    style={{ display: currentPlayer.photoUrl ? 'none' : 'flex' }}
+                  >
+                    {getInitials(currentPlayer.fullName)}
+                  </div>
 
                   {/* Gradient overlay */}
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent opacity-90 pointer-events-none" />

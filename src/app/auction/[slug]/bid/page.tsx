@@ -455,13 +455,29 @@ export default function MobileBiddingPage() {
             
             <div className="flex items-center gap-4 mb-3">
               <div className="w-20 h-20 rounded-2xl p-[2px] bg-gradient-to-tr from-amber-400 to-emerald-400 shrink-0">
-                <div className="w-full h-full rounded-[14px] bg-slate-950 overflow-hidden flex items-center justify-center">
+                <div className="w-full h-full rounded-[14px] bg-slate-950 overflow-hidden flex items-center justify-center relative">
                   {currentPlayer.photoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={currentPlayer.photoUrl} alt={currentPlayer.fullName} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="font-black text-amber-400 text-xl">{getInitials(currentPlayer.fullName)}</span>
-                  )}
+                    <img
+                      src={currentPlayer.photoUrl}
+                      alt={currentPlayer.fullName}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                        const parent = (e.target as HTMLElement).parentElement;
+                        if (parent) {
+                          const fallback = parent.querySelector('.bid-initials-badge');
+                          if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                        }
+                      }}
+                    />
+                  ) : null}
+                  <span
+                    className="bid-initials-badge font-black text-amber-400 text-xl flex items-center justify-center w-full h-full"
+                    style={{ display: currentPlayer.photoUrl ? 'none' : 'flex' }}
+                  >
+                    {getInitials(currentPlayer.fullName)}
+                  </span>
                 </div>
               </div>
 

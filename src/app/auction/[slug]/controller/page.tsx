@@ -45,6 +45,7 @@ import {
 import { FullAuctionState, TournamentTeam, PlayerAuctionStatus, SoldRecord } from '@/lib/auctionTypes';
 import { PlayingRole, BattingStyle, BowlingStyle } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
+import { compressImage } from '@/lib/utils';
 
 function getInitials(name: string): string {
   if (!name) return 'PL';
@@ -309,6 +310,9 @@ export default function AuctioneerControllerPage() {
   const [playerEditBasePrice, setPlayerEditBasePrice] = useState<number | string>(1000);
   const [playerEditSoldPrice, setPlayerEditSoldPrice] = useState<number | string>('');
   const [playerEditSoldTeamId, setPlayerEditSoldTeamId] = useState<string>('');
+  const [playerEditPhotoUrl, setPlayerEditPhotoUrl] = useState<string>('');
+  const editPlayerPhotoInputRef = useRef<HTMLInputElement>(null);
+  const [isPhotoCompressing, setIsPhotoCompressing] = useState<boolean>(false);
 
   // Manual Add Player State
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
@@ -866,9 +870,35 @@ export default function AuctioneerControllerPage() {
     setPlayerEditStatus(currentStatus || 'PENDING');
     setPlayerEditBasePrice(basePrice || 1000);
     setPlayerEditSoldPrice(soldPrice !== undefined && soldPrice !== null ? soldPrice : '');
+    setPlayerEditPhotoUrl(player.photoUrl || '');
     const currentTeam = teams.find((t) => t.name === soldTeamName);
     setPlayerEditSoldTeamId(currentTeam ? currentTeam.id : '');
     setShowPlayerEditModal(true);
+  };
+
+  // Upload/Change Player Photo in Edit Modal with high-speed compression
+  const handleEditPlayerPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsPhotoCompressing(true);
+      const dataUrl = await compressImage(file, 600, 600, 0.85);
+      setPlayerEditPhotoUrl(dataUrl);
+      showToast('Player photo compressed & ready to save!', 'success');
+    } catch (err) {
+      console.error('Photo compression error:', err);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setPlayerEditPhotoUrl(event.target.result as string);
+          showToast('Photo uploaded!', 'success');
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsPhotoCompressing(false);
+    }
   };
 
   // Save Manual Player Edit
@@ -886,12 +916,35 @@ export default function AuctioneerControllerPage() {
       return;
     }
 
+    // 0ms instant optimistic update
+    setState((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        playersQueue: (prev.playersQueue || []).map((pq) =>
+          pq.player.registrationId === editingPlayerObj.registrationId
+            ? {
+                ...pq,
+                status: playerEditStatus as any,
+                basePrice: baseP,
+                soldPrice: soldP || null,
+                player: {
+                  ...pq.player,
+                  photoUrl: playerEditPhotoUrl || pq.player.photoUrl,
+                },
+              }
+            : pq
+        ),
+      };
+    });
+
     const res = await executeAction('MANUAL_EDIT_PLAYER_AUCTION', {
       playerId: editingPlayerObj.registrationId,
       status: playerEditStatus,
       basePrice: baseP,
       soldPrice: soldP,
       soldToTeamId: soldTeamId,
+      photoUrl: playerEditPhotoUrl || undefined,
     });
 
     if (res?.success) {
@@ -902,6 +955,7 @@ export default function AuctioneerControllerPage() {
         text: `✅ Player record for ${editingPlayerObj.fullName} updated manually!`,
       });
       setTimeout(() => setLastDecisionMsg(null), 5000);
+      fetchState();
     }
   };
 
@@ -1125,45 +1179,29 @@ export default function AuctioneerControllerPage() {
     }
   };
 
-  // Add New Player Photo Upload with automatic canvas compression (<50KB)
-  const handlePlayerPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Add New Player Photo Upload with automatic compression
+  const handlePlayerPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      showToast('Please select an image file (PNG, JPG, WEBP)', 'error');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new (window as any).Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_SIZE = 480;
-        let width = img.width;
-        let height = img.height;
-        if (width > height) {
-          if (width > MAX_SIZE) {
-            height *= MAX_SIZE / width;
-            width = MAX_SIZE;
-          }
-        } else {
-          if (height > MAX_SIZE) {
-            width *= MAX_SIZE / height;
-            height = MAX_SIZE;
-          }
+    try {
+      setIsPhotoCompressing(true);
+      const dataUrl = await compressImage(file, 600, 600, 0.85);
+      setAddPlayerPhotoUrl(dataUrl);
+      showToast('Photo uploaded & optimized successfully!', 'success');
+    } catch (err) {
+      console.error('Photo compression error:', err);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setAddPlayerPhotoUrl(event.target.result as string);
+          showToast('Photo uploaded!', 'success');
         }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-        setAddPlayerPhotoUrl(dataUrl);
       };
-      img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
+      reader.readAsDataURL(file);
+    } finally {
+      setIsPhotoCompressing(false);
+    }
   };
 
   // Save New Player Action Handler (0ms Instant Optimistic UI + Background Sync)
@@ -1626,19 +1664,29 @@ export default function AuctioneerControllerPage() {
               {currentPlayer ? (
                 <div className="flex items-center gap-5 mb-5">
                   <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl p-[2px] bg-gradient-to-tr from-amber-400 to-emerald-400 shrink-0 shadow-lg">
-                    <div className="w-full h-full rounded-[14px] bg-slate-950 overflow-hidden flex items-center justify-center">
+                    <div className="w-full h-full rounded-[14px] bg-slate-950 overflow-hidden flex items-center justify-center relative">
                       {currentPlayer.photoUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={currentPlayer.photoUrl}
                           alt={currentPlayer.fullName}
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                            const parent = (e.target as HTMLElement).parentElement;
+                            if (parent) {
+                              const fallback = parent.querySelector('.stage-initials-badge');
+                              if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                            }
+                          }}
                         />
-                      ) : (
-                        <div className="w-full h-full bg-slate-900 flex items-center justify-center font-black text-amber-400 text-2xl">
-                          {getInitials(currentPlayer.fullName)}
-                        </div>
-                      )}
+                      ) : null}
+                      <div
+                        className="stage-initials-badge w-full h-full bg-slate-900 flex items-center justify-center font-black text-amber-400 text-2xl"
+                        style={{ display: currentPlayer.photoUrl ? 'none' : 'flex' }}
+                      >
+                        {getInitials(currentPlayer.fullName)}
+                      </div>
                     </div>
                   </div>
 
@@ -2083,7 +2131,7 @@ export default function AuctioneerControllerPage() {
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-14 h-14 rounded-xl bg-slate-900 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center shadow">
+                        <div className="w-14 h-14 rounded-xl bg-slate-900 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center shadow relative">
                           {player.photoUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -2091,10 +2139,22 @@ export default function AuctioneerControllerPage() {
                               alt={player.fullName}
                               loading="lazy"
                               className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                                const parent = (e.target as HTMLElement).parentElement;
+                                if (parent) {
+                                  const fallback = parent.querySelector('.initials-badge');
+                                  if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                                }
+                              }}
                             />
-                          ) : (
-                            <span className="font-black text-amber-400 text-xs">{getInitials(player.fullName)}</span>
-                          )}
+                          ) : null}
+                          <span
+                            className="initials-badge font-black text-amber-400 text-xs flex items-center justify-center w-full h-full"
+                            style={{ display: player.photoUrl ? 'none' : 'flex' }}
+                          >
+                            {getInitials(player.fullName)}
+                          </span>
                         </div>
 
                         <div className="min-w-0 flex-1">
@@ -2982,6 +3042,50 @@ export default function AuctioneerControllerPage() {
                 />
               </div>
 
+              {/* Player Photo Upload & Preview */}
+              <div>
+                <label className="text-xs font-bold text-slate-400 block mb-1 uppercase">
+                  Player Photo (Upload Image / Camera)
+                </label>
+                <div className="flex items-center gap-3">
+                  <div className="w-16 h-16 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-center overflow-hidden shrink-0 shadow relative">
+                    {playerEditPhotoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={playerEditPhotoUrl} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <ImageIcon className="w-6 h-6 text-slate-600" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <input
+                      type="file"
+                      ref={editPlayerPhotoInputRef}
+                      onChange={handleEditPlayerPhotoUpload}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      disabled={isPhotoCompressing}
+                      onClick={() => editPlayerPhotoInputRef.current?.click()}
+                      className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{isPhotoCompressing ? 'Optimizing...' : playerEditPhotoUrl ? 'Change Photo' : 'Upload Photo'}</span>
+                    </button>
+                    {playerEditPhotoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setPlayerEditPhotoUrl('')}
+                        className="text-[11px] text-rose-400 hover:underline mt-1 block"
+                      >
+                        Remove photo
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {playerEditStatus === 'SOLD' && (
                 <>
                   <div>
@@ -3202,11 +3306,12 @@ export default function AuctioneerControllerPage() {
                     />
                     <button
                       type="button"
+                      disabled={isPhotoCompressing}
                       onClick={() => playerPhotoInputRef.current?.click()}
-                      className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors"
+                      className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center gap-1.5 transition-colors disabled:opacity-50"
                     >
                       <Upload className="w-3.5 h-3.5 text-amber-400" />
-                      <span>{addPlayerPhotoUrl ? 'Change Photo' : 'Upload Photo'}</span>
+                      <span>{isPhotoCompressing ? 'Optimizing photo...' : addPlayerPhotoUrl ? 'Change Photo' : 'Upload Photo'}</span>
                     </button>
                     {addPlayerPhotoUrl && (
                       <button
@@ -3246,11 +3351,11 @@ export default function AuctioneerControllerPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={addPlayerLoading}
+                  disabled={addPlayerLoading || isPhotoCompressing}
                   className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-black uppercase tracking-wider shadow-lg disabled:opacity-40 flex items-center gap-1.5"
                 >
                   <UserPlus className="w-4 h-4" />
-                  <span>{addPlayerLoading ? 'Saving...' : 'Add Player to Pool'}</span>
+                  <span>{isPhotoCompressing ? 'Optimizing Photo...' : addPlayerLoading ? 'Saving...' : 'Add Player to Pool'}</span>
                 </button>
               </div>
             </form>
