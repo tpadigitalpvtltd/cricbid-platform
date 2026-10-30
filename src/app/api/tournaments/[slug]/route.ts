@@ -36,7 +36,10 @@ export async function GET(
       tagline: tournament.tagline,
       city: tournament.city,
       venue: tournament.venue,
-      bannerUrl: tournament.bannerUrl,
+      bannerUrl:
+        tournament.bannerUrl && !tournament.bannerUrl.startsWith('data:image/')
+          ? tournament.bannerUrl
+          : `/api/tournament-banner/${encodeURIComponent(tournament.slug)}`,
       registrationDeadline: tournament.registrationDeadline,
       auctionDate: tournament.auctionDate,
       isPaid: Boolean(tournament.isPaid),
