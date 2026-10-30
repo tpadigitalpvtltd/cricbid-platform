@@ -1,1 +1,38 @@
-[]
+[
+  {
+    "id": "tourn_mvkqelyc_iyzx",
+    "title": "YMPL season 2 Organised By SR11",
+    "slug": "ympl-season-2-organised-by-sr11-kqel",
+    "tagline": "Tennis Ball Tournament",
+    "city": "Yavatmal",
+    "venue": "Jaiswal Ground, Yavatmal",
+    "bannerUrl": "https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?q=80&w=1200&auto=format&fit=crop",
+    "registrationDeadline": "2026-11-05",
+    "auctionDate": "2026-11-05",
+    "isPaid": true,
+    "entryFee": 150,
+    "googleSheetUrl": "",
+    "organizerName": "Mohammad Shahrukh",
+    "organizerContact": "9588487791",
+    "registeredCount": 10,
+    "createdAt": "2026-10-23T08:52:19.614673+00:00"
+  },
+  {
+    "id": "tourn_mvk33lhc_kwdc",
+    "title": "YMPL season 2 Yavatmal organised by SR11",
+    "slug": "ympl-season-2-yavatmal-organised-by-sr11-k33l",
+    "tagline": "Tennis Ball Cricket League",
+    "city": "Yavatmal",
+    "venue": "Jaiswal Ground, Yavatmal",
+    "bannerUrl": "https://images.unsplash.com/photo-1531415074968-036ba1b575da?q=80&w=1200&auto=format&fit=crop",
+    "registrationDeadline": "2026-11-05",
+    "auctionDate": "2026-11-05",
+    "isPaid": true,
+    "entryFee": 150,
+    "googleSheetUrl": "",
+    "organizerName": "Mohammad Shahrukh",
+    "organizerContact": "9588487791",
+    "registeredCount": 4,
+    "createdAt": "2026-10-23T08:45:00.000000+00:00"
+  }
+]

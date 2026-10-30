@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { supabase } from './supabase';
+import {  supabase, withTimeout } from './supabase';
 import {
   TournamentTeam,
   AuctionRoom,
@@ -12,7 +12,7 @@ import {
   AuctionRoomStatus,
   PlayerAuctionStatus,
 } from './auctionTypes';
-import { getPlayersByTournamentAsync, getTournamentBySlugAsync } from './tournamentStore';
+import { getPlayersByTournamentAsync, getTournamentBySlugAsync , savePlayerRegistrationAsync, incrementRegistrationCountAsync } from './tournamentStore';
 import { RegistrationSubmission } from './types';
 
 const isServerless = Boolean(
@@ -101,6 +101,124 @@ function saveLocalData(data: LocalAuctionData): void {
  * Generate 6 default starter teams with rich cricket branding and 4-digit PINs
  */
 export function getDefaultSeedTeams(slug: string): TournamentTeam[] {
+  const isYmpl = slug.toLowerCase().includes('ympl');
+  if (isYmpl) {
+    return [
+      {
+        id: `team_${slug}_st`,
+        tournamentSlug: slug,
+        name: 'Super Titan',
+        shortName: 'ST',
+        logoUrl: '',
+        color: '#0ea5e9',
+        totalPurse: 100000,
+        remainingPurse: 100000,
+        secretPin: '1111',
+        maxPlayers: 15,
+        boughtPlayersCount: 0,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: `team_${slug}_ra`,
+        tournamentSlug: slug,
+        name: 'Rani Amravati',
+        shortName: 'RA',
+        logoUrl: '',
+        color: '#ec4899',
+        totalPurse: 100000,
+        remainingPurse: 100000,
+        secretPin: '2222',
+        maxPlayers: 15,
+        boughtPlayersCount: 0,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: `team_${slug}_kb`,
+        tournamentSlug: slug,
+        name: 'Kohinoor Badshah',
+        shortName: 'KB',
+        logoUrl: '',
+        color: '#f59e0b',
+        totalPurse: 100000,
+        remainingPurse: 100000,
+        secretPin: '3333',
+        maxPlayers: 15,
+        boughtPlayersCount: 0,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: `team_${slug}_sr`,
+        tournamentSlug: slug,
+        name: 'SR Striker',
+        shortName: 'SR',
+        logoUrl: '',
+        color: '#10b981',
+        totalPurse: 100000,
+        remainingPurse: 100000,
+        secretPin: '4444',
+        maxPlayers: 15,
+        boughtPlayersCount: 0,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: `team_${slug}_sm`,
+        tournamentSlug: slug,
+        name: 'Sahara MSD',
+        shortName: 'SM',
+        logoUrl: '',
+        color: '#3b82f6',
+        totalPurse: 100000,
+        remainingPurse: 100000,
+        secretPin: '5555',
+        maxPlayers: 15,
+        boughtPlayersCount: 0,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: `team_${slug}_gr`,
+        tournamentSlug: slug,
+        name: 'GRCC',
+        shortName: 'GR',
+        logoUrl: '',
+        color: '#8b5cf6',
+        totalPurse: 100000,
+        remainingPurse: 100000,
+        secretPin: '6666',
+        maxPlayers: 15,
+        boughtPlayersCount: 0,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: `team_${slug}_cs`,
+        tournamentSlug: slug,
+        name: 'CSK',
+        shortName: 'CS',
+        logoUrl: '',
+        color: '#eab308',
+        totalPurse: 100000,
+        remainingPurse: 100000,
+        secretPin: '7777',
+        maxPlayers: 15,
+        boughtPlayersCount: 0,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: `team_${slug}_2s`,
+        tournamentSlug: slug,
+        name: '2 Star Furniture',
+        shortName: '2S',
+        logoUrl: '',
+        color: '#14b8a6',
+        totalPurse: 100000,
+        remainingPurse: 100000,
+        secretPin: '8888',
+        maxPlayers: 15,
+        boughtPlayersCount: 0,
+        createdAt: new Date().toISOString(),
+      },
+    ];
+  }
+
   return [
     {
       id: `team_${slug}_mt`,
@@ -333,11 +451,12 @@ export async function getAuctionRoom(slug: string): Promise<AuctionRoom> {
 
   // 1. Try Supabase
   try {
-    const { data, error } = await supabase
+    const roomQuery = supabase
       .from('auction_rooms')
       .select('*')
       .ilike('tournament_slug', cleanSlug)
       .maybeSingle();
+    const { data, error } = await withTimeout(roomQuery, 2500);
 
     if (!error && data) {
       const dbBid = Number(data.current_bid) || 0;
@@ -459,91 +578,52 @@ export async function saveAuctionRoom(room: AuctionRoom): Promise<AuctionRoom> {
  */
 export async function getTournamentTeams(slug: string): Promise<TournamentTeam[]> {
   const cleanSlug = slug.toLowerCase();
+  const local = readLocalData();
+  const cachedTeams = local.teams[cleanSlug];
 
-  // 1. Try Supabase
+  // 1. Try Supabase with fast timeout
   try {
-    const { data, error } = await supabase
+    const query = supabase
       .from('tournament_teams')
       .select('*')
       .ilike('tournament_slug', cleanSlug)
       .order('created_at', { ascending: true });
 
-    if (!error && Array.isArray(data)) {
-      if (data.length > 0) {
-        return data.map((t) => ({
-          id: t.id,
-          tournamentId: t.tournament_id,
-          tournamentSlug: t.tournament_slug,
-          name: t.name,
-          shortName: t.short_name,
-          logoUrl: t.logo_url || '',
-          color: t.color || '#f59e0b',
-          totalPurse: Number(t.total_purse) || 100000,
-          remainingPurse: Number(t.remaining_purse) || 100000,
-          secretPin: String(t.secret_pin || '1111'),
-          maxPlayers: Number(t.max_players) || 15,
-          boughtPlayersCount: Number(t.bought_players_count) || 0,
-          createdAt: t.created_at,
-        }));
-      }
+    const { data, error } = await withTimeout(query, 2500);
 
-      // If database returned 0 rows, check if tournament was already initialized.
-      // 1. Check if auction room exists in Supabase
-      const { data: existingRoom } = await supabase
-        .from('auction_rooms')
-        .select('id')
-        .ilike('tournament_slug', cleanSlug)
-        .maybeSingle();
-
-      if (existingRoom) {
-        // Auction room exists in database! That means the auction was initialized
-        // and the admin deliberately deleted/cleared all teams. Respect empty state!
-        return [];
-      }
-
-      // 2. Check local in-memory initialized flag
-      const local = readLocalData();
-      if (local.teamsInitialized?.[cleanSlug]) {
-        return local.teams[cleanSlug] || [];
-      }
+    if (!error && Array.isArray(data) && data.length > 0) {
+      const teams = data.map((t) => ({
+        id: t.id,
+        tournamentId: t.tournament_id,
+        tournamentSlug: t.tournament_slug,
+        name: t.name,
+        shortName: t.short_name,
+        logoUrl: t.logo_url || '',
+        color: t.color || '#f59e0b',
+        totalPurse: Number(t.total_purse) || 100000,
+        remainingPurse: Number(t.remaining_purse) || 100000,
+        secretPin: String(t.secret_pin || '1111'),
+        maxPlayers: Number(t.max_players) || 15,
+        boughtPlayersCount: Number(t.bought_players_count) || 0,
+        createdAt: t.created_at,
+      }));
+      local.teams[cleanSlug] = teams;
+      local.teamsInitialized[cleanSlug] = true;
+      saveLocalData(local);
+      return teams;
     }
   } catch (err) {}
 
-  // 2. Try Local Store
-  const local = readLocalData();
-  if (local.teamsInitialized?.[cleanSlug]) {
-    return local.teams[cleanSlug] || [];
-  }
-  if (local.teams[cleanSlug] && local.teams[cleanSlug].length > 0) {
-    return local.teams[cleanSlug];
+  // 2. Return cached local teams if available
+  if (cachedTeams && cachedTeams.length > 0) {
+    return cachedTeams;
   }
 
-  // 3. Seed Default Teams ONLY on initial room setup
+  // 3. Fallback to default seed teams (guarantees teams are NEVER 0!)
   const defaultTeams = getDefaultSeedTeams(cleanSlug);
   local.teams[cleanSlug] = defaultTeams;
-  if (!local.teamsInitialized) local.teamsInitialized = {};
   local.teamsInitialized[cleanSlug] = true;
   saveLocalData(local);
-
-  // Sync to Supabase in background
-  try {
-    for (const t of defaultTeams) {
-      await supabase.from('tournament_teams').upsert({
-        id: t.id,
-        tournament_slug: t.tournamentSlug,
-        name: t.name,
-        short_name: t.shortName,
-        logo_url: t.logoUrl,
-        color: t.color,
-        total_purse: t.totalPurse,
-        remaining_purse: t.remainingPurse,
-        secret_pin: t.secretPin,
-        max_players: t.maxPlayers,
-        bought_players_count: t.boughtPlayersCount,
-      });
-    }
-  } catch (e) {}
-
   return defaultTeams;
 }
 
@@ -628,12 +708,13 @@ export async function getAuctionBids(slug: string, limit = 20): Promise<AuctionB
   const cleanSlug = slug.toLowerCase();
 
   try {
-    const { data, error } = await supabase
+    const bidsQuery = supabase
       .from('auction_bids')
       .select('*')
       .ilike('tournament_slug', cleanSlug)
-      .order('created_at', { ascending: false })
+      .order('timestamp', { ascending: false })
       .limit(limit);
+    const { data, error } = await withTimeout(bidsQuery, 2500);
 
     if (!error && Array.isArray(data)) {
       return data.map((b) => ({
@@ -688,10 +769,11 @@ export async function getAuctionPlayerStates(slug: string): Promise<Record<strin
   const cleanSlug = slug.toLowerCase();
 
   try {
-    const { data, error } = await supabase
+    const pStateQuery = supabase
       .from('auction_players')
       .select('*')
       .ilike('tournament_slug', cleanSlug);
+    const { data, error } = await withTimeout(pStateQuery, 2500);
 
     if (!error && Array.isArray(data) && data.length > 0) {
       const map: Record<string, AuctionPlayerState> = {};
@@ -1551,7 +1633,7 @@ export async function executeAuctioneerAction(params: {
       return { success: false, error: 'Player full name is required' };
     }
 
-    const regId = `CRIC-2026-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+    const regId = playerData.registrationId || `CRIC-2026-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
     const basePrice = Number(playerData.basePrice) > 0 ? Number(playerData.basePrice) : (room.basePrice || 1000);
 
     const newPlayerSub: RegistrationSubmission = {
@@ -1573,27 +1655,13 @@ export async function executeAuctioneerAction(params: {
       amount: 0,
     };
 
-    // Save to Supabase players table
-    await supabase.from('players').insert({
-      registration_id: newPlayerSub.registrationId,
-      tournament_slug: cleanSlug,
-      tournament_title: newPlayerSub.tournamentTitle,
-      full_name: newPlayerSub.fullName,
-      phone: newPlayerSub.phone,
-      age: newPlayerSub.age,
-      role: newPlayerSub.role,
-      batting_style: newPlayerSub.battingStyle,
-      bowling_style: newPlayerSub.bowlingStyle,
-      stats: newPlayerSub.stats,
-      photo_url: newPlayerSub.photoUrl,
-      payment_id: newPlayerSub.paymentId,
-      order_id: newPlayerSub.orderId,
-      payment_status: newPlayerSub.paymentStatus,
-      amount: newPlayerSub.amount,
-      timestamp: newPlayerSub.timestamp,
-    });
+    // 1. Save to registrations store (memory + disk + Supabase) so player appears in /players and /admin
+    await savePlayerRegistrationAsync(newPlayerSub);
 
-    // Save initial player auction state (status: PENDING)
+    // 2. Increment registration count
+    await incrementRegistrationCountAsync(cleanSlug);
+
+    // 3. Save initial player auction state (status: PENDING)
     const newPlayerState: AuctionPlayerState = {
       playerId: regId,
       tournamentSlug: cleanSlug,
@@ -1604,7 +1672,7 @@ export async function executeAuctioneerAction(params: {
     playerStates[regId] = newPlayerState;
     await saveAuctionPlayerState(newPlayerState);
 
-    // Invalidate players memory cache so next fetches include the new player
+    // 4. Invalidate cache and update memory queue
     invalidateAuctionPlayersCache(cleanSlug);
     rawPlayers.unshift(newPlayerSub);
   }

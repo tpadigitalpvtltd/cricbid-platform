@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { Tournament, RegistrationSubmission } from './types';
-import { supabase } from './supabase';
+import { supabase, withTimeout } from './supabase';
 import { clean10DigitPhone } from './utils';
 
 export const MASTER_GOOGLE_SHEET_URL =
@@ -214,18 +214,20 @@ export function getAllTournaments(): Tournament[] {
 
 export async function getAllTournamentsAsync(): Promise<Tournament[]> {
   try {
-    const { data, error } = await supabase
+    const query = supabase
       .from('tournaments')
-      .select('*')
+      .select('id, slug, title, tagline, city, venue, registration_deadline, auction_date, is_paid, entry_fee, organizer_name, organizer_contact, registered_count, created_at')
       .order('created_at', { ascending: false });
 
-    if (!error && Array.isArray(data)) {
+    const { data, error } = await withTimeout(query, 2500);
+
+    if (!error && Array.isArray(data) && data.length > 0) {
       const mapped = data.map(mapDbTournamentToModel);
       saveTournamentsToFile(mapped);
       return mapped;
     }
   } catch (err) {
-    console.warn('Supabase tournaments fetch notice:', err);
+    console.warn('Supabase tournaments fetch notice (using instant cache):', err);
   }
 
   return readTournamentsFromFile();
@@ -239,32 +241,29 @@ export function getTournamentBySlug(slug: string): Tournament | null {
 export async function getTournamentBySlugAsync(slug: string): Promise<Tournament | null> {
   const cleanSlug = slug.toLowerCase();
   try {
-    const [tRes, pRes] = await Promise.all([
-      supabase.from('tournaments').select('*').ilike('slug', cleanSlug).maybeSingle(),
-      supabase
-        .from('players')
-        .select('tournament_slug')
-        .ilike('tournament_slug', cleanSlug)
-        .neq('payment_status', 'PENDING_PAYMENT'),
-    ]);
+    const tQuery = supabase
+      .from('tournaments')
+      .select('id, slug, title, tagline, city, venue, banner_url, registration_deadline, auction_date, is_paid, entry_fee, organizer_name, organizer_contact, registered_count, created_at')
+      .ilike('slug', cleanSlug)
+      .maybeSingle();
 
-    if (!tRes.error && tRes.data) {
+    const pQuery = supabase
+      .from('players')
+      .select('tournament_slug')
+      .ilike('tournament_slug', cleanSlug)
+      .neq('payment_status', 'PENDING_PAYMENT');
+
+    const [tRes, pRes] = await withTimeout(Promise.all([tQuery, pQuery]), 2500);
+
+    if (tRes && !tRes.error && tRes.data) {
       const model = mapDbTournamentToModel(tRes.data);
-      if (!pRes.error && Array.isArray(pRes.data)) {
+      if (pRes && !pRes.error && Array.isArray(pRes.data)) {
         model.registeredCount = pRes.data.length;
-        if (Number(tRes.data.registered_count) !== pRes.data.length) {
-          fireAndForget(
-            supabase
-              .from('tournaments')
-              .update({ registered_count: pRes.data.length })
-              .ilike('slug', cleanSlug)
-          );
-        }
       }
       return model;
     }
   } catch (err) {
-    console.warn('Supabase getTournamentBySlug notice:', err);
+    console.warn('Supabase getTournamentBySlug notice (using instant cache):', err);
   }
 
   const all = readTournamentsFromFile();
@@ -274,7 +273,7 @@ export async function getTournamentBySlugAsync(slug: string): Promise<Tournament
     const count = localPlayers.filter(
       (p) => p.tournamentSlug?.toLowerCase() === cleanSlug && p.paymentStatus !== 'PENDING_PAYMENT' && p.paymentStatus !== 'PENDING'
     ).length;
-    return { ...found, registeredCount: count > 0 ? count : found.registeredCount };
+    return { ...found, registeredCount: count > 0 ? count : (found.registeredCount || 0) };
   }
   return null;
 }
@@ -559,9 +558,7 @@ export async function savePlayerRegistrationAsync(player: RegistrationSubmission
   savePlayersToFile(players);
 
   try {
-    const { error } = await supabase
-      .from('players')
-      .upsert({
+    const upsertPromise = supabase.from('players').upsert({
         registration_id: player.registrationId,
         tournament_slug: player.tournamentSlug,
         tournament_title: player.tournamentTitle || '',
@@ -579,6 +576,7 @@ export async function savePlayerRegistrationAsync(player: RegistrationSubmission
         amount: Number(player.amount) || 0,
         timestamp: player.timestamp || new Date().toISOString(),
       });
+    const { error } = await withTimeout(upsertPromise, 2500).catch(() => ({ error: 'Supabase timeout' }));
     if (error) {
       console.error('Supabase player save error:', error);
     }
@@ -642,14 +640,16 @@ function deduplicatePlayers(players: RegistrationSubmission[]): RegistrationSubm
 
 export async function getPlayersByTournamentAsync(slug: string): Promise<RegistrationSubmission[]> {
   try {
-    const { data, error } = await supabase
+    const query = supabase
       .from('players')
       .select('*')
       .ilike('tournament_slug', slug)
       .neq('payment_status', 'PENDING_PAYMENT')
       .order('created_at', { ascending: false });
 
-    if (!error && Array.isArray(data)) {
+    const { data, error } = await withTimeout(query, 2500);
+
+    if (!error && Array.isArray(data) && data.length > 0) {
       const mapped = data.map(mapDbPlayerToModel);
       return deduplicatePlayers(mapped);
     }
@@ -664,13 +664,15 @@ export function getAllPlayers(): RegistrationSubmission[] {
 
 export async function getAllPlayersAsync(): Promise<RegistrationSubmission[]> {
   try {
-    const { data, error } = await supabase
+    const query = supabase
       .from('players')
       .select('*')
       .neq('payment_status', 'PENDING_PAYMENT')
       .order('created_at', { ascending: false });
 
-    if (!error && Array.isArray(data)) {
+    const { data, error } = await withTimeout(query, 2500);
+
+    if (!error && Array.isArray(data) && data.length > 0) {
       const mapped = data.map(mapDbPlayerToModel);
       savePlayersToFile(mapped);
       return deduplicatePlayers(mapped);
