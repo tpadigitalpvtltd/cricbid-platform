@@ -77,17 +77,75 @@ const ROLE_OPTIONS = [
   { label: 'Wicket Keepers', value: 'Wicket Keeper Batsman' },
 ];
 
+
+function isStateUnchanged(prev: FullAuctionState | null, incoming: FullAuctionState | null): boolean {
+  if (prev === incoming) return true;
+  if (!prev || !incoming) return false;
+
+  const pr = prev.room;
+  const ir = incoming.room;
+  if (!pr || !ir) return false;
+
+  if (
+    pr.status !== ir.status ||
+    pr.currentPlayerId !== ir.currentPlayerId ||
+    pr.currentBid !== ir.currentBid ||
+    pr.currentBiddingTeamId !== ir.currentBiddingTeamId ||
+    pr.lastAction !== ir.lastAction ||
+    pr.lastActionTimestamp !== ir.lastActionTimestamp ||
+    pr.timerSeconds !== ir.timerSeconds ||
+    pr.timerRunning !== ir.timerRunning
+  ) {
+    return false;
+  }
+
+  if (prev.currentPlayer?.registrationId !== incoming.currentPlayer?.registrationId) {
+    return false;
+  }
+
+  if (
+    (prev.teams?.length || 0) !== (incoming.teams?.length || 0) ||
+    (prev.soldHistory?.length || 0) !== (incoming.soldHistory?.length || 0) ||
+    (prev.recentBids?.length || 0) !== (incoming.recentBids?.length || 0)
+  ) {
+    return false;
+  }
+
+  if (prev.recentBids?.[0]?.id !== incoming.recentBids?.[0]?.id) {
+    return false;
+  }
+
+  return true;
+}
+
 function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionState): FullAuctionState {
   if (!prev) return incoming;
 
-  // 1. Maintain queue if stripped in broadcast
+  // 1. If data is identical, return the EXACT same object reference (prev)
+  // This completely stops React re-renders and eliminates screen blinking/flashing!
+  if (isStateUnchanged(prev, incoming)) {
+    return prev;
+  }
+
+  // 2. Protect against dropping current player during active bidding
+  let resolvedPlayer = incoming.currentPlayer;
+  let resolvedPlayerState = incoming.currentPlayerState;
+
+  if (!resolvedPlayer && prev.currentPlayer && incoming.room?.status === 'ACTIVE') {
+    resolvedPlayer = prev.currentPlayer;
+    resolvedPlayerState = prev.currentPlayerState;
+  }
+
+  // 3. Maintain queue and hydrate photos
   const currentQueue =
     incoming.playersQueue && incoming.playersQueue.length > 0
       ? incoming.playersQueue
-      : prev.playersQueue;
+      : (prev.playersQueue || []);
 
-  // 2. Hydrate photos in soldHistory from currentQueue
-  const hydratedSoldHistory = (incoming.soldHistory || []).map((sh: any) => {
+  const hydratedSoldHistory = (incoming.soldHistory && incoming.soldHistory.length > 0
+    ? incoming.soldHistory
+    : (prev.soldHistory || [])
+  ).map((sh: any) => {
     if (!sh.player?.photoUrl) {
       const matched = currentQueue?.find((pq: any) => pq.player?.registrationId === sh.player?.registrationId);
       if (matched?.player?.photoUrl) {
@@ -107,8 +165,6 @@ function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionStat
   const incomingActionTime = incoming.room?.lastActionTimestamp || 0;
 
   let resolvedRoom = { ...incoming.room };
-  let resolvedCurrentPlayer = incoming.currentPlayer;
-  let resolvedCurrentPlayerState = incoming.currentPlayerState;
   let resolvedBiddingTeam = incoming.currentBiddingTeam;
 
   // Stale packet protection: if user locally triggered an action more recently than the packet
@@ -123,8 +179,8 @@ function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionStat
       lastAction: prev.room.lastAction,
       lastActionTimestamp: prev.room.lastActionTimestamp,
     };
-    resolvedCurrentPlayer = prev.currentPlayer;
-    resolvedCurrentPlayerState = prev.currentPlayerState;
+    resolvedPlayer = prev.currentPlayer;
+    resolvedPlayerState = prev.currentPlayerState;
     resolvedBiddingTeam = prev.currentBiddingTeam;
   } else {
     // BID PROTECTION: Never downgrade the bid on the same player unless explicit UNDO/RESET
@@ -150,13 +206,14 @@ function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionStat
     ...incoming,
     teams: incoming.teams && incoming.teams.length > 0 ? incoming.teams : (prev.teams || []),
     room: resolvedRoom,
-    currentPlayer: resolvedCurrentPlayer,
-    currentPlayerState: resolvedCurrentPlayerState,
+    currentPlayer: resolvedPlayer,
+    currentPlayerState: resolvedPlayerState,
     currentBiddingTeam: resolvedBiddingTeam,
     playersQueue: currentQueue,
     soldHistory: hydratedSoldHistory,
   };
 }
+
 
 export default function AuctioneerControllerPage() {
   const params = useParams();
@@ -168,6 +225,7 @@ export default function AuctioneerControllerPage() {
 
   const [state, setState] = useState<FullAuctionState | null>(null);
   const [loading, setLoading] = useState(true);
+  const isFetchingStateRef = useRef(false);
   const [actionLoading, setActionLoading] = useState(false);
 
   // Active view tab in controller
@@ -238,7 +296,8 @@ export default function AuctioneerControllerPage() {
   };
 
   const fetchState = async () => {
-    if (!slug) return;
+    if (!slug || isFetchingStateRef.current) return;
+    isFetchingStateRef.current = true;
     try {
       const res = await fetch(`/api/auction/${slug}?t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
@@ -257,6 +316,7 @@ export default function AuctioneerControllerPage() {
     } catch (e) {
       console.error('Fetch controller state error:', e);
     } finally {
+      isFetchingStateRef.current = false;
       setLoading(false);
     }
   };
@@ -283,7 +343,7 @@ export default function AuctioneerControllerPage() {
       if (typeof document !== 'undefined' && !document.hidden) {
         fetchState();
       }
-    }, 1200);
+    }, 2200);
     return () => clearInterval(interval);
   }, [slug]);
 

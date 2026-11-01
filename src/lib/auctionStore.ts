@@ -429,6 +429,18 @@ export async function broadcastAuctionUpdate(slug: string, event: string, payloa
   }
 }
 
+
+const AUCTION_STATE_CACHE: Record<string, { state: FullAuctionState; timestamp: number }> = {};
+const TEAMS_CACHE: Record<string, { data: TournamentTeam[]; timestamp: number }> = {};
+
+export function setCachedAuctionState(slug: string, state: FullAuctionState): void {
+  AUCTION_STATE_CACHE[slug.toLowerCase()] = { state, timestamp: Date.now() };
+}
+
+export function invalidateAuctionStateCache(slug: string): void {
+  delete AUCTION_STATE_CACHE[slug.toLowerCase()];
+}
+
 const PLAYERS_CACHE: Record<string, { data: RegistrationSubmission[]; timestamp: number }> = {};
 
 export async function getAuctionTournamentPlayers(slug: string): Promise<RegistrationSubmission[]> {
@@ -617,12 +629,17 @@ export async function getTournamentTeams(slug: string): Promise<TournamentTeam[]
       }));
       local.teams[cleanSlug] = teams;
       local.teamsInitialized[cleanSlug] = true;
+      TEAMS_CACHE[cleanSlug] = { data: teams, timestamp: Date.now() };
       saveLocalData(local);
       return teams;
     }
   } catch (err) {}
 
-  // 2. Return cached local teams if available
+  // 2. Return cached memory teams if available
+  const memTeams = TEAMS_CACHE[cleanSlug];
+  if (memTeams && memTeams.data && memTeams.data.length > 0) {
+    return memTeams.data;
+  }
   if (cachedTeams && cachedTeams.length > 0) {
     return cachedTeams;
   }
@@ -720,7 +737,7 @@ export async function getAuctionBids(slug: string, limit = 20): Promise<AuctionB
       .from('auction_bids')
       .select('*')
       .ilike('tournament_slug', cleanSlug)
-      .order('timestamp', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(limit);
     const { data, error } = await withTimeout(bidsQuery, 2500);
 
@@ -944,6 +961,13 @@ export function buildFullAuctionStateSync(params: {
  */
 export async function getFullAuctionState(slug: string): Promise<FullAuctionState | null> {
   const cleanSlug = slug.toLowerCase();
+
+  // Return fresh state from memory cache (1500ms) to prevent database flooding and race conditions
+  const cached = AUCTION_STATE_CACHE[cleanSlug];
+  if (cached && (Date.now() - cached.timestamp < 1500)) {
+    return cached.state;
+  }
+
   const tournament = await getTournamentBySlugAsync(cleanSlug);
   if (!tournament) return null;
 
@@ -955,7 +979,7 @@ export async function getFullAuctionState(slug: string): Promise<FullAuctionStat
     getAuctionBids(cleanSlug, 15),
   ]);
 
-  return buildFullAuctionStateSync({
+  const fullState = buildFullAuctionStateSync({
     slug: cleanSlug,
     room,
     teams,
@@ -963,6 +987,9 @@ export async function getFullAuctionState(slug: string): Promise<FullAuctionStat
     playerStates,
     bids,
   });
+
+  setCachedAuctionState(cleanSlug, fullState);
+  return fullState;
 }
 
 /**
@@ -1083,6 +1110,7 @@ export async function placeAuctionBid(params: {
   ]).catch((err) => console.error('Bid background save error:', err));
 
   // Broadcast realtime update with the complete state to all viewers in background (non-blocking for sub-15ms response!)
+  setCachedAuctionState(cleanSlug, fullState);
   broadcastAuctionUpdate(cleanSlug, 'BID_PLACED', {
     bid: bidRecord,
     room,
@@ -1711,6 +1739,7 @@ export async function executeAuctioneerAction(params: {
   saveTournamentTeams(cleanSlug, fullState.teams).catch((e) => console.error(e));
 
   // Broadcast the full updated state to all connected screens in background (non-blocking for sub-25ms response!)
+  setCachedAuctionState(cleanSlug, fullState);
   broadcastAuctionUpdate(cleanSlug, 'STATE_UPDATE', {
     action,
     state: fullState,

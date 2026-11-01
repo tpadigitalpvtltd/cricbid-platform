@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Coins,
@@ -30,15 +30,71 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+
+function isStateUnchanged(prev: FullAuctionState | null, incoming: FullAuctionState | null): boolean {
+  if (prev === incoming) return true;
+  if (!prev || !incoming) return false;
+
+  const pr = prev.room;
+  const ir = incoming.room;
+  if (!pr || !ir) return false;
+
+  if (
+    pr.status !== ir.status ||
+    pr.currentPlayerId !== ir.currentPlayerId ||
+    pr.currentBid !== ir.currentBid ||
+    pr.currentBiddingTeamId !== ir.currentBiddingTeamId ||
+    pr.lastAction !== ir.lastAction ||
+    pr.lastActionTimestamp !== ir.lastActionTimestamp ||
+    pr.timerSeconds !== ir.timerSeconds ||
+    pr.timerRunning !== ir.timerRunning
+  ) {
+    return false;
+  }
+
+  if (prev.currentPlayer?.registrationId !== incoming.currentPlayer?.registrationId) {
+    return false;
+  }
+
+  if (
+    (prev.teams?.length || 0) !== (incoming.teams?.length || 0) ||
+    (prev.soldHistory?.length || 0) !== (incoming.soldHistory?.length || 0) ||
+    (prev.recentBids?.length || 0) !== (incoming.recentBids?.length || 0)
+  ) {
+    return false;
+  }
+
+  if (prev.recentBids?.[0]?.id !== incoming.recentBids?.[0]?.id) {
+    return false;
+  }
+
+  return true;
+}
+
 function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionState): FullAuctionState {
   if (!prev) return incoming;
+
+  if (isStateUnchanged(prev, incoming)) {
+    return prev;
+  }
+
+  let resolvedPlayer = incoming.currentPlayer;
+  let resolvedPlayerState = incoming.currentPlayerState;
+
+  if (!resolvedPlayer && prev.currentPlayer && incoming.room?.status === 'ACTIVE') {
+    resolvedPlayer = prev.currentPlayer;
+    resolvedPlayerState = prev.currentPlayerState;
+  }
 
   const currentQueue =
     incoming.playersQueue && incoming.playersQueue.length > 0
       ? incoming.playersQueue
-      : prev.playersQueue;
+      : (prev.playersQueue || []);
 
-  const hydratedSoldHistory = (incoming.soldHistory || []).map((sh: any) => {
+  const hydratedSoldHistory = (incoming.soldHistory && incoming.soldHistory.length > 0
+    ? incoming.soldHistory
+    : (prev.soldHistory || [])
+  ).map((sh: any) => {
     if (!sh.player?.photoUrl) {
       const matched = currentQueue?.find((pq: any) => pq.player?.registrationId === sh.player?.registrationId);
       if (matched?.player?.photoUrl) {
@@ -58,8 +114,6 @@ function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionStat
   const incomingActionTime = incoming.room?.lastActionTimestamp || 0;
 
   let resolvedRoom = { ...incoming.room };
-  let resolvedCurrentPlayer = incoming.currentPlayer;
-  let resolvedCurrentPlayerState = incoming.currentPlayerState;
   let resolvedBiddingTeam = incoming.currentBiddingTeam;
 
   if (prevActionTime > incomingActionTime && prev.room?.lastAction !== 'INIT') {
@@ -73,8 +127,8 @@ function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionStat
       lastAction: prev.room.lastAction,
       lastActionTimestamp: prev.room.lastActionTimestamp,
     };
-    resolvedCurrentPlayer = prev.currentPlayer;
-    resolvedCurrentPlayerState = prev.currentPlayerState;
+    resolvedPlayer = prev.currentPlayer;
+    resolvedPlayerState = prev.currentPlayerState;
     resolvedBiddingTeam = prev.currentBiddingTeam;
   } else {
     const isSamePlayer =
@@ -97,14 +151,16 @@ function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionStat
 
   return {
     ...incoming,
+    teams: incoming.teams && incoming.teams.length > 0 ? incoming.teams : (prev.teams || []),
     room: resolvedRoom,
-    currentPlayer: resolvedCurrentPlayer,
-    currentPlayerState: resolvedCurrentPlayerState,
+    currentPlayer: resolvedPlayer,
+    currentPlayerState: resolvedPlayerState,
     currentBiddingTeam: resolvedBiddingTeam,
     playersQueue: currentQueue,
     soldHistory: hydratedSoldHistory,
   };
 }
+
 
 export default function MobileBiddingPage() {
   const params = useParams();
@@ -120,6 +176,7 @@ export default function MobileBiddingPage() {
   // Auction State
   const [state, setState] = useState<FullAuctionState | null>(null);
   const [loading, setLoading] = useState(true);
+  const isFetchingBidRef = useRef(false);
   const [biddingLoading, setBiddingLoading] = useState(false);
   const [bidError, setBidError] = useState('');
   const [showMySquadModal, setShowMySquadModal] = useState(false);
@@ -170,7 +227,7 @@ export default function MobileBiddingPage() {
       if (typeof document !== 'undefined' && !document.hidden) {
         fetchState();
       }
-    }, 1200);
+    }, 2200);
     return () => clearInterval(interval);
   }, [slug, currentTeam?.id]);
 

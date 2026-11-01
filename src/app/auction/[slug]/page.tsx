@@ -32,12 +32,54 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+
+function isStateUnchanged(prev: FullAuctionState | null, incoming: FullAuctionState | null): boolean {
+  if (prev === incoming) return true;
+  if (!prev || !incoming) return false;
+
+  const pr = prev.room;
+  const ir = incoming.room;
+  if (!pr || !ir) return false;
+
+  if (
+    pr.status !== ir.status ||
+    pr.currentPlayerId !== ir.currentPlayerId ||
+    pr.currentBid !== ir.currentBid ||
+    pr.currentBiddingTeamId !== ir.currentBiddingTeamId ||
+    pr.lastAction !== ir.lastAction ||
+    pr.lastActionTimestamp !== ir.lastActionTimestamp ||
+    pr.timerSeconds !== ir.timerSeconds ||
+    pr.timerRunning !== ir.timerRunning
+  ) {
+    return false;
+  }
+
+  if (prev.currentPlayer?.registrationId !== incoming.currentPlayer?.registrationId) {
+    return false;
+  }
+
+  if (
+    (prev.teams?.length || 0) !== (incoming.teams?.length || 0) ||
+    (prev.soldHistory?.length || 0) !== (incoming.soldHistory?.length || 0) ||
+    (prev.recentBids?.length || 0) !== (incoming.recentBids?.length || 0)
+  ) {
+    return false;
+  }
+
+  if (prev.recentBids?.[0]?.id !== incoming.recentBids?.[0]?.id) {
+    return false;
+  }
+
+  return true;
+}
+
 export default function ProjectorAuctionPage() {
   const params = useParams();
   const slug = params?.slug as string;
 
   const [state, setState] = useState<FullAuctionState | null>(null);
   const [loading, setLoading] = useState(true);
+  const isFetchingProjectorRef = useRef(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -109,6 +151,7 @@ export default function ProjectorAuctionPage() {
 
   const handleIncomingState = (newState: FullAuctionState) => {
     setState((prevState) => {
+      if (prevState && isStateUnchanged(prevState, newState)) return prevState;
       // 1. Check for new higher bid -> Cancel hammer countdown and play chime
       if (
         prevState &&
@@ -183,7 +226,7 @@ export default function ProjectorAuctionPage() {
       if (typeof document !== 'undefined' && !document.hidden) {
         fetchState();
       }
-    }, 1200);
+    }, 2200);
     return () => clearInterval(interval);
   }, [slug]);
 
