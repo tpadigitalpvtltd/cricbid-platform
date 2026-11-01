@@ -118,11 +118,12 @@ export default function ProjectorAuctionPage() {
     setIsMuted(auctionAudio.getIsMuted());
   }, []);
 
-  // Fetch auction state
+  // Fetch auction state (lightweight ?view=live payload for sub-15ms transfer)
   const fetchState = async () => {
-    if (!slug) return;
+    if (!slug || isFetchingProjectorRef.current) return;
+    isFetchingProjectorRef.current = true;
     try {
-      const res = await fetch(`/api/auction/${slug}?t=${Date.now()}`, { cache: 'no-store' });
+      const res = await fetch(`/api/auction/${slug}?view=live&t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.state) {
@@ -132,6 +133,7 @@ export default function ProjectorAuctionPage() {
     } catch (e) {
       console.error('Fetch auction error:', e);
     } finally {
+      isFetchingProjectorRef.current = false;
       setLoading(false);
     }
   };
@@ -163,8 +165,15 @@ export default function ProjectorAuctionPage() {
 
   const handleIncomingState = (newState: FullAuctionState) => {
     setState((prevState) => {
-      if (!newState) return prevState;
+      if (!newState || !newState.room) return prevState;
       if (prevState && isStateUnchanged(prevState, newState)) return prevState;
+
+      // Strict Stale Packet Protection: NEVER let an older server poll overwrite a newer realtime broadcast!
+      const prevTs = Number(prevState?.room?.lastActionTimestamp) || 0;
+      const incomingTs = Number(newState?.room?.lastActionTimestamp) || 0;
+      if (prevState && prevTs > 0 && incomingTs > 0 && incomingTs < prevTs && prevState.room?.lastAction !== 'INIT') {
+        return prevState;
+      }
 
       // Bid Protection: Never downgrade the bid for the same player unless explicit RESET/UNDO/NEXT
       const isSamePlayer =
@@ -259,21 +268,100 @@ export default function ProjectorAuctionPage() {
     });
   };
 
-  // 1. Native Browser BroadcastChannel for 0ms instantaneous cross-tab synchronization
+  // 1. Native Browser BroadcastChannel + localStorage event for 0ms instantaneous cross-tab/window sync
   useEffect(() => {
-    if (!slug || typeof window === 'undefined' || !('BroadcastChannel' in window)) return;
-    const bc = new BroadcastChannel(`cricbid_auction_${slug.toLowerCase()}`);
-    bc.onmessage = (event) => {
-      if (event.data?.state) {
-        handleIncomingState(event.data.state);
+    if (!slug || typeof window === 'undefined') return;
+    const cleanSlug = slug.toLowerCase();
+    const storageKey = `cricbid_live_state_${cleanSlug}`;
+
+    // Hydrate immediately from localStorage if controller has active state on this machine
+    try {
+      const cachedRaw = window.localStorage.getItem(storageKey);
+      if (cachedRaw) {
+        const parsed = JSON.parse(cachedRaw);
+        if (parsed?.state?.room) {
+          handleIncomingState(parsed.state);
+          setLoading(false);
+        }
+      }
+    } catch {}
+
+    // Listen to storage events across windows/tabs (0ms latency)
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === storageKey && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed?.state?.room) {
+            handleIncomingState(parsed.state);
+          }
+        } catch {}
       }
     };
+    window.addEventListener('storage', onStorage);
+
+    // Listen to BroadcastChannel (0ms latency)
+    let bc: BroadcastChannel | null = null;
+    if ('BroadcastChannel' in window) {
+      bc = new BroadcastChannel(`cricbid_auction_${cleanSlug}`);
+      bc.onmessage = (event) => {
+        if (event.data?.state) {
+          handleIncomingState(event.data.state);
+        }
+      };
+    }
+
     return () => {
-      bc.close();
+      window.removeEventListener('storage', onStorage);
+      if (bc) bc.close();
     };
   }, [slug]);
 
-  // 2. Supabase Realtime broadcast listener for instant sub-30ms sync
+  // 2. Cross-Device Public WebSocket Relay (ntfy.sh) for <80ms Mobile-to-Projector TV sync
+  useEffect(() => {
+    if (!slug || typeof window === 'undefined' || !('WebSocket' in window)) return;
+    const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 48);
+    const ntfyTopic = `cricbid_live_${cleanSlug}`;
+    let ws: WebSocket | null = null;
+    let reconnectTimer: NodeJS.Timeout | null = null;
+    let isUnmounted = false;
+
+    const connectWs = () => {
+      if (isUnmounted) return;
+      try {
+        ws = new WebSocket(`wss://ntfy.sh/${ntfyTopic}/ws`);
+        ws.onmessage = (evt) => {
+          try {
+            const outer = JSON.parse(evt.data);
+            if (outer?.event === 'message' && outer?.message) {
+              const inner = JSON.parse(outer.message);
+              if (inner?.state?.room) {
+                handleIncomingState(inner.state);
+              }
+            }
+          } catch {}
+        };
+        ws.onclose = () => {
+          if (!isUnmounted) {
+            reconnectTimer = setTimeout(connectWs, 3000);
+          }
+        };
+      } catch {}
+    };
+
+    connectWs();
+
+    return () => {
+      isUnmounted = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (ws) {
+        try {
+          ws.close();
+        } catch {}
+      }
+    };
+  }, [slug]);
+
+  // 3. Supabase Realtime broadcast listener
   useEffect(() => {
     if (!slug) return;
     const channelName = `auction_${slug.toLowerCase()}`;
@@ -299,14 +387,14 @@ export default function ProjectorAuctionPage() {
     };
   }, [slug]);
 
-  // 3. Fast polling fallback (every 1000ms for high-frequency reliability)
+  // 4. High-frequency polling fallback (every 700ms with lightweight ?view=live)
   useEffect(() => {
     fetchState();
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && !document.hidden) {
         fetchState();
       }
-    }, 1000);
+    }, 700);
     return () => clearInterval(interval);
   }, [slug]);
 

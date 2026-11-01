@@ -8,7 +8,7 @@ export async function POST(
   try {
     const slug = params.slug;
     const body = await request.json().catch(() => ({}));
-    const { teamId, amount, secretPin } = body;
+    const { teamId, amount, secretPin, clientSync } = body;
 
     if (!slug) {
       return NextResponse.json({ success: false, error: 'Tournament slug is required' }, { status: 400 });
@@ -23,6 +23,7 @@ export async function POST(
       teamId,
       amount,
       secretPin,
+      clientSync,
     });
 
     if (!result.success) {

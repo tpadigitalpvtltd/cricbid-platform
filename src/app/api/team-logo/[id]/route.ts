@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseHealthy } from '@/lib/supabase';
+import { getDefaultSeedTeams } from '@/lib/auctionStore';
 
 // In-memory cache to prevent redundant Supabase queries and speed up rendering
 const logoCache = new Map<string, { buffer: Buffer; contentType: string; timestamp: number }>();
@@ -8,6 +9,23 @@ const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour memory TTL
 export const dynamic = 'force-dynamic';
 export const revalidate = 3600;
 
+function renderTeamCrestSvg(shortName = 'TM', color = '#f59e0b'): Response {
+  const safeShort = (shortName || 'TM').replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() || 'TM';
+  const safeColor = /^#[0-9a-fA-F]{3,8}$/.test(color || '') ? color : '#f59e0b';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">
+  <rect width="160" height="160" rx="32" fill="#0b1329"/>
+  <path d="M80 18 L134 38 L134 84 C134 118 110 138 80 146 C50 138 26 118 26 84 L26 38 Z" fill="${safeColor}" opacity="0.2" stroke="${safeColor}" stroke-width="5"/>
+  <text x="80" y="94" font-family="Arial, sans-serif" font-weight="900" font-size="38" fill="#ffffff" text-anchor="middle">${safeShort}</text>
+</svg>`;
+  return new Response(svg, {
+    status: 200,
+    headers: {
+      'Content-Type': 'image/svg+xml',
+      'Cache-Control': 'public, max-age=3600',
+    },
+  });
+}
+
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
@@ -15,7 +33,7 @@ export async function GET(
   try {
     const rawId = params.id;
     if (!rawId) {
-      return new Response('Team ID is required', { status: 400 });
+      return renderTeamCrestSvg('TM', '#f59e0b');
     }
 
     const teamId = decodeURIComponent(rawId).trim();
@@ -32,25 +50,50 @@ export async function GET(
       });
     }
 
-    // 2. Fetch logo_url from Supabase tournament_teams
-    const { data, error } = await supabase
-      .from('tournament_teams')
-      .select('logo_url')
-      .eq('id', teamId)
-      .maybeSingle();
+    // 2. Check seed / local teams for metadata or data:image logo
+    let logoUrl = '';
+    let fallbackShort = 'TM';
+    let fallbackColor = '#f59e0b';
 
-    if (error || !data || !data.logo_url || typeof data.logo_url !== 'string') {
-      return new Response('Team logo not found', { status: 404 });
+    try {
+      const ymplTeams = getDefaultSeedTeams('ympl-season-2-organised-by-sr11-kqel');
+      const matched = ymplTeams.find((t) => t.id === teamId);
+      if (matched) {
+        fallbackShort = matched.shortName || matched.name.slice(0, 3).toUpperCase();
+        fallbackColor = matched.color || '#f59e0b';
+        if (matched.logoUrl && !matched.logoUrl.startsWith('/api/team-logo/')) {
+          logoUrl = matched.logoUrl;
+        }
+      }
+    } catch {}
+
+    // 3. Fetch logo_url from Supabase tournament_teams if healthy
+    if (!logoUrl && isSupabaseHealthy()) {
+      const { data, error } = await supabase
+        .from('tournament_teams')
+        .select('logo_url, short_name, color')
+        .eq('id', teamId)
+        .maybeSingle();
+
+      if (!error && data) {
+        if (data.short_name) fallbackShort = data.short_name;
+        if (data.color) fallbackColor = data.color;
+        if (data.logo_url && typeof data.logo_url === 'string' && !data.logo_url.startsWith('/api/team-logo/')) {
+          logoUrl = data.logo_url.trim();
+        }
+      }
     }
 
-    const logoUrl = data.logo_url.trim();
+    if (!logoUrl) {
+      return renderTeamCrestSvg(fallbackShort, fallbackColor);
+    }
 
-    // 3. Handle external image URLs
+    // 4. Handle external image URLs
     if (logoUrl.startsWith('http://') || logoUrl.startsWith('https://')) {
       return NextResponse.redirect(logoUrl, 302);
     }
 
-    // 4. Handle base64 Data URIs (e.g. data:image/png;base64,....)
+    // 5. Handle base64 Data URIs (e.g. data:image/png;base64,....)
     if (logoUrl.startsWith('data:image/')) {
       const match = logoUrl.match(/^data:([^;]+);base64,(.+)$/);
       if (match) {
@@ -58,7 +101,6 @@ export async function GET(
         const base64Data = match[2];
         const buffer = Buffer.from(base64Data, 'base64');
 
-        // Prevent memory leak by keeping cache bounded
         if (logoCache.size > 100) {
           const oldestKey = logoCache.keys().next().value;
           if (oldestKey) logoCache.delete(oldestKey);
@@ -76,9 +118,9 @@ export async function GET(
       }
     }
 
-    return new Response('Unsupported image format', { status: 400 });
+    return renderTeamCrestSvg(fallbackShort, fallbackColor);
   } catch (err: any) {
     console.error('Error in GET /api/team-logo/[id]:', err);
-    return new Response('Internal server error', { status: 500 });
+    return renderTeamCrestSvg('TM', '#f59e0b');
   }
 }

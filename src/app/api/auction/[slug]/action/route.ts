@@ -13,7 +13,7 @@ export async function POST(
   try {
     const slug = params.slug;
     const body = await request.json().catch(() => ({}));
-    const { action, payload, adminPin } = body;
+    const { action, payload, adminPin, clientSync } = body;
 
     if (!slug || !action) {
       return NextResponse.json({ success: false, error: 'Tournament slug and action are required' }, { status: 400 });
@@ -35,6 +35,7 @@ export async function POST(
       slug,
       action,
       payload,
+      clientSync,
     });
 
     if (!result.success) {

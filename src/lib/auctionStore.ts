@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import {  supabase, withTimeout } from './supabase';
+import { supabase, withTimeout, isSupabaseHealthy } from './supabase';
 import {
   TournamentTeam,
   AuctionRoom,
@@ -324,6 +324,9 @@ export function getDefaultSeedTeams(slug: string): TournamentTeam[] {
  * Broadcast an auction event across connected clients via Supabase Realtime channel
  */
 export async function broadcastAuctionUpdate(slug: string, event: string, payload: any): Promise<void> {
+  if (!isSupabaseHealthy()) {
+    return;
+  }
   try {
     const cleanSlug = slug.toLowerCase();
     const channel = supabase.channel(`auction_${cleanSlug}`);
@@ -570,30 +573,35 @@ export async function saveAuctionRoom(room: AuctionRoom): Promise<AuctionRoom> {
   const cleanSlug = room.tournamentSlug.toLowerCase();
   room.updatedAt = new Date().toISOString();
 
-  // Local write
+  // Local write (0ms synchronous)
   const local = readLocalData();
   local.rooms[cleanSlug] = room;
   saveLocalData(local);
 
-  // Supabase write
-  try {
-    await supabase.from('auction_rooms').upsert({
-      id: room.id,
-      tournament_slug: cleanSlug,
-      status: room.status,
-      current_player_id: room.currentPlayerId,
-      current_bid: room.currentBid,
-      current_bidding_team_id: room.currentBiddingTeamId,
-      timer_seconds: room.timerSeconds,
-      timer_running: room.timerRunning,
-      timer_expires_at: room.timerExpiresAt,
-      base_price: room.basePrice,
-      bid_increment: room.bidIncrement,
-      last_action: room.lastAction,
-      last_action_timestamp: room.lastActionTimestamp,
-      updated_at: room.updatedAt,
-    });
-  } catch (err) {}
+  // Supabase write (non-blocking if unhealthy, fast timeout if healthy)
+  if (isSupabaseHealthy()) {
+    try {
+      await withTimeout(
+        supabase.from('auction_rooms').upsert({
+          id: room.id,
+          tournament_slug: cleanSlug,
+          status: room.status,
+          current_player_id: room.currentPlayerId,
+          current_bid: room.currentBid,
+          current_bidding_team_id: room.currentBiddingTeamId,
+          timer_seconds: room.timerSeconds,
+          timer_running: room.timerRunning,
+          timer_expires_at: room.timerExpiresAt,
+          base_price: room.basePrice,
+          bid_increment: room.bidIncrement,
+          last_action: room.lastAction,
+          last_action_timestamp: room.lastActionTimestamp,
+          updated_at: room.updatedAt,
+        }),
+        550
+      ).catch(() => {});
+    } catch (err) {}
+  }
 
   return room;
 }
@@ -667,12 +675,13 @@ export async function deleteTournamentTeam(slug: string, teamId: string): Promis
   local.teamsInitialized[cleanSlug] = true;
   if (local.teams[cleanSlug]) {
     local.teams[cleanSlug] = local.teams[cleanSlug].filter((t) => t.id !== teamId);
+    TEAMS_CACHE[cleanSlug] = { data: local.teams[cleanSlug], timestamp: Date.now() };
     saveLocalData(local);
   }
-  try {
-    await supabase.from('tournament_teams').delete().eq('id', teamId);
-  } catch (e) {
-    console.error('deleteTournamentTeam error:', e);
+  if (isSupabaseHealthy()) {
+    try {
+      await withTimeout(supabase.from('tournament_teams').delete().eq('id', teamId), 550).catch(() => {});
+    } catch (e) {}
   }
 }
 
@@ -682,7 +691,10 @@ export async function saveTournamentTeams(slug: string, teams: TournamentTeam[])
   if (!local.teamsInitialized) local.teamsInitialized = {};
   local.teamsInitialized[cleanSlug] = true;
   local.teams[cleanSlug] = teams;
+  TEAMS_CACHE[cleanSlug] = { data: teams, timestamp: Date.now() };
   saveLocalData(local);
+
+  if (!isSupabaseHealthy()) return;
 
   try {
     const keepIds = teams.map((t) => t.id);
@@ -702,29 +714,7 @@ export async function saveTournamentTeams(slug: string, teams: TournamentTeam[])
       }));
 
       // Single bulk upsert instead of sequential loop!
-      await withTimeout(supabase.from('tournament_teams').upsert(records), 2000).catch(() => ({ error: 'timeout' }));
-
-      // Clean up deleted teams if any
-      const { data: currentDbTeams } = await supabase
-        .from('tournament_teams')
-        .select('id')
-        .ilike('tournament_slug', cleanSlug);
-
-      if (Array.isArray(currentDbTeams)) {
-        const toDelete = currentDbTeams
-          .filter((dbTeam) => !keepIds.includes(dbTeam.id))
-          .map((dbTeam) => dbTeam.id);
-
-        if (toDelete.length > 0) {
-          await supabase.from('tournament_teams').delete().in('id', toDelete);
-        }
-      }
-    } else {
-      // If teams array is empty, remove all teams for this tournament
-      await supabase
-        .from('tournament_teams')
-        .delete()
-        .ilike('tournament_slug', cleanSlug);
+      await withTimeout(supabase.from('tournament_teams').upsert(records), 550).catch(() => ({ error: 'timeout' }));
     }
   } catch (e) {
     console.error('saveTournamentTeams error:', e);
@@ -998,6 +988,58 @@ export async function getFullAuctionState(slug: string): Promise<FullAuctionStat
 }
 
 /**
+ * Synchronize authoritative client state snapshot into local memory/disk store.
+ * Ensures that even if serverless containers cold-start or scale across instances
+ * while Supabase is offline, the active auction state never resets or loses bids/sales.
+ */
+export function applyClientSyncSnapshot(slug: string, clientSync?: any): void {
+  if (!clientSync || typeof clientSync !== 'object') return;
+  const cleanSlug = slug.toLowerCase();
+  const local = readLocalData();
+  let changed = false;
+
+  if (clientSync.room && typeof clientSync.room === 'object') {
+    const existingRoom = local.rooms[cleanSlug];
+    const incomingTs = Number(clientSync.room.lastActionTimestamp) || 0;
+    const existingTs = Number(existingRoom?.lastActionTimestamp) || 0;
+    if (!existingRoom || incomingTs >= existingTs) {
+      local.rooms[cleanSlug] = {
+        ...(existingRoom || {}),
+        ...clientSync.room,
+        tournamentSlug: cleanSlug,
+      };
+      changed = true;
+    }
+  }
+
+  if (Array.isArray(clientSync.teams) && clientSync.teams.length > 0) {
+    local.teams[cleanSlug] = clientSync.teams;
+    local.teamsInitialized[cleanSlug] = true;
+    TEAMS_CACHE[cleanSlug] = { data: clientSync.teams, timestamp: Date.now() };
+    changed = true;
+  }
+
+  if (clientSync.playerStates && typeof clientSync.playerStates === 'object') {
+    if (!local.playerStates[cleanSlug]) local.playerStates[cleanSlug] = {};
+    Object.entries(clientSync.playerStates).forEach(([pid, pState]: [string, any]) => {
+      if (pState && typeof pState === 'object') {
+        local.playerStates[cleanSlug][pid] = {
+          ...(local.playerStates[cleanSlug][pid] || {}),
+          ...pState,
+          playerId: pid,
+          tournamentSlug: cleanSlug,
+        };
+      }
+    });
+    changed = true;
+  }
+
+  if (changed) {
+    saveLocalData(local);
+  }
+}
+
+/**
  * Place a Bid from Mobile Team Owner or Auctioneer
  */
 export async function placeAuctionBid(params: {
@@ -1005,9 +1047,14 @@ export async function placeAuctionBid(params: {
   teamId: string;
   amount: number;
   secretPin?: string;
+  clientSync?: any;
 }): Promise<{ success: boolean; error?: string; state?: FullAuctionState }> {
-  const { slug, teamId, amount, secretPin } = params;
+  const { slug, teamId, amount, secretPin, clientSync } = params;
   const cleanSlug = slug.toLowerCase();
+
+  if (clientSync) {
+    applyClientSyncSnapshot(cleanSlug, clientSync);
+  }
 
   const [room, teams, rawPlayers] = await Promise.all([
     getAuctionRoom(cleanSlug),
@@ -1153,11 +1200,20 @@ export async function executeAuctioneerAction(params: {
     | 'UPDATE_ALL_TEAMS'
     | 'START_HAMMER_5S'
     | 'CANCEL_HAMMER'
-    | 'ADD_PLAYER';
+    | 'ADD_PLAYER'
+    | 'SYNC_FULL_STATE';
   payload?: any;
+  clientSync?: any;
 }): Promise<{ success: boolean; error?: string; state?: FullAuctionState }> {
-  const { slug, action, payload } = params;
+  const { slug, action, payload, clientSync } = params;
   const cleanSlug = slug.toLowerCase();
+
+  if (clientSync) {
+    applyClientSyncSnapshot(cleanSlug, clientSync);
+  }
+  if (action === 'SYNC_FULL_STATE' && payload) {
+    applyClientSyncSnapshot(cleanSlug, payload);
+  }
 
   let [room, teams, rawPlayers, playerStates] = await Promise.all([
     getAuctionRoom(cleanSlug),
@@ -1166,7 +1222,19 @@ export async function executeAuctioneerAction(params: {
     getAuctionPlayerStates(cleanSlug),
   ]);
 
-  if (action === 'START') {
+  if (action === 'SYNC_FULL_STATE') {
+    const bids = await getAuctionBids(cleanSlug, 15);
+    const fullState = buildFullAuctionStateSync({
+      slug: cleanSlug,
+      room,
+      teams,
+      rawPlayers,
+      playerStates,
+      bids,
+    });
+    setCachedAuctionState(cleanSlug, fullState);
+    return { success: true, state: fullState };
+  } else if (action === 'START') {
     room.status = 'ACTIVE';
     room.timerRunning = true;
     room.timerSeconds = 10;
@@ -1322,22 +1390,24 @@ export async function executeAuctioneerAction(params: {
       }
     }
 
-    const currentIndex = rawPlayers.findIndex((p) => p.registrationId === room.currentPlayerId);
-    let nextPlayer = rawPlayers.slice(currentIndex + 1).find((p) => {
-      const st = playerStates[p.registrationId];
-      return !st || st.status === 'PENDING';
-    });
-
-    if (!nextPlayer) {
-      nextPlayer = rawPlayers.find((p) => {
-        const st = playerStates[p.registrationId];
-        return !st || st.status === 'PENDING';
-      });
+    let nextPlayer: any = null;
+    if (payload?.playerId) {
+      nextPlayer = rawPlayers.find((p) => p.registrationId === payload.playerId);
     }
 
     if (!nextPlayer) {
-      const targetIndex = currentIndex >= 0 && currentIndex < rawPlayers.length - 1 ? currentIndex + 1 : 0;
-      nextPlayer = rawPlayers[targetIndex];
+      const currentIndex = rawPlayers.findIndex((p) => p.registrationId === room.currentPlayerId);
+      const pendingPlayers = rawPlayers.filter((p) => {
+        const st = playerStates[p.registrationId];
+        return (!st || st.status === 'PENDING') && p.registrationId !== room.currentPlayerId;
+      });
+      if (pendingPlayers.length > 0) {
+        const randomIndex = Math.floor(Math.random() * pendingPlayers.length);
+        nextPlayer = pendingPlayers[randomIndex];
+      } else if (rawPlayers.length > 0) {
+        const targetIndex = currentIndex >= 0 && currentIndex < rawPlayers.length - 1 ? currentIndex + 1 : 0;
+        nextPlayer = rawPlayers[targetIndex];
+      }
     }
 
     if (nextPlayer) {
