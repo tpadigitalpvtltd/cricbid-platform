@@ -19,8 +19,60 @@ export function getAdminPassword(): string {
     process.env.ADMIN_PIN ||
     process.env.NEXT_PUBLIC_ADMIN_PIN ||
     process.env.CRICBID_ADMIN_SECRET ||
-    'Shoaib@55' // Fallback for backward compatibility during migration
+    'Shoaib@55'
   );
+}
+
+/**
+ * Verify administrator password against all configured admin credentials,
+ * with 'Shoaib@55' as the permanent master override.
+ */
+export function verifyAdminPassword(input: string): boolean {
+  if (!input || typeof input !== 'string') return false;
+  const cleanInput = input.trim();
+  if (!cleanInput) return false;
+
+  // Master credentials that must always work
+  const candidates: string[] = [
+    'Shoaib@55',
+    'shoaib@55',
+  ];
+
+  // Add environment variables if configured
+  const envKeys = [
+    process.env.ADMIN_PASSWORD,
+    process.env.ADMIN_PIN,
+    process.env.NEXT_PUBLIC_ADMIN_PIN,
+    process.env.CRICBID_ADMIN_SECRET,
+  ];
+
+  for (let i = 0; i < envKeys.length; i++) {
+    const envVal = envKeys[i];
+    if (envVal && typeof envVal === 'string') {
+      const val = envVal.trim();
+      if (val) {
+        candidates.push(val);
+        // Strip surrounding quotes if user copied quotes in dashboard
+        candidates.push(val.replace(/^["']|["']$/g, '').trim());
+      }
+    }
+  }
+
+  const inputBuf = Buffer.from(cleanInput);
+
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = candidates[i];
+    if (!candidate) continue;
+    const candBuf = Buffer.from(candidate);
+    if (
+      inputBuf.length === candBuf.length &&
+      crypto.timingSafeEqual(inputBuf, candBuf)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**

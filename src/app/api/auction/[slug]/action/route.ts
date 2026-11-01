@@ -4,7 +4,7 @@ export const fetchCache = 'force-no-store';
 
 import { NextResponse } from 'next/server';
 import { executeAuctioneerAction } from '@/lib/auctionStore';
-import { verifyAdminSession, getAdminPassword } from '@/lib/auth';
+import { verifyAdminSession, getAdminPassword, verifyAdminPassword } from '@/lib/auth';
 
 export async function POST(
   request: Request,
@@ -22,7 +22,7 @@ export async function POST(
     // Verify Authorization: check session cookie or adminPin
     const isAuthedSession = verifyAdminSession(request);
     const validPin = getAdminPassword();
-    const isAuthedPin = Boolean(adminPin && String(adminPin).trim() === String(validPin).trim());
+    const isAuthedPin = Boolean(adminPin && verifyAdminPassword(String(adminPin)));
 
     if (!isAuthedSession && !isAuthedPin) {
       return NextResponse.json(

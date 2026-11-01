@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import {
   getAdminPassword,
+  verifyAdminPassword,
   createSessionToken,
   verifySessionToken,
   checkRateLimit,
@@ -59,15 +60,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const correctPassword = getAdminPassword();
-
-    // Constant-time comparison to prevent timing attacks
-    const inputBuf = Buffer.from(password.trim());
-    const targetBuf = Buffer.from(correctPassword.trim());
-
-    const isMatch =
-      inputBuf.length === targetBuf.length &&
-      crypto.timingSafeEqual(inputBuf, targetBuf);
+    const isMatch = verifyAdminPassword(password);
 
     if (!isMatch) {
       recordFailedAttempt(clientIp);

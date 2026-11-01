@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getTournamentTeams, saveTournamentTeams, executeAuctioneerAction } from '@/lib/auctionStore';
-import { verifyAdminSession, getAdminPassword } from '@/lib/auth';
+import { verifyAdminSession, getAdminPassword, verifyAdminPassword } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -99,7 +99,7 @@ export async function PUT(
 
     const isAuthedSession = verifyAdminSession(request);
     const validPin = getAdminPassword();
-    const isAuthedPin = Boolean(adminPin && String(adminPin).trim() === String(validPin).trim());
+    const isAuthedPin = Boolean(adminPin && verifyAdminPassword(String(adminPin)));
 
     if (!isAuthedSession && !isAuthedPin) {
       return NextResponse.json({ success: false, error: 'Unauthorized: Admin PIN or session required' }, { status: 401 });
@@ -135,7 +135,7 @@ export async function DELETE(
 
     const isAuthedSession = verifyAdminSession(request);
     const validPin = getAdminPassword();
-    const isAuthedPin = Boolean(adminPin && String(adminPin).trim() === String(validPin).trim());
+    const isAuthedPin = Boolean(adminPin && verifyAdminPassword(String(adminPin)));
 
     if (!isAuthedSession && !isAuthedPin) {
       return NextResponse.json({ success: false, error: 'Unauthorized: Admin PIN or session required' }, { status: 401 });
