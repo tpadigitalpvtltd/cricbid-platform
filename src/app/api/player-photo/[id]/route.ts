@@ -111,19 +111,38 @@ export async function GET(
       }
     }
 
-    // 3. Fetch photo_url from Supabase if not in local store and Supabase is healthy
-    if (!photoUrl && isSupabaseHealthy()) {
-      const { data, error } = await supabase
-        .from('players')
-        .select('photo_url')
-        .ilike('registration_id', registrationId)
-        .maybeSingle();
-
-      if (!error && data?.photo_url && typeof data.photo_url === 'string') {
-        const candidate = data.photo_url.trim();
-        if (!candidate.startsWith('/api/player-photo/')) {
-          photoUrl = candidate;
-        }
+    // 3. Fetch photo_url directly from Supabase REST index (bypassing 550ms circuit breaker)
+    if (!photoUrl) {
+      const sbUrl =
+        process.env.SUPABASE_URL ||
+        process.env.NEXT_PUBLIC_SUPABASE_URL ||
+        'https://dbakxdpudmfhrnhgyglq.supabase.co';
+      const sbKey =
+        process.env.SUPABASE_SERVICE_ROLE_KEY ||
+        process.env.SUPABASE_SECRET_KEY ||
+        process.env.SUPABASE_ANON_KEY ||
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+        '';
+      if (sbUrl && sbKey) {
+        try {
+          const restRes = await fetch(
+            `${sbUrl}/rest/v1/players?registration_id=eq.${encodeURIComponent(registrationId.toUpperCase())}&select=photo_url&limit=1`,
+            {
+              headers: {
+                apikey: sbKey,
+                Authorization: `Bearer ${sbKey}`,
+              },
+              signal: AbortSignal.timeout(4500),
+            }
+          );
+          if (restRes.ok) {
+            const rows = await restRes.json();
+            const candidate = rows?.[0]?.photo_url?.trim?.();
+            if (candidate && !candidate.startsWith('/api/player-photo/')) {
+              photoUrl = candidate;
+            }
+          }
+        } catch {}
       }
     }
 

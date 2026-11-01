@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
 import { supabase, isSupabaseHealthy } from '@/lib/supabase';
 import { getDefaultSeedTeams } from '@/lib/auctionStore';
 
@@ -63,6 +65,23 @@ export async function GET(
         fallbackColor = matched.color || '#f59e0b';
         if (matched.logoUrl && !matched.logoUrl.startsWith('/api/team-logo/')) {
           logoUrl = matched.logoUrl;
+        }
+      }
+      if (!logoUrl) {
+        const seedPath = path.join(process.cwd(), 'data', 'auction_data.json');
+        if (fs.existsSync(seedPath)) {
+          const ad = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+          for (const slug of Object.keys(ad.teams || {})) {
+            const foundTeam = (ad.teams[slug] || []).find((t: any) => t.id === teamId);
+            if (foundTeam) {
+              fallbackShort = foundTeam.shortName || foundTeam.name?.slice(0, 3)?.toUpperCase() || fallbackShort;
+              fallbackColor = foundTeam.color || fallbackColor;
+              if (foundTeam.logoUrl && !foundTeam.logoUrl.startsWith('/api/team-logo/')) {
+                logoUrl = foundTeam.logoUrl;
+                break;
+              }
+            }
+          }
         }
       }
     } catch {}

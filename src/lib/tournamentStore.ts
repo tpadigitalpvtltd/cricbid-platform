@@ -33,6 +33,7 @@ const SEED_PLAYERS_FILE = path.join(SEED_DIR, 'players.json');
 declare global {
   var __CRICBID_TOURNAMENTS__: Tournament[] | undefined;
   var __CRICBID_PLAYERS__: RegistrationSubmission[] | undefined;
+  var __CRICBID_PLAYERS_MTIME__: number | undefined;
   var __CRICBID_LAST_SYNC__: number | undefined;
   var __CRICBID_PENDING_ORDERS__: Record<string, any> | undefined;
 }
@@ -161,23 +162,32 @@ function saveTournamentsToFile(tournaments: Tournament[]): void {
 }
 
 /**
- * Read players with fallback order: Memory -> Writable Temp Disk -> Seed Disk
+ * Read players with fallback order: Memory (with mtime check) -> Writable Temp Disk -> Seed Disk
  */
 function readPlayersFromFile(): RegistrationSubmission[] {
-  if (globalThis.__CRICBID_PLAYERS__ && globalThis.__CRICBID_PLAYERS__.length > 0) {
-    return globalThis.__CRICBID_PLAYERS__;
-  }
-
   try {
     if (fs.existsSync(PLAYERS_FILE)) {
+      const mtime = fs.statSync(PLAYERS_FILE).mtimeMs;
+      if (
+        globalThis.__CRICBID_PLAYERS__ &&
+        globalThis.__CRICBID_PLAYERS__.length > 0 &&
+        globalThis.__CRICBID_PLAYERS_MTIME__ === mtime
+      ) {
+        return globalThis.__CRICBID_PLAYERS__;
+      }
       const raw = fs.readFileSync(PLAYERS_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         globalThis.__CRICBID_PLAYERS__ = parsed;
+        globalThis.__CRICBID_PLAYERS_MTIME__ = mtime;
         return parsed;
       }
     }
   } catch (err) {}
+
+  if (globalThis.__CRICBID_PLAYERS__ && globalThis.__CRICBID_PLAYERS__.length > 0) {
+    return globalThis.__CRICBID_PLAYERS__;
+  }
 
   try {
     if (fs.existsSync(SEED_PLAYERS_FILE)) {
@@ -201,6 +211,9 @@ function savePlayersToFile(players: RegistrationSubmission[]): void {
   try {
     ensureStorageDir();
     fs.writeFileSync(PLAYERS_FILE, JSON.stringify(players, null, 2), 'utf-8');
+    if (fs.existsSync(PLAYERS_FILE)) {
+      globalThis.__CRICBID_PLAYERS_MTIME__ = fs.statSync(PLAYERS_FILE).mtimeMs;
+    }
   } catch (err) {}
 }
 
@@ -676,9 +689,18 @@ export async function getPlayersByTournamentAsync(slug: string): Promise<Registr
     const { data, error } = await withTimeout(query, 4000);
 
     if (!error && Array.isArray(data) && data.length > 0) {
+      const existingLocal = readPlayersFromFile();
+      const localPhotoMap = new Map<string, string>();
+      existingLocal.forEach((lp) => {
+        if (lp.registrationId && lp.photoUrl && lp.photoUrl.startsWith('data:image/')) {
+          localPhotoMap.set(lp.registrationId, lp.photoUrl);
+        }
+      });
       const mapped = data.map((row) => ({
         ...mapDbPlayerToModel(row),
-        photoUrl: `/api/player-photo/${encodeURIComponent(row.registration_id)}`,
+        photoUrl:
+          localPhotoMap.get(row.registration_id) ||
+          `/api/player-photo/${encodeURIComponent(row.registration_id)}`,
       }));
       savePlayersToFile(mapped);
       return deduplicatePlayers(mapped);
@@ -703,9 +725,18 @@ export async function getAllPlayersAsync(): Promise<RegistrationSubmission[]> {
     const { data, error } = await withTimeout(query, 4000);
 
     if (!error && Array.isArray(data) && data.length > 0) {
+      const existingLocal = readPlayersFromFile();
+      const localPhotoMap = new Map<string, string>();
+      existingLocal.forEach((lp) => {
+        if (lp.registrationId && lp.photoUrl && lp.photoUrl.startsWith('data:image/')) {
+          localPhotoMap.set(lp.registrationId, lp.photoUrl);
+        }
+      });
       const mapped = data.map((row) => ({
         ...mapDbPlayerToModel(row),
-        photoUrl: `/api/player-photo/${encodeURIComponent(row.registration_id)}`,
+        photoUrl:
+          localPhotoMap.get(row.registration_id) ||
+          `/api/player-photo/${encodeURIComponent(row.registration_id)}`,
       }));
       savePlayersToFile(mapped);
       return deduplicatePlayers(mapped);
