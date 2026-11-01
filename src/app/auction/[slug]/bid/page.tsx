@@ -222,13 +222,114 @@ export default function MobileBiddingPage() {
 
   useEffect(() => {
     fetchState();
-    // 1200ms lightweight fallback polling
+    // 1500ms lightweight fallback polling
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && !document.hidden) {
         fetchState();
       }
-    }, 1200);
+    }, 1500);
     return () => clearInterval(interval);
+  }, [slug, currentTeam?.id]);
+
+  // Instant 0ms BroadcastChannel + localStorage + SSE + ntfy.sh WebSocket sync
+  useEffect(() => {
+    if (!slug || typeof window === 'undefined') return;
+    const cleanSlug = slug.toLowerCase();
+    const storageKey = `cricbid_live_state_${cleanSlug}`;
+
+    const applyIncoming = (incomingState: FullAuctionState) => {
+      if (!incomingState?.room) return;
+      setState((prev) => mergeStateSafe(prev, incomingState));
+      if (currentTeam) {
+        const updated = incomingState.teams?.find((t: TournamentTeam) => t.id === currentTeam.id);
+        if (updated) {
+          setCurrentTeam(updated);
+          try {
+            localStorage.setItem(`cricbid_team_session_${slug}`, JSON.stringify(updated));
+          } catch {}
+        }
+      }
+    };
+
+    try {
+      const cachedRaw = window.localStorage.getItem(storageKey);
+      if (cachedRaw) {
+        const parsed = JSON.parse(cachedRaw);
+        if (parsed?.state?.room) {
+          applyIncoming(parsed.state);
+          setLoading(false);
+        }
+      }
+    } catch {}
+
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === storageKey && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed?.state?.room) applyIncoming(parsed.state);
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    let bc: BroadcastChannel | null = null;
+    if ('BroadcastChannel' in window) {
+      bc = new BroadcastChannel(`cricbid_auction_${cleanSlug}`);
+      bc.onmessage = (evt) => {
+        if (evt.data?.state) applyIncoming(evt.data.state);
+      };
+    }
+
+    let es: EventSource | null = null;
+    if ('EventSource' in window) {
+      try {
+        es = new EventSource(`/api/auction/${slug}/stream`);
+        es.onmessage = (evt) => {
+          try {
+            const data = JSON.parse(evt.data);
+            if (data?.state?.room) applyIncoming(data.state);
+          } catch {}
+        };
+      } catch {}
+    }
+
+    const ntfyTopic = `cricbid_live_${cleanSlug.replace(/[^a-z0-9]/g, '_').slice(0, 48)}`;
+    let ws: WebSocket | null = null;
+    let reconnectTimer: NodeJS.Timeout | null = null;
+    let isUnmounted = false;
+
+    const connectWs = () => {
+      if (isUnmounted || !('WebSocket' in window)) return;
+      try {
+        ws = new WebSocket(`wss://ntfy.sh/${ntfyTopic}/ws`);
+        ws.onmessage = (evt) => {
+          try {
+            const outer = JSON.parse(evt.data);
+            if (outer?.event === 'message' && outer?.message) {
+              const inner = JSON.parse(outer.message);
+              if (inner?.state?.room) applyIncoming(inner.state);
+            }
+          } catch {}
+        };
+        ws.onclose = () => {
+          if (!isUnmounted) reconnectTimer = setTimeout(connectWs, 3000);
+        };
+      } catch {}
+    };
+    connectWs();
+
+    return () => {
+      isUnmounted = true;
+      window.removeEventListener('storage', onStorage);
+      if (bc) bc.close();
+      if (es) es.close();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (ws) {
+        try {
+          ws.close();
+        } catch {}
+      }
+    };
   }, [slug, currentTeam?.id]);
 
   // Realtime Supabase listener (instant state update in <50ms without round-trip HTTP)

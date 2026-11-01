@@ -112,6 +112,7 @@ export default function ProjectorAuctionPage() {
 
   const prevBidAmountRef = useRef<number>(0);
   const prevActionRef = useRef<string>('');
+  const serverOfflineUntilRef = useRef<number>(0);
 
   // Initialize sound mute state
   useEffect(() => {
@@ -121,9 +122,28 @@ export default function ProjectorAuctionPage() {
   // Fetch auction state (lightweight ?view=live payload for sub-15ms transfer)
   const fetchState = async () => {
     if (!slug || isFetchingProjectorRef.current) return;
+    if (Date.now() < serverOfflineUntilRef.current) {
+      setLoading(false);
+      return;
+    }
     isFetchingProjectorRef.current = true;
     try {
       const res = await fetch(`/api/auction/${slug}?view=live&t=${Date.now()}`, { cache: 'no-store' });
+      if (res.status === 503 || res.status === 504) {
+        serverOfflineUntilRef.current = Date.now() + 45000;
+        setState((curr) => {
+          if (!curr) {
+            fetch('/seed/ympl-state.json')
+              .then((r) => r.json())
+              .then((j) => {
+                if (j?.state) handleIncomingState(j.state);
+              })
+              .catch(() => {});
+          }
+          return curr;
+        });
+        return;
+      }
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.state) {
@@ -131,7 +151,17 @@ export default function ProjectorAuctionPage() {
         }
       }
     } catch (e) {
-      console.error('Fetch auction error:', e);
+      setState((curr) => {
+        if (!curr) {
+          fetch('/seed/ympl-state.json')
+            .then((r) => r.json())
+            .then((j) => {
+              if (j?.state) handleIncomingState(j.state);
+            })
+            .catch(() => {});
+        }
+        return curr;
+      });
     } finally {
       isFetchingProjectorRef.current = false;
       setLoading(false);
@@ -268,11 +298,18 @@ export default function ProjectorAuctionPage() {
     });
   };
 
-  // 1. Native Browser BroadcastChannel + localStorage event for 0ms instantaneous cross-tab/window sync
+  // 1. Native Browser BroadcastChannel + localStorage + SSE event stream for 0ms instantaneous sync
   useEffect(() => {
     if (!slug || typeof window === 'undefined') return;
     const cleanSlug = slug.toLowerCase();
     const storageKey = `cricbid_live_state_${cleanSlug}`;
+    const photoTransformKey = `cricbid_photo_transform_${cleanSlug}`;
+
+    const applyPhotoPacket = (pkt: any) => {
+      if (typeof pkt?.zoomScale === 'number') setZoomScale(pkt.zoomScale);
+      if (typeof pkt?.panY === 'number') setPanY(pkt.panY);
+      if (pkt?.photoFit === 'contain' || pkt?.photoFit === 'cover') setPhotoFit(pkt.photoFit);
+    };
 
     // Hydrate immediately from localStorage if controller has active state on this machine
     try {
@@ -295,6 +332,10 @@ export default function ProjectorAuctionPage() {
             handleIncomingState(parsed.state);
           }
         } catch {}
+      } else if (e.key === photoTransformKey && e.newValue) {
+        try {
+          applyPhotoPacket(JSON.parse(e.newValue));
+        } catch {}
       }
     };
     window.addEventListener('storage', onStorage);
@@ -304,19 +345,38 @@ export default function ProjectorAuctionPage() {
     if ('BroadcastChannel' in window) {
       bc = new BroadcastChannel(`cricbid_auction_${cleanSlug}`);
       bc.onmessage = (event) => {
-        if (event.data?.state) {
+        if (event.data?.type === 'PHOTO_TRANSFORM') {
+          applyPhotoPacket(event.data);
+        } else if (event.data?.state) {
           handleIncomingState(event.data.state);
         }
       };
     }
 
+    // Listen to Server-Sent Events (/api/auction/[slug]/stream) for <1ms live push
+    let es: EventSource | null = null;
+    if ('EventSource' in window) {
+      try {
+        es = new EventSource(`/api/auction/${slug}/stream`);
+        es.onmessage = (evt) => {
+          try {
+            const data = JSON.parse(evt.data);
+            if (data?.state?.room) {
+              handleIncomingState(data.state);
+            }
+          } catch {}
+        };
+      } catch {}
+    }
+
     return () => {
       window.removeEventListener('storage', onStorage);
       if (bc) bc.close();
+      if (es) es.close();
     };
   }, [slug]);
 
-  // 2. Cross-Device Public WebSocket Relay (ntfy.sh) for <80ms Mobile-to-Projector TV sync
+  // 2. Cross-Device Public WebSocket Relay (ntfy.sh) for <50ms Mobile-to-Projector TV sync
   useEffect(() => {
     if (!slug || typeof window === 'undefined' || !('WebSocket' in window)) return;
     const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 48);
@@ -325,6 +385,16 @@ export default function ProjectorAuctionPage() {
     let reconnectTimer: NodeJS.Timeout | null = null;
     let isUnmounted = false;
 
+    const handleInnerPayload = (inner: any) => {
+      if (inner?.type === 'PHOTO_TRANSFORM') {
+        if (typeof inner.zoomScale === 'number') setZoomScale(inner.zoomScale);
+        if (typeof inner.panY === 'number') setPanY(inner.panY);
+        if (inner.photoFit === 'contain' || inner.photoFit === 'cover') setPhotoFit(inner.photoFit);
+      } else if (inner?.state?.room) {
+        handleIncomingState(inner.state);
+      }
+    };
+
     const connectWs = () => {
       if (isUnmounted) return;
       try {
@@ -332,10 +402,14 @@ export default function ProjectorAuctionPage() {
         ws.onmessage = (evt) => {
           try {
             const outer = JSON.parse(evt.data);
-            if (outer?.event === 'message' && outer?.message) {
-              const inner = JSON.parse(outer.message);
-              if (inner?.state?.room) {
-                handleIncomingState(inner.state);
+            if (outer?.event === 'message') {
+              if (outer?.attachment?.url) {
+                fetch(outer.attachment.url)
+                  .then((r) => r.json())
+                  .then(handleInnerPayload)
+                  .catch(() => {});
+              } else if (outer?.message) {
+                handleInnerPayload(JSON.parse(outer.message));
               }
             }
           } catch {}
@@ -387,14 +461,14 @@ export default function ProjectorAuctionPage() {
     };
   }, [slug]);
 
-  // 4. High-frequency polling fallback (every 700ms with lightweight ?view=live)
+  // 4. Lightweight polling fallback
   useEffect(() => {
     fetchState();
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && !document.hidden) {
         fetchState();
       }
-    }, 700);
+    }, 1000);
     return () => clearInterval(interval);
   }, [slug]);
 

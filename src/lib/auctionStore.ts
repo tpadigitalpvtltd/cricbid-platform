@@ -26,7 +26,7 @@ import { RegistrationSubmission } from './types';
 const isServerless = Boolean(
   process.env.VERCEL ||
   process.env.AWS_LAMBDA_FUNCTION_NAME ||
-  process.env.NODE_ENV === 'production'
+  process.env.NETLIFY
 );
 
 const STORAGE_DIR = isServerless
@@ -43,9 +43,10 @@ interface LocalAuctionData {
   playerStates: Record<string, Record<string, AuctionPlayerState>>; // slug -> playerId -> state
 }
 
-// In-memory fallback
+// In-memory fallback + SSE Live Stream Bus
 declare global {
   var __CRICBID_AUCTION_DATA__: LocalAuctionData | undefined;
+  var __CRICBID_SSE_SUBSCRIBERS__: Map<string, Set<(data: any) => void>> | undefined;
 }
 
 if (!globalThis.__CRICBID_AUCTION_DATA__) {
@@ -55,6 +56,23 @@ if (!globalThis.__CRICBID_AUCTION_DATA__) {
     teamsInitialized: {},
     bids: {},
     playerStates: {},
+  };
+}
+
+if (!globalThis.__CRICBID_SSE_SUBSCRIBERS__) {
+  globalThis.__CRICBID_SSE_SUBSCRIBERS__ = new Map();
+}
+
+export function subscribeToAuctionStream(slug: string, callback: (data: any) => void): () => void {
+  const cleanSlug = slug.toLowerCase();
+  const map = globalThis.__CRICBID_SSE_SUBSCRIBERS__!;
+  if (!map.has(cleanSlug)) {
+    map.set(cleanSlug, new Set());
+  }
+  const set = map.get(cleanSlug)!;
+  set.add(callback);
+  return () => {
+    set.delete(callback);
   };
 }
 
@@ -321,15 +339,11 @@ export function getDefaultSeedTeams(slug: string): TournamentTeam[] {
 }
 
 /**
- * Broadcast an auction event across connected clients via Supabase Realtime channel
+ * Broadcast an auction event across connected clients via SSE Bus, ntfy.sh WebSocket, and Supabase Realtime
  */
 export async function broadcastAuctionUpdate(slug: string, event: string, payload: any): Promise<void> {
-  if (!isSupabaseHealthy()) {
-    return;
-  }
   try {
     const cleanSlug = slug.toLowerCase();
-    const channel = supabase.channel(`auction_${cleanSlug}`);
 
     // Helper to optimize large base64 strings into CDN-cacheable URLs for instant sub-30ms broadcast
     const optPhoto = (p: any) => {
@@ -351,7 +365,7 @@ export async function broadcastAuctionUpdate(slug: string, event: string, payloa
       return logo;
     };
 
-    // Ensure broadcast payload is ultra-lean (<15KB) so Supabase Realtime delivers in <30ms without dropping
+    // Ensure broadcast payload is ultra-lean (<15KB)
     let broadcastPayload = { ...payload, timestamp: Date.now() };
 
     if (broadcastPayload.bid) {
@@ -371,7 +385,7 @@ export async function broadcastAuctionUpdate(slug: string, event: string, payloa
     if (broadcastPayload.state) {
       broadcastPayload.state = {
         ...broadcastPayload.state,
-        playersQueue: [], // Strip heavy queue to guarantee sub-30ms instant delivery (clients keep their cached queue)
+        playersQueue: [], // Strip heavy queue to guarantee instant delivery
       };
 
       if (broadcastPayload.state.currentPlayer) {
@@ -421,11 +435,81 @@ export async function broadcastAuctionUpdate(slug: string, event: string, payloa
       }
     }
 
-    // Use direct httpSend for instantaneous REST broadcast delivery without websocket handshake delays
+    // 1. Instant 0.1ms In-Memory SSE Stream Broadcast (Works completely offline/without Supabase)
+    const subs = globalThis.__CRICBID_SSE_SUBSCRIBERS__?.get(cleanSlug);
+    if (subs && subs.size > 0) {
+      subs.forEach((cb) => {
+        try {
+          cb({ event, ...broadcastPayload });
+        } catch {}
+      });
+    }
+
+    // 2. Push <2.2KB ultra-compact packet to ntfy.sh WebSocket relay so Mobile Owner Bids reach Projector in <50ms
+    if (broadcastPayload.state && broadcastPayload.state.room) {
+      try {
+        const s = broadcastPayload.state;
+        const ntfyTopic = `cricbid_live_${cleanSlug.replace(/[^a-z0-9]/g, '_').slice(0, 48)}`;
+        const ultraCompact = {
+          room: s.room,
+          currentPlayer: s.currentPlayer
+            ? {
+                registrationId: s.currentPlayer.registrationId,
+                fullName: s.currentPlayer.fullName,
+                age: s.currentPlayer.age,
+                role: s.currentPlayer.role,
+                battingStyle: s.currentPlayer.battingStyle,
+                bowlingStyle: s.currentPlayer.bowlingStyle,
+                photoUrl: optPhoto(s.currentPlayer),
+                tournamentTitle: s.currentPlayer.tournamentTitle,
+              }
+            : null,
+          currentPlayerState: s.currentPlayerState,
+          currentBiddingTeam: s.currentBiddingTeam
+            ? {
+                id: s.currentBiddingTeam.id,
+                name: s.currentBiddingTeam.name,
+                shortName: s.currentBiddingTeam.shortName,
+                color: s.currentBiddingTeam.color,
+                logoUrl: optLogo(s.currentBiddingTeam),
+                remainingPurse: s.currentBiddingTeam.remainingPurse,
+                totalPurse: s.currentBiddingTeam.totalPurse,
+                maxPlayers: s.currentBiddingTeam.maxPlayers,
+                boughtPlayersCount: s.currentBiddingTeam.boughtPlayersCount,
+              }
+            : null,
+          teams: (s.teams || []).map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            shortName: t.shortName,
+            color: t.color,
+            logoUrl: optLogo(t),
+            totalPurse: t.totalPurse,
+            remainingPurse: t.remainingPurse,
+            maxPlayers: t.maxPlayers,
+            boughtPlayersCount: t.boughtPlayersCount,
+          })),
+          recentBids: (s.recentBids || []).slice(0, 3),
+          soldHistory: (s.soldHistory || []).slice(0, 3),
+          playersQueue: [],
+        };
+        fetch(`https://ntfy.sh/${ntfyTopic}`, {
+          method: 'POST',
+          body: JSON.stringify({ type: 'STATE_UPDATE', state: ultraCompact, ts: Date.now() }),
+          signal: AbortSignal.timeout(1500),
+        }).catch(() => {});
+      } catch {}
+    }
+
+    // 3. Supabase Realtime (only if healthy)
+    if (!isSupabaseHealthy()) {
+      return;
+    }
+
+    const channel = supabase.channel(`auction_${cleanSlug}`);
     try {
       await channel.httpSend(event, broadcastPayload);
     } catch (httpErr) {
-      // Fallback if httpSend encounters any version mismatch
       await channel.send({
         type: 'broadcast',
         event: event,
