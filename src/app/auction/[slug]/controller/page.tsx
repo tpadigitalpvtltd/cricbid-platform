@@ -389,7 +389,7 @@ export default function AuctioneerControllerPage() {
   const playerPhotoInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-Next Player State & Timers (Defaults to FALSE for full Manual Auctioneer Control)
-  const [isAutoNextEnabled, setIsAutoNextEnabled] = useState<boolean>(false);
+  const [isAutoNextEnabled, setIsAutoNextEnabled] = useState<boolean>(true);
   const [autoNextCountdown, setAutoNextCountdown] = useState<number | null>(null);
   const autoNextTimerRef = useRef<NodeJS.Timeout | null>(null);
   const autoNextIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -730,9 +730,13 @@ export default function AuctioneerControllerPage() {
     if (playersQueue.length === 0) return;
     const currId = currentPlayer?.registrationId;
     const currIdx = playersQueue.findIndex((pq) => pq.player.registrationId === currId);
-    let nextItem = playersQueue.slice(currIdx + 1).find((pq) => pq.status === 'PENDING');
-    if (!nextItem) {
-      nextItem = playersQueue.find((pq) => pq.status === 'PENDING' && pq.player.registrationId !== currId);
+    const pendingList = playersQueue.filter(
+      (pq) => pq.status === 'PENDING' && pq.player.registrationId !== currId
+    );
+    let nextItem: any = null;
+    if (pendingList.length > 0) {
+      const randomIdx = Math.floor(Math.random() * pendingList.length);
+      nextItem = pendingList[randomIdx];
     }
     if (!nextItem) {
       const nextIdx = currIdx >= 0 && currIdx < playersQueue.length - 1 ? currIdx + 1 : 0;

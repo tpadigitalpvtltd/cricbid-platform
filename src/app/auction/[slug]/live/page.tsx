@@ -312,22 +312,32 @@ export default function MobileSpectatorLivePage() {
 
                 {/* Hero Player Frame with Caution Tape Bidding Bar */}
                 <div className="w-full h-80 sm:h-96 rounded-2xl border-2 border-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.3)] relative overflow-hidden bg-slate-950 flex flex-col justify-end">
-                  {/* Photo */}
+                  {/* Photo with Ambient Backdrop & Smart Fit */}
                   {currentPlayer.photoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={currentPlayer.photoUrl}
-                      alt={currentPlayer.fullName}
-                      className="absolute inset-0 w-full h-full object-cover object-top"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                        const parent = (e.target as HTMLElement).parentElement;
-                        if (parent) {
-                          const fallback = parent.querySelector('.live-initials-badge');
-                          if (fallback) (fallback as HTMLElement).style.display = 'flex';
-                        }
-                      }}
-                    />
+                    <>
+                      {/* Ambient Glow Backdrop */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={currentPlayer.photoUrl}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover blur-xl opacity-40 scale-110 pointer-events-none"
+                      />
+                      {/* Foreground Sharp Player Photo */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={currentPlayer.photoUrl}
+                        alt={currentPlayer.fullName}
+                        className="absolute inset-0 w-full h-full object-contain object-center z-10"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                          const parent = (e.target as HTMLElement).parentElement;
+                          if (parent) {
+                            const fallback = parent.querySelector('.live-initials-badge');
+                            if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                          }
+                        }}
+                      />
+                    </>
                   ) : null}
                   <div
                     className="live-initials-badge absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-950 to-amber-950 flex items-center justify-center font-black text-amber-400 text-6xl"

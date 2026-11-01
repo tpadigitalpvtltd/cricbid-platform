@@ -895,7 +895,10 @@ export function buildFullAuctionStateSync(params: {
 
   // If no current player is set, pick the first pending player
   if (!currentPlayer && playersQueue.length > 0) {
-    const firstPending = playersQueue.find((pq) => pq.status === 'PENDING') || playersQueue[0];
+    const allPending = playersQueue.filter((pq) => pq.status === 'PENDING');
+    const firstPending = allPending.length > 0 
+      ? allPending[Math.floor(Math.random() * allPending.length)]
+      : playersQueue[0];
     if (firstPending) {
       currentPlayer = firstPending.player;
       currentPlayerState = {
@@ -1252,22 +1255,29 @@ export async function executeAuctioneerAction(params: {
     if (!nextPlayer) {
       const currentIndex = rawPlayers.findIndex((p) => p.registrationId === room.currentPlayerId);
       if (action === 'NEXT_PLAYER') {
-        // 1. Look forward for next un-auctioned (PENDING) player
-        nextPlayer = rawPlayers.slice(currentIndex + 1).find((p) => {
+        // 1. Gather all un-auctioned (PENDING) players in the draft pool
+        const pendingPlayers = rawPlayers.filter((p) => {
           const st = playerStates[p.registrationId];
-          return !st || st.status === 'PENDING';
+          return (!st || st.status === 'PENDING') && p.registrationId !== room.currentPlayerId;
         });
-        // 2. Wrap around from beginning for next un-auctioned player
-        if (!nextPlayer) {
-          nextPlayer = rawPlayers.find((p) => {
+
+        // 2. Pick a RANDOM pending player so sequence is NOT ascending / predictable!
+        if (pendingPlayers.length > 0) {
+          const randomIndex = Math.floor(Math.random() * pendingPlayers.length);
+          nextPlayer = pendingPlayers[randomIndex];
+        } else {
+          // If no pending players left, check un-sold players
+          const unsoldPlayers = rawPlayers.filter((p) => {
             const st = playerStates[p.registrationId];
-            return (!st || st.status === 'PENDING') && p.registrationId !== room.currentPlayerId;
+            return st && st.status === 'UNSOLD' && p.registrationId !== room.currentPlayerId;
           });
-        }
-        // 3. Fallback: next player in list
-        if (!nextPlayer && rawPlayers.length > 0) {
-          const targetIndex = currentIndex >= 0 && currentIndex < rawPlayers.length - 1 ? currentIndex + 1 : 0;
-          nextPlayer = rawPlayers[targetIndex];
+          if (unsoldPlayers.length > 0) {
+            const randomIndex = Math.floor(Math.random() * unsoldPlayers.length);
+            nextPlayer = unsoldPlayers[randomIndex];
+          } else if (rawPlayers.length > 0) {
+            const targetIndex = currentIndex >= 0 && currentIndex < rawPlayers.length - 1 ? currentIndex + 1 : 0;
+            nextPlayer = rawPlayers[targetIndex];
+          }
         }
       } else {
         const targetIndex = currentIndex > 0 ? currentIndex - 1 : rawPlayers.length - 1;

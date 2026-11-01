@@ -5,6 +5,12 @@ import { useParams } from 'next/navigation';
 import confetti from 'canvas-confetti';
 import {
   Volume2,
+  ZoomIn,
+  RotateCcw,
+  ZoomOut,
+  ChevronUp,
+  ChevronDown,
+  MoveVertical,
   VolumeX,
   Maximize2,
   Minimize2,
@@ -86,6 +92,12 @@ export default function ProjectorAuctionPage() {
   // 5-Second Final Call Hammer Timer State (NO automatic counting timer)
   const [hammerCountdown, setHammerCountdown] = useState<number | null>(null);
   const hammerTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+
+  // Photo Zoom, Pan & Framing Controls
+  const [photoFit, setPhotoFit] = useState<'contain' | 'cover'>('contain');
+  const [zoomScale, setZoomScale] = useState<number>(1);
+  const [panY, setPanY] = useState<number>(0);
 
   // Sold / Unsold Celebration Modals
   const [showSoldModal, setShowSoldModal] = useState(false);
@@ -386,17 +398,88 @@ export default function ProjectorAuctionPage() {
                 {/* Stadium Spotlight Behind Player */}
                 <div className="absolute inset-0 bg-radial from-amber-500/20 via-transparent to-transparent opacity-80 pointer-events-none" />
 
-                {/* Massive Hero Photo */}
+                {/* Massive Hero Photo with Ambient Glow & Smart Framing */}
                 {currentPlayer.photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={currentPlayer.photoUrl}
-                    alt={currentPlayer.fullName}
-                    className="absolute inset-0 w-full h-full object-cover object-top"
-                  />
+                  <>
+                    {/* Ambient Blurred Backdrop so there are never empty black bars */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={currentPlayer.photoUrl}
+                      alt=""
+                      className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-40 scale-125 pointer-events-none"
+                    />
+                    {/* Foreground Sharp Player Photo with Zoom & Pan */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={currentPlayer.photoUrl}
+                      alt={currentPlayer.fullName}
+                      style={{
+                        transform: `scale(${zoomScale}) translateY(${panY}%)`,
+                        transformOrigin: 'center center',
+                      }}
+                      className={`absolute inset-0 w-full h-full ${
+                        photoFit === 'contain' ? 'object-contain' : 'object-cover object-center'
+                      } transition-all duration-200 z-10`}
+                    />
+                  </>
                 ) : (
                   <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-950 to-amber-950/80 flex items-center justify-center font-black text-amber-400 text-6xl sm:text-8xl tracking-widest">
                     {getInitials(currentPlayer.fullName)}
+                  </div>
+                )}
+
+                {/* Interactive Photo Zoom & Pan Floating Controls */}
+                {currentPlayer.photoUrl && (
+                  <div className="absolute top-14 right-4 z-30 flex items-center gap-1 bg-slate-950/85 backdrop-blur-md p-1 rounded-xl border border-amber-400/40 shadow-[0_4px_20px_rgba(0,0,0,0.6)] text-slate-300">
+                    <button
+                      type="button"
+                      onClick={() => setZoomScale((z) => Math.max(0.6, +(z - 0.1).toFixed(2)))}
+                      className="p-1.5 rounded-lg hover:bg-slate-800 hover:text-amber-400 text-xs font-bold transition-colors"
+                      title="Zoom Out Photo"
+                    >
+                      <ZoomOut className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPhotoFit((f) => (f === 'contain' ? 'cover' : 'contain'))}
+                      className="px-2 py-1 rounded-lg hover:bg-slate-800 hover:text-amber-400 text-[10px] font-black uppercase tracking-wider transition-colors border border-slate-700/60"
+                      title="Toggle Fit Full Photo / Fill Box"
+                    >
+                      {photoFit === 'contain' ? 'Fit' : 'Fill'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setZoomScale((z) => Math.min(2.5, +(z + 0.1).toFixed(2)))}
+                      className="p-1.5 rounded-lg hover:bg-slate-800 hover:text-amber-400 text-xs font-bold transition-colors"
+                      title="Zoom In Photo"
+                    >
+                      <ZoomIn className="w-3.5 h-3.5" />
+                    </button>
+                    <div className="w-[1px] h-4 bg-slate-700 mx-0.5" />
+                    <button
+                      type="button"
+                      onClick={() => setPanY((y) => y - 5)}
+                      className="p-1.5 rounded-lg hover:bg-slate-800 hover:text-amber-400 text-xs font-bold transition-colors"
+                      title="Move Photo Up"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPanY((y) => y + 5)}
+                      className="p-1.5 rounded-lg hover:bg-slate-800 hover:text-amber-400 text-xs font-bold transition-colors"
+                      title="Move Photo Down"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setZoomScale(1); setPanY(0); setPhotoFit('contain'); }}
+                      className="p-1.5 rounded-lg hover:bg-slate-800 hover:text-amber-400 text-xs font-bold transition-colors"
+                      title="Reset Zoom & Position"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                    </button>
                   </div>
                 )}
 
