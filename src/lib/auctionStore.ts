@@ -965,9 +965,9 @@ export function buildFullAuctionStateSync(params: {
 export async function getFullAuctionState(slug: string): Promise<FullAuctionState | null> {
   const cleanSlug = slug.toLowerCase();
 
-  // Return fresh state from memory cache (1500ms) to prevent database flooding and race conditions
+  // Return fresh state from memory cache (400ms) to prevent database flooding and race conditions
   const cached = AUCTION_STATE_CACHE[cleanSlug];
-  if (cached && (Date.now() - cached.timestamp < 1500)) {
+  if (cached && (Date.now() - cached.timestamp < 400)) {
     return cached.state;
   }
 
@@ -1106,11 +1106,11 @@ export async function placeAuctionBid(params: {
     bids: allBids,
   });
 
-  // Save room and bid concurrently in background (non-blocking for speed)
-  Promise.all([
+  // Ensure room and bid are fully saved to database before responding (guarantees zero bid reset / loss)
+  await Promise.all([
     saveAuctionRoom(room),
     recordAuctionBid(bidRecord),
-  ]).catch((err) => console.error('Bid background save error:', err));
+  ]);
 
   // Broadcast realtime update with the complete state to all viewers in background (non-blocking for sub-15ms response!)
   setCachedAuctionState(cleanSlug, fullState);
@@ -1170,39 +1170,39 @@ export async function executeAuctioneerAction(params: {
     room.timerSeconds = 10;
     room.lastAction = 'RESUME';
     room.lastActionTimestamp = Date.now();
-    saveAuctionRoom(room).catch((e) => console.error(e));
+    await saveAuctionRoom(room);
   } else if (action === 'PAUSE') {
     room.status = 'PAUSED';
     room.timerRunning = false;
     room.lastAction = 'PAUSE';
     room.lastActionTimestamp = Date.now();
-    saveAuctionRoom(room).catch((e) => console.error(e));
+    await saveAuctionRoom(room);
   } else if (action === 'RESUME') {
     room.status = 'ACTIVE';
     room.timerRunning = true;
     room.lastAction = 'RESUME';
     room.lastActionTimestamp = Date.now();
-    saveAuctionRoom(room).catch((e) => console.error(e));
+    await saveAuctionRoom(room);
   } else if (action === 'RESET_TIMER') {
     room.timerSeconds = 10;
     room.timerRunning = false;
     room.timerExpiresAt = null;
     room.lastAction = 'RESET';
     room.lastActionTimestamp = Date.now();
-    saveAuctionRoom(room).catch((e) => console.error(e));
+    await saveAuctionRoom(room);
   } else if (action === 'START_HAMMER_5S') {
     room.timerSeconds = 5;
     room.timerRunning = true;
     room.timerExpiresAt = Date.now() + 5200;
     room.lastAction = 'HAMMER_5S';
     room.lastActionTimestamp = Date.now();
-    saveAuctionRoom(room).catch((e) => console.error(e));
+    await saveAuctionRoom(room);
   } else if (action === 'CANCEL_HAMMER') {
     room.timerRunning = false;
     room.timerExpiresAt = null;
     room.lastAction = 'CANCEL_HAMMER';
     room.lastActionTimestamp = Date.now();
-    saveAuctionRoom(room).catch((e) => console.error(e));
+    await saveAuctionRoom(room);
   } else if (action === 'SET_PLAYER' || action === 'REAUCTION_PLAYER') {
     const targetPlayerId = payload?.playerId;
     const player = rawPlayers.find((p) => p.registrationId === targetPlayerId);
@@ -1443,7 +1443,7 @@ export async function executeAuctioneerAction(params: {
       room.lastActionTimestamp = Date.now();
       room.timerRunning = false;
       room.currentBiddingTeamId = null;
-      saveAuctionRoom(room).catch((e) => console.error(e));
+      await saveAuctionRoom(room);
     }
 
     await saveAuctionPlayerState(unsoldState);
@@ -1578,10 +1578,10 @@ export async function executeAuctioneerAction(params: {
         room.lastAction = 'EDIT';
       }
       room.lastActionTimestamp = Date.now();
-      saveAuctionRoom(room).catch((e) => console.error(e));
+      await saveAuctionRoom(room);
     }
 
-    saveAuctionPlayerState(updatedState).catch((e) => console.error(e));
+    await saveAuctionPlayerState(updatedState).catch((e) => console.error(e));
 
     // Also update player photo or details in registrations store and Supabase if provided
     if (payload?.photoUrl || payload?.fullName || payload?.role) {
@@ -1608,7 +1608,7 @@ export async function executeAuctioneerAction(params: {
       room.currentBid = room.basePrice;
     }
     room.updatedAt = new Date().toISOString();
-    saveAuctionRoom(room).catch((e) => console.error(e));
+    await saveAuctionRoom(room);
   } else if (action === 'UPDATE_PLAYER_BASE_PRICE') {
     const targetPlayerId = payload?.playerId;
     const newBasePrice = Number(payload?.basePrice) || 1000;
@@ -1622,11 +1622,11 @@ export async function executeAuctioneerAction(params: {
       existing.basePrice = newBasePrice;
       existing.updatedAt = new Date().toISOString();
       playerStates[targetPlayerId] = existing;
-      saveAuctionPlayerState(existing).catch((e) => console.error(e));
+      await saveAuctionPlayerState(existing).catch((e) => console.error(e));
 
       if (room.currentPlayerId === targetPlayerId && !room.currentBiddingTeamId) {
         room.currentBid = newBasePrice;
-        saveAuctionRoom(room).catch((e) => console.error(e));
+        await saveAuctionRoom(room);
       }
     }
   } else if (action === 'SAVE_TEAM') {
@@ -1672,7 +1672,7 @@ export async function executeAuctioneerAction(params: {
       teams = teams.filter((t) => t.id !== teamId);
       if (room.currentBiddingTeamId === teamId) {
         room.currentBiddingTeamId = null;
-        saveAuctionRoom(room).catch((e) => console.error(e));
+        await saveAuctionRoom(room);
       }
       await deleteTournamentTeam(cleanSlug, teamId);
       await saveTournamentTeams(cleanSlug, teams);
@@ -1746,7 +1746,7 @@ export async function executeAuctioneerAction(params: {
   });
 
   // Ensure latest computed team purse & squad counts are safely persisted
-  saveTournamentTeams(cleanSlug, fullState.teams).catch((e) => console.error(e));
+  await saveTournamentTeams(cleanSlug, fullState.teams).catch((e) => console.error(e));
 
   // Broadcast the full updated state to all connected screens in background (non-blocking for sub-25ms response!)
   setCachedAuctionState(cleanSlug, fullState);

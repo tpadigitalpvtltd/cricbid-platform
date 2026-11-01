@@ -335,15 +335,49 @@ export default function AuctioneerControllerPage() {
   const isBidInFlightRef = useRef(false);
   const nextQueuedBidRef = useRef<{ teamId: string; amount: number } | null>(null);
   const hammerCancelledRef = useRef(false);
+  const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
+  const supabaseChannelRef = useRef<any>(null);
+
+  // Initialize native cross-tab BroadcastChannel for 0ms instantaneous projector sync
+  useEffect(() => {
+    if (!slug || typeof window === 'undefined' || !('BroadcastChannel' in window)) return;
+    const bc = new BroadcastChannel(`cricbid_auction_${slug.toLowerCase()}`);
+    broadcastChannelRef.current = bc;
+    return () => {
+      bc.close();
+      broadcastChannelRef.current = null;
+    };
+  }, [slug]);
+
+  // Broadcast helper to mirror state immediately across all projector screens
+  const broadcastStateToScreens = (newState: FullAuctionState) => {
+    if (!newState) return;
+    // 1. Native cross-tab broadcast (0ms delay)
+    if (broadcastChannelRef.current) {
+      try {
+        broadcastChannelRef.current.postMessage({ type: 'STATE_UPDATE', state: newState });
+      } catch (e) {}
+    }
+    // 2. Supabase WebSocket (<30ms delay)
+    if (supabaseChannelRef.current) {
+      try {
+        supabaseChannelRef.current.send({
+          type: 'broadcast',
+          event: 'STATE_UPDATE',
+          payload: { state: newState },
+        }).catch(() => {});
+      } catch (e) {}
+    }
+  };
 
   useEffect(() => {
     fetchState();
-    // 1200ms lightweight polling when active (API response is now only ~30KB)
+    // 1200ms lightweight polling fallback
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && !document.hidden) {
         fetchState();
       }
-    }, 2200);
+    }, 1200);
     return () => clearInterval(interval);
   }, [slug]);
 
@@ -351,15 +385,25 @@ export default function AuctioneerControllerPage() {
   useEffect(() => {
     if (!slug) return;
     const channel = supabase.channel(`auction_${slug.toLowerCase()}`);
-    channel.on('broadcast', { event: '*' }, (msg: any) => {
+    supabaseChannelRef.current = channel;
+
+    const onIncoming = (msg: any) => {
       if (msg?.payload?.state) {
         setState((prev) => mergeStateSafe(prev, msg.payload.state));
       } else {
         fetchState();
       }
-    }).subscribe();
+    };
+
+    channel
+      .on('broadcast', { event: 'BID_PLACED' }, onIncoming)
+      .on('broadcast', { event: 'STATE_UPDATE' }, onIncoming)
+      .on('broadcast', { event: '*' }, onIncoming)
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabaseChannelRef.current = null;
     };
   }, [slug]);
 
@@ -500,7 +544,11 @@ export default function AuctioneerControllerPage() {
           setPinError('Session expired. Please enter Admin PIN again.');
         }
       } else if (json.state) {
-        setState((prev) => mergeStateSafe(prev, json.state));
+        setState((prev) => {
+          const merged = mergeStateSafe(prev, json.state);
+          broadcastStateToScreens(merged);
+          return merged;
+        });
       }
       return json;
     } catch (e: any) {
@@ -531,7 +579,11 @@ export default function AuctioneerControllerPage() {
         }
         fetchState();
       } else if (json.state) {
-        setState((prev) => mergeStateSafe(prev, json.state));
+        setState((prev) => {
+          const merged = mergeStateSafe(prev, json.state);
+          broadcastStateToScreens(merged);
+          return merged;
+        });
         setCustomBidAmount('');
       }
     } catch (e: any) {
@@ -565,10 +617,12 @@ export default function AuctioneerControllerPage() {
 
     // Instant optimistic feedback in 0ms!
     const now = Date.now();
+    const team = teams.find((t) => t.id === teamId);
+    let optimisticState: FullAuctionState | null = null;
+
     setState((prev) => {
       if (!prev) return prev;
-      const team = prev.teams.find((t) => t.id === teamId);
-      return {
+      optimisticState = {
         ...prev,
         room: {
           ...prev.room,
@@ -581,7 +635,12 @@ export default function AuctioneerControllerPage() {
         },
         currentBiddingTeam: team || prev.currentBiddingTeam,
       };
+      return optimisticState;
     });
+
+    if (optimisticState) {
+      broadcastStateToScreens(optimisticState);
+    }
 
     if (isBidInFlightRef.current) {
       // Buffer latest queued bid
@@ -591,24 +650,38 @@ export default function AuctioneerControllerPage() {
     }
   };
 
-  // Instant 1-Tap Direct Team Bidding
+  // Instant 1-Tap Direct Team Bidding (+₹1,000)
   const handleDirectTeamBid = async (teamId: string) => {
     if (!currentPlayer) {
       showToast('Please load a player on stage first.', 'error');
       return;
     }
-    setSelectedTeamForBid(teamId);
     const team = teams.find((t) => t.id === teamId);
     if (!team) return;
 
+    if (currentBiddingTeam?.id === teamId) {
+      showToast(`${team.name} is already the leading bidder!`, 'info');
+      return;
+    }
+
     // Direct tap logic:
     // If no bid placed yet -> Opening bid is base price (e.g. ₹1,000)
-    // If bid already placed -> currentBid + currentIncrement
+    // If bid already placed -> currentBid + 1,000 (fixed step as requested)
     let bidAmount: number;
     if (!currentBiddingTeam || currentBid === 0) {
       bidAmount = state?.currentPlayerState?.basePrice || room.basePrice || 1000;
     } else {
-      bidAmount = currentBid + currentIncrement;
+      bidAmount = currentBid + 1000;
+    }
+
+    if (team.remainingPurse < bidAmount) {
+      showToast(`Insufficient balance! ${team.name} has only ₹${team.remainingPurse.toLocaleString('en-IN')}`, 'error');
+      return;
+    }
+
+    if (team.boughtPlayersCount >= team.maxPlayers) {
+      showToast(`${team.name} has already filled their max squad limit of ${team.maxPlayers} players!`, 'error');
+      return;
     }
 
     handlePlaceFloorBid(teamId, bidAmount);
@@ -624,11 +697,13 @@ export default function AuctioneerControllerPage() {
 
     let nextItem: any = null;
     if (isPrefer) {
-      // 1. Look forward for next PENDING player
-      nextItem = playersQueue.slice(currIdx + 1).find((pq) => pq.status === 'PENDING');
-      // 2. Wrap around from beginning for next PENDING player
-      if (!nextItem) {
-        nextItem = playersQueue.find((pq) => pq.status === 'PENDING' && pq.player.registrationId !== currId);
+      // 1. Pick a RANDOM pending player so sequence is unpredictable / non-ascending
+      const pendingList = playersQueue.filter(
+        (pq) => pq.status === 'PENDING' && pq.player.registrationId !== currId
+      );
+      if (pendingList.length > 0) {
+        const randIdx = Math.floor(Math.random() * pendingList.length);
+        nextItem = pendingList[randIdx];
       }
     }
 
@@ -653,9 +728,10 @@ export default function AuctioneerControllerPage() {
     const now = Date.now();
 
     // 0ms instant optimistic update
+    let optimisticNextState: FullAuctionState | null = null;
     setState((prev) => {
       if (!prev) return prev;
-      return {
+      optimisticNextState = {
         ...prev,
         currentPlayer: nextItem.player,
         currentPlayerState: {
@@ -677,7 +753,12 @@ export default function AuctioneerControllerPage() {
         },
         currentBiddingTeam: null,
       };
+      return optimisticNextState;
     });
+
+    if (optimisticNextState) {
+      broadcastStateToScreens(optimisticNextState);
+    }
 
     executeAction('NEXT_PLAYER', { playerId: nextItem.player.registrationId }).catch((e) => console.error(e));
   };
@@ -748,9 +829,10 @@ export default function AuctioneerControllerPage() {
     const now = Date.now();
 
     // 0ms instant optimistic update
+    let optimisticNextState: FullAuctionState | null = null;
     setState((prev) => {
       if (!prev) return prev;
-      return {
+      optimisticNextState = {
         ...prev,
         currentPlayer: nextItem.player,
         currentPlayerState: {
@@ -772,7 +854,12 @@ export default function AuctioneerControllerPage() {
         },
         currentBiddingTeam: null,
       };
+      return optimisticNextState;
     });
+
+    if (optimisticNextState) {
+      broadcastStateToScreens(optimisticNextState);
+    }
 
     setLastDecisionMsg({
       type: 'UNSOLD',
@@ -1942,73 +2029,55 @@ export default function AuctioneerControllerPage() {
                 </span>
               </div>
 
-              {/* 1. Quick Increment Selector */}
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-[11px] font-black uppercase text-slate-400 block">
-                    1. Select Bid Step / Increment
-                  </label>
-                  <span className="text-[10px] text-amber-400 font-mono font-bold">
-                    Active Step: +₹{currentIncrement.toLocaleString('en-IN')}
+              {/* DIRECT 1-TAP FRANCHISE BIDDING (+₹1,000 PER CLICK) */}
+              <div className="mb-2">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <label className="text-xs font-black uppercase tracking-wider text-amber-400 block">
+                      Franchises (Tap Any Team to Place Bid)
+                    </label>
+                    <span className="text-[11px] text-slate-400">
+                      Direct 1-tap bidding: each click advances bid by <strong className="text-amber-300">+₹1,000</strong>
+                    </span>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                    ⚡ 1-Tap Active
                   </span>
                 </div>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-                  {quickIncrements.map((inc) => (
-                    <button
-                      key={inc}
-                      type="button"
-                      onClick={() => setSelectedIncrement(inc)}
-                      className={`py-2 rounded-xl text-xs font-mono font-black text-center transition-all ${
-                        currentIncrement === inc
-                          ? 'bg-amber-400 text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.5)] ring-2 ring-amber-300'
-                          : 'bg-slate-950 border border-slate-700 hover:border-slate-500 text-slate-300 hover:text-white'
-                      }`}
-                    >
-                      +₹{inc >= 1000 ? `${inc / 1000}k` : inc}
-                    </button>
-                  ))}
-                </div>
-              </div>
 
-              {/* 2. Direct 1-Tap Team Bidding Grid */}
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-[11px] font-black uppercase text-slate-400 block">
-                    2. Franchises (Tap Any Team to Place Bid Instantly)
-                  </label>
-                  <span className="text-[10px] text-emerald-400 font-bold animate-pulse">
-                    ⚡ 1-Tap Bid Enabled
-                  </span>
-                </div>
                 {teams.length === 0 ? (
-                  <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-center text-xs text-slate-500">
+                  <div className="p-6 rounded-2xl bg-slate-950 border border-slate-800 text-center text-xs text-slate-500">
                     No franchises registered yet. Go to <strong className="text-amber-400">Franchises & Purse</strong> tab to add teams.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-60 overflow-y-auto pr-1 scrollbar-thin">
+                  <div className="grid grid-cols-2 gap-3">
                     {teams.map((t) => {
                       const isCurrentHolding = currentBiddingTeam?.id === t.id;
                       const nextAmount = !currentBiddingTeam || currentBid === 0
                         ? (state?.currentPlayerState?.basePrice || room.basePrice || 1000)
-                        : (currentBid + currentIncrement);
+                        : (currentBid + 1000);
                       const canAfford = t.remainingPurse >= nextAmount;
+                      const hasSquadRoom = t.boughtPlayersCount < t.maxPlayers;
+                      const canBid = canAfford && hasSquadRoom && !isCurrentHolding && Boolean(currentPlayer);
 
                       return (
                         <button
                           key={t.id}
                           type="button"
                           onClick={() => handleDirectTeamBid(t.id)}
-                          disabled={actionLoading || !canAfford || !currentPlayer}
-                          className={`p-3 rounded-2xl border text-left transition-all relative transform active:scale-95 cursor-pointer shadow-md flex flex-col justify-between ${
+                          disabled={actionLoading || !canBid}
+                          className={`p-3.5 rounded-2xl border text-left transition-all relative transform active:scale-95 cursor-pointer shadow-md flex flex-col justify-between ${
                             isCurrentHolding
                               ? 'border-emerald-400 bg-emerald-500/20 ring-2 ring-emerald-400/50 shadow-[0_0_20px_rgba(16,185,129,0.25)]'
-                              : 'border-slate-800 bg-slate-950 hover:border-amber-400 hover:bg-slate-900'
-                          } ${!canAfford || !currentPlayer ? 'opacity-35 cursor-not-allowed' : ''}`}
+                              : canAfford && hasSquadRoom
+                              ? 'border-slate-800 bg-slate-950 hover:border-amber-400 hover:bg-slate-900/90'
+                              : 'border-slate-900 bg-slate-950/60 opacity-40 cursor-not-allowed'
+                          }`}
                         >
                           <div>
-                            <div className="flex items-center gap-2 mb-1.5">
+                            <div className="flex items-center gap-2.5 mb-2">
                               <div
-                                className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center font-black text-[10px] text-slate-950 shrink-0 shadow"
+                                className="w-8 h-8 rounded-xl overflow-hidden flex items-center justify-center font-black text-xs text-slate-950 shrink-0 shadow"
                                 style={{ backgroundColor: t.color || '#f59e0b' }}
                               >
                                 {t.logoUrl ? (
@@ -2018,25 +2087,34 @@ export default function AuctioneerControllerPage() {
                                   t.shortName || 'TM'
                                 )}
                               </div>
-                              <span className="text-xs font-black text-white truncate flex-1">
-                                {t.name}
-                              </span>
+                              <div className="min-w-0 flex-1">
+                                <span className="text-xs font-black text-white truncate block">
+                                  {t.name}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-mono block">
+                                  Purse: <strong className={!canAfford ? 'text-rose-400' : 'text-amber-300'}>₹{t.remainingPurse.toLocaleString('en-IN')}</strong>
+                                </span>
+                              </div>
                             </div>
-
-                            <span className="text-[10px] text-slate-400 font-mono block mb-2">
-                              Purse: <strong className="text-amber-300">₹{t.remainingPurse.toLocaleString('en-IN')}</strong>
-                            </span>
                           </div>
 
                           {/* Direct Tap Action Pill */}
-                          <div className="pt-1.5 border-t border-slate-800/80">
+                          <div className="pt-2 border-t border-slate-800/80">
                             {isCurrentHolding ? (
-                              <span className="w-full py-1 rounded-lg text-[10px] font-black uppercase bg-emerald-500 text-slate-950 flex items-center justify-center gap-1 shadow">
-                                <CheckCircle2 className="w-3 h-3 stroke-[2.5]" /> Leading Bidder
+                              <span className="w-full py-2 rounded-xl text-xs font-black uppercase bg-emerald-500 text-slate-950 flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                                <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" /> Leading Bidder
+                              </span>
+                            ) : !canAfford ? (
+                              <span className="w-full py-2 rounded-xl text-[11px] font-black uppercase bg-rose-950/60 border border-rose-900/80 text-rose-300 flex items-center justify-center gap-1">
+                                ⚠️ Insufficient Purse
+                              </span>
+                            ) : !hasSquadRoom ? (
+                              <span className="w-full py-2 rounded-xl text-[11px] font-black uppercase bg-slate-900 border border-slate-800 text-slate-400 flex items-center justify-center gap-1">
+                                Squad Full ({t.maxPlayers})
                               </span>
                             ) : (
-                              <span className="w-full py-1 rounded-lg text-[10px] font-black uppercase bg-amber-400 hover:bg-amber-300 text-slate-950 flex items-center justify-center gap-1 shadow">
-                                {!currentBiddingTeam ? `Bid ₹${nextAmount.toLocaleString('en-IN')}` : `+ Bid ₹${nextAmount.toLocaleString('en-IN')}`}
+                              <span className="w-full py-2 rounded-xl text-xs font-black uppercase bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-yellow-300 text-slate-950 flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 font-mono">
+                                {!currentBiddingTeam ? `Open ₹${nextAmount.toLocaleString('en-IN')}` : `+ Bid ₹${nextAmount.toLocaleString('en-IN')}`}
                               </span>
                             )}
                           </div>
@@ -2045,40 +2123,6 @@ export default function AuctioneerControllerPage() {
                     })}
                   </div>
                 )}
-              </div>
-
-              {/* Custom Bid Input */}
-              <div className="mb-4 pt-3 border-t border-slate-800">
-                <label className="text-[11px] font-black uppercase text-slate-400 block mb-1.5">
-                  3. Or Enter Custom Bid Amount (₹)
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    placeholder={`Min: ₹${(currentBid + currentIncrement).toLocaleString('en-IN')}`}
-                    value={customBidAmount}
-                    onChange={(e) => setCustomBidAmount(e.target.value ? Number(e.target.value) : '')}
-                    className="flex-1 px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono text-sm focus:outline-none focus:border-amber-400"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!selectedTeamForBid) {
-                        showToast('Please select a franchise first', 'error');
-                        return;
-                      }
-                      if (!customBidAmount || customBidAmount <= currentBid) {
-                        showToast(`Bid must be higher than current stage bid (₹${currentBid.toLocaleString('en-IN')})`, 'error');
-                        return;
-                      }
-                      handlePlaceFloorBid(selectedTeamForBid, customBidAmount);
-                    }}
-                    disabled={actionLoading || !selectedTeamForBid || !customBidAmount}
-                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-black uppercase tracking-wider disabled:opacity-40 transition-colors"
-                  >
-                    Place Bid
-                  </button>
-                </div>
               </div>
             </div>
 

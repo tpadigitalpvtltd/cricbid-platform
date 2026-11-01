@@ -188,12 +188,12 @@ export default function MobileSpectatorLivePage() {
 
   useEffect(() => {
     fetchState();
-    // 1200ms lightweight fallback polling when tab is active (Supabase WebSocket handles sub-30ms instant updates)
+    // 1200ms lightweight fallback polling
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && !document.hidden) {
         fetchState();
       }
-    }, 2200);
+    }, 1200);
     return () => clearInterval(interval);
   }, [slug]);
 
@@ -201,13 +201,20 @@ export default function MobileSpectatorLivePage() {
   useEffect(() => {
     if (!slug) return;
     const channel = supabase.channel(`auction_${slug.toLowerCase()}`);
-    channel.on('broadcast', { event: '*' }, (msg: any) => {
+    const onIncoming = (msg: any) => {
       if (msg?.payload?.state) {
         setState((prev) => mergeStateSafe(prev, msg.payload.state));
       } else {
         fetchState();
       }
-    }).subscribe();
+    };
+
+    channel
+      .on('broadcast', { event: 'BID_PLACED' }, onIncoming)
+      .on('broadcast', { event: 'STATE_UPDATE' }, onIncoming)
+      .on('broadcast', { event: '*' }, onIncoming)
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
     };

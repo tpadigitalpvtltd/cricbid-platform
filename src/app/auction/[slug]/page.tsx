@@ -163,33 +163,61 @@ export default function ProjectorAuctionPage() {
 
   const handleIncomingState = (newState: FullAuctionState) => {
     setState((prevState) => {
+      if (!newState) return prevState;
       if (prevState && isStateUnchanged(prevState, newState)) return prevState;
+
+      // Bid Protection: Never downgrade the bid for the same player unless explicit RESET/UNDO/NEXT
+      const isSamePlayer =
+        prevState?.room?.currentPlayerId &&
+        newState.room?.currentPlayerId &&
+        prevState.room.currentPlayerId === newState.room.currentPlayerId;
+
+      let effectiveState = newState;
+      if (
+        isSamePlayer &&
+        prevState &&
+        newState.room.currentBid < prevState.room.currentBid &&
+        newState.room.lastAction !== 'UNDO' &&
+        newState.room.lastAction !== 'RESET' &&
+        newState.room.lastAction !== 'NEXT'
+      ) {
+        effectiveState = {
+          ...newState,
+          room: {
+            ...newState.room,
+            currentBid: prevState.room.currentBid,
+            currentBiddingTeamId: prevState.room.currentBiddingTeamId,
+          },
+          currentBiddingTeam: prevState.currentBiddingTeam,
+        };
+      }
+
       // 1. Check for new higher bid -> Cancel hammer countdown and play chime
       if (
         prevState &&
-        newState.room.currentBid > prevBidAmountRef.current &&
-        newState.room.currentBiddingTeamId
+        effectiveState.room.currentBid > prevBidAmountRef.current &&
+        effectiveState.room.currentBiddingTeamId
       ) {
         clearLocalHammerTimer();
         auctionAudio.playBidChime();
       }
-      prevBidAmountRef.current = newState.room.currentBid;
+      prevBidAmountRef.current = effectiveState.room.currentBid;
 
       // 2. Check for action changes
-      const currentActionKey = `${newState.room.lastAction}_${newState.room.lastActionTimestamp}`;
+      const currentActionKey = `${effectiveState.room.lastAction}_${effectiveState.room.lastActionTimestamp}`;
       if (prevActionRef.current !== currentActionKey) {
         prevActionRef.current = currentActionKey;
 
         // 5-Second Hammer Final Call triggered by Auctioneer
-        if (newState.room.lastAction === 'HAMMER_5S') {
+        if (effectiveState.room.lastAction === 'HAMMER_5S') {
           startLocalHammerCountdown();
-        } else if (newState.room.lastAction === 'CANCEL_HAMMER' || newState.room.lastAction === 'NEW_BID') {
+        } else if (effectiveState.room.lastAction === 'CANCEL_HAMMER' || effectiveState.room.lastAction === 'NEW_BID') {
           clearLocalHammerTimer();
-        } else if (newState.room.lastAction === 'SOLD' && newState.currentBiddingTeam) {
+        } else if (effectiveState.room.lastAction === 'SOLD' && effectiveState.currentBiddingTeam) {
           clearLocalHammerTimer();
-          const winningTeam = newState.currentBiddingTeam;
-          const soldAmount = newState.room.currentBid;
-          const pName = newState.currentPlayer?.fullName || 'Player';
+          const winningTeam = effectiveState.currentBiddingTeam;
+          const soldAmount = effectiveState.room.currentBid;
+          const pName = effectiveState.currentPlayer?.fullName || 'Player';
 
           setLastSoldData({
             playerName: pName,
@@ -214,54 +242,72 @@ export default function ProjectorAuctionPage() {
           } catch (err) {}
 
           setTimeout(() => setShowSoldModal(false), 5000);
-        } else if (newState.room.lastAction === 'UNSOLD') {
+        } else if (effectiveState.room.lastAction === 'UNSOLD') {
           clearLocalHammerTimer();
           setShowUnsoldModal(true);
           setShowSoldModal(false);
           auctionAudio.playUnsoldBuzzer();
           setTimeout(() => setShowUnsoldModal(false), 3500);
-        } else if (newState.room.lastAction === 'NEXT' || newState.room.lastAction === 'RESET') {
+        } else if (effectiveState.room.lastAction === 'NEXT' || effectiveState.room.lastAction === 'RESET') {
           clearLocalHammerTimer();
           setShowSoldModal(false);
           setShowUnsoldModal(false);
         }
       }
 
-      return newState;
+      return effectiveState;
     });
   };
 
-  // Polling fallback (lightweight 1200ms sync with <30KB payload)
+  // 1. Native Browser BroadcastChannel for 0ms instantaneous cross-tab synchronization
   useEffect(() => {
-    fetchState();
-    const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && !document.hidden) {
-        fetchState();
+    if (!slug || typeof window === 'undefined' || !('BroadcastChannel' in window)) return;
+    const bc = new BroadcastChannel(`cricbid_auction_${slug.toLowerCase()}`);
+    bc.onmessage = (event) => {
+      if (event.data?.state) {
+        handleIncomingState(event.data.state);
       }
-    }, 2200);
-    return () => clearInterval(interval);
+    };
+    return () => {
+      bc.close();
+    };
   }, [slug]);
 
-  // Supabase Realtime broadcast listener for instant sub-50ms sync
+  // 2. Supabase Realtime broadcast listener for instant sub-30ms sync
   useEffect(() => {
     if (!slug) return;
     const channelName = `auction_${slug.toLowerCase()}`;
     const channel = supabase.channel(channelName);
 
+    const onIncoming = (msg: any) => {
+      if (msg?.payload?.state) {
+        handleIncomingState(msg.payload.state);
+      } else {
+        fetchState();
+      }
+    };
+
     channel
-      .on('broadcast', { event: '*' }, (msg: any) => {
-        if (msg?.payload?.state) {
-          handleIncomingState(msg.payload.state);
-        } else {
-          fetchState();
-        }
-      })
+      .on('broadcast', { event: 'BID_PLACED' }, onIncoming)
+      .on('broadcast', { event: 'STATE_UPDATE' }, onIncoming)
+      .on('broadcast', { event: '*' }, onIncoming)
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
       clearLocalHammerTimer();
     };
+  }, [slug]);
+
+  // 3. Fast polling fallback (every 1000ms for high-frequency reliability)
+  useEffect(() => {
+    fetchState();
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        fetchState();
+      }
+    }, 1000);
+    return () => clearInterval(interval);
   }, [slug]);
 
   const toggleSound = () => {
