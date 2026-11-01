@@ -686,24 +686,48 @@ export async function getPlayersByTournamentAsync(slug: string): Promise<Registr
       .neq('payment_status', 'PENDING_PAYMENT')
       .order('created_at', { ascending: false });
 
-    const { data, error } = await withTimeout(query, 4000);
+    const { data, error } = await withTimeout(query, 2500);
 
     if (!error && Array.isArray(data) && data.length > 0) {
       const existingLocal = readPlayersFromFile();
-      const localPhotoMap = new Map<string, string>();
+      const localMap = new Map<string, RegistrationSubmission>();
       existingLocal.forEach((lp) => {
-        if (lp.registrationId && lp.photoUrl && lp.photoUrl.startsWith('data:image/')) {
-          localPhotoMap.set(lp.registrationId, lp.photoUrl);
+        if (lp.registrationId) {
+          localMap.set(lp.registrationId, lp);
         }
       });
-      const mapped = data.map((row) => ({
-        ...mapDbPlayerToModel(row),
-        photoUrl:
-          localPhotoMap.get(row.registration_id) ||
-          `/api/player-photo/${encodeURIComponent(row.registration_id)}`,
-      }));
-      savePlayersToFile(mapped);
-      return deduplicatePlayers(mapped);
+      const dbIds = new Set<string>();
+      const mapped = data.map((row) => {
+        dbIds.add(row.registration_id);
+        const localPlayer = localMap.get(row.registration_id);
+        const dbModel = mapDbPlayerToModel(row);
+        return {
+          ...dbModel,
+          fullName: localPlayer?.fullName || dbModel.fullName,
+          role: localPlayer?.role || dbModel.role,
+          age: localPlayer?.age || dbModel.age,
+          battingStyle: localPlayer?.battingStyle || dbModel.battingStyle,
+          bowlingStyle: localPlayer?.bowlingStyle || dbModel.bowlingStyle,
+          stats: localPlayer?.stats || dbModel.stats,
+          photoUrl:
+            (localPlayer?.photoUrl && localPlayer.photoUrl.startsWith('data:image/')
+              ? localPlayer.photoUrl
+              : '') || `/api/player-photo/${encodeURIComponent(row.registration_id)}`,
+        };
+      });
+      const cleanSlug = slug.toLowerCase();
+      const localAdded = existingLocal.filter(
+        (lp) =>
+          lp.registrationId &&
+          !dbIds.has(lp.registrationId) &&
+          (lp.tournamentSlug || '').toLowerCase() === cleanSlug
+      );
+      const otherTourneys = existingLocal.filter(
+        (lp) => (lp.tournamentSlug || '').toLowerCase() !== cleanSlug
+      );
+      const combinedForTourney = [...localAdded, ...mapped];
+      savePlayersToFile([...combinedForTourney, ...otherTourneys]);
+      return deduplicatePlayers(combinedForTourney);
     }
   } catch (err) {}
 
@@ -722,24 +746,41 @@ export async function getAllPlayersAsync(): Promise<RegistrationSubmission[]> {
       .neq('payment_status', 'PENDING_PAYMENT')
       .order('created_at', { ascending: false });
 
-    const { data, error } = await withTimeout(query, 4000);
+    const { data, error } = await withTimeout(query, 2500);
 
     if (!error && Array.isArray(data) && data.length > 0) {
       const existingLocal = readPlayersFromFile();
-      const localPhotoMap = new Map<string, string>();
+      const localMap = new Map<string, RegistrationSubmission>();
       existingLocal.forEach((lp) => {
-        if (lp.registrationId && lp.photoUrl && lp.photoUrl.startsWith('data:image/')) {
-          localPhotoMap.set(lp.registrationId, lp.photoUrl);
+        if (lp.registrationId) {
+          localMap.set(lp.registrationId, lp);
         }
       });
-      const mapped = data.map((row) => ({
-        ...mapDbPlayerToModel(row),
-        photoUrl:
-          localPhotoMap.get(row.registration_id) ||
-          `/api/player-photo/${encodeURIComponent(row.registration_id)}`,
-      }));
-      savePlayersToFile(mapped);
-      return deduplicatePlayers(mapped);
+      const dbIds = new Set<string>();
+      const mapped = data.map((row) => {
+        dbIds.add(row.registration_id);
+        const localPlayer = localMap.get(row.registration_id);
+        const dbModel = mapDbPlayerToModel(row);
+        return {
+          ...dbModel,
+          fullName: localPlayer?.fullName || dbModel.fullName,
+          role: localPlayer?.role || dbModel.role,
+          age: localPlayer?.age || dbModel.age,
+          battingStyle: localPlayer?.battingStyle || dbModel.battingStyle,
+          bowlingStyle: localPlayer?.bowlingStyle || dbModel.bowlingStyle,
+          stats: localPlayer?.stats || dbModel.stats,
+          photoUrl:
+            (localPlayer?.photoUrl && localPlayer.photoUrl.startsWith('data:image/')
+              ? localPlayer.photoUrl
+              : '') || `/api/player-photo/${encodeURIComponent(row.registration_id)}`,
+        };
+      });
+      const localAdded = existingLocal.filter(
+        (lp) => lp.registrationId && !dbIds.has(lp.registrationId)
+      );
+      const mergedAll = [...localAdded, ...mapped];
+      savePlayersToFile(mergedAll);
+      return deduplicatePlayers(mergedAll);
     }
   } catch (err) {}
 
@@ -751,13 +792,37 @@ export async function updatePlayerAsync(
   updates: Partial<RegistrationSubmission>
 ): Promise<RegistrationSubmission | null> {
   const players = readPlayersFromFile();
-  const index = players.findIndex((p) => p.registrationId === registrationId);
-  if (index === -1) return null;
+  const cleanId = registrationId.trim().toLowerCase();
+  let index = players.findIndex((p) => (p.registrationId || '').toLowerCase() === cleanId);
 
-  players[index] = {
-    ...players[index],
-    ...updates,
-  };
+  if (index === -1) {
+    if (!updates.fullName && !updates.photoUrl) return null;
+    const newRecord: RegistrationSubmission = {
+      timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+      registrationId,
+      tournamentSlug: updates.tournamentSlug || 'ympl-season-2-organised-by-sr11-kqel',
+      tournamentTitle: updates.tournamentTitle || updates.tournamentSlug || 'YMPL Season 2',
+      fullName: updates.fullName || 'Cricket Player',
+      phone: updates.phone || '9876543210',
+      age: String(updates.age || '24'),
+      role: updates.role || 'Batting All-Rounder',
+      battingStyle: updates.battingStyle || 'Right-hand',
+      bowlingStyle: updates.bowlingStyle || 'Right-arm Fast',
+      stats: updates.stats || 'Updated by Admin',
+      photoUrl: updates.photoUrl || '',
+      paymentId: updates.paymentId || 'ADMIN_MANUAL',
+      orderId: updates.orderId || 'ADMIN_MANUAL',
+      paymentStatus: updates.paymentStatus || 'PAID',
+      amount: updates.amount || 0,
+    };
+    players.unshift(newRecord);
+    index = 0;
+  } else {
+    players[index] = {
+      ...players[index],
+      ...updates,
+    };
+  }
 
   savePlayersToFile([...players]);
 
@@ -775,13 +840,14 @@ export async function updatePlayerAsync(
 
   if (Object.keys(dbUpdates).length > 0) {
     try {
-      await supabase
-        .from('players')
-        .update(dbUpdates)
-        .eq('registration_id', registrationId);
-    } catch (err) {
-      console.error('Supabase player update error:', err);
-    }
+      await withTimeout(
+        supabase
+          .from('players')
+          .update(dbUpdates)
+          .eq('registration_id', registrationId),
+        2000
+      );
+    } catch (err) {}
   }
 
   return players[index];
@@ -791,12 +857,36 @@ export function updatePlayer(
   registrationId: string,
   updates: Partial<RegistrationSubmission>
 ): RegistrationSubmission | null {
-  fireAndForget(updatePlayerAsync(registrationId, updates));
   const players = readPlayersFromFile();
-  const index = players.findIndex((p) => p.registrationId === registrationId);
-  if (index === -1) return null;
-  players[index] = { ...players[index], ...updates };
+  const cleanId = registrationId.trim().toLowerCase();
+  let index = players.findIndex((p) => (p.registrationId || '').toLowerCase() === cleanId);
+  if (index === -1) {
+    if (!updates.fullName && !updates.photoUrl) return null;
+    const newRecord: RegistrationSubmission = {
+      timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+      registrationId,
+      tournamentSlug: updates.tournamentSlug || 'ympl-season-2-organised-by-sr11-kqel',
+      tournamentTitle: updates.tournamentTitle || updates.tournamentSlug || 'YMPL Season 2',
+      fullName: updates.fullName || 'Cricket Player',
+      phone: updates.phone || '9876543210',
+      age: String(updates.age || '24'),
+      role: updates.role || 'Batting All-Rounder',
+      battingStyle: updates.battingStyle || 'Right-hand',
+      bowlingStyle: updates.bowlingStyle || 'Right-arm Fast',
+      stats: updates.stats || 'Updated by Admin',
+      photoUrl: updates.photoUrl || '',
+      paymentId: updates.paymentId || 'ADMIN_MANUAL',
+      orderId: updates.orderId || 'ADMIN_MANUAL',
+      paymentStatus: updates.paymentStatus || 'PAID',
+      amount: updates.amount || 0,
+    };
+    players.unshift(newRecord);
+    index = 0;
+  } else {
+    players[index] = { ...players[index], ...updates };
+  }
   savePlayersToFile([...players]);
+  fireAndForget(updatePlayerAsync(registrationId, updates));
   return players[index];
 }
 

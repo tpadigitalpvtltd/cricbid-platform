@@ -78,6 +78,22 @@ const ROLE_OPTIONS = [
 ];
 
 
+function isRealRasterDataUri(url?: string | null): boolean {
+  return Boolean(url && url.startsWith('data:image/') && !url.startsWith('data:image/svg+xml'));
+}
+
+function getLocalCustomPlayersMap(slug?: string): Record<string, any> {
+  if (!slug || typeof window === 'undefined' || !window.localStorage) return {};
+  try {
+    const raw = window.localStorage.getItem(`cricbid_custom_players_${slug.toLowerCase()}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+  } catch {}
+  return {};
+}
+
 function isStateUnchanged(prev: FullAuctionState | null, incoming: FullAuctionState | null): boolean {
   if (prev === incoming) return true;
   if (!prev || !incoming) return false;
@@ -101,6 +117,8 @@ function isStateUnchanged(prev: FullAuctionState | null, incoming: FullAuctionSt
 
   if (
     prev.currentPlayer?.registrationId !== incoming.currentPlayer?.registrationId ||
+    prev.currentPlayer?.fullName !== incoming.currentPlayer?.fullName ||
+    prev.currentPlayer?.role !== incoming.currentPlayer?.role ||
     prev.currentPlayer?.photoUrl !== incoming.currentPlayer?.photoUrl ||
     (prev.playersQueue?.length || 0) !== (incoming.playersQueue?.length || 0) ||
     prev.playersQueue?.[0]?.player?.photoUrl !== incoming.playersQueue?.[0]?.player?.photoUrl
@@ -132,6 +150,9 @@ function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionStat
     return prev;
   }
 
+  const cleanSlug = (incoming.room?.tournamentSlug || prev.room?.tournamentSlug || '').toLowerCase();
+  const customPlayersMap = getLocalCustomPlayersMap(cleanSlug);
+
   // 2. Protect against dropping current player during active bidding
   let resolvedPlayer = incoming.currentPlayer;
   let resolvedPlayerState = incoming.currentPlayerState;
@@ -141,54 +162,120 @@ function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionStat
     resolvedPlayerState = prev.currentPlayerState;
   }
 
-  // 3. Maintain queue and hydrate photos (always prefer data:image/ base64 photos from incoming or prev)
+  // 3. Maintain queue and hydrate real photos + custom edited player names/roles
   const incomingQueue = incoming.playersQueue || [];
   const prevQueue = prev.playersQueue || [];
   const baseQueue = incomingQueue.length >= prevQueue.length ? incomingQueue : prevQueue;
   const secondaryQueue = incomingQueue.length >= prevQueue.length ? prevQueue : incomingQueue;
-  const secondaryPhotoMap = new Map<string, string>();
+  const secondaryPlayerMap = new Map<string, any>();
   secondaryQueue.forEach((pq: any) => {
     const pid = pq?.player?.registrationId;
-    const pUrl = pq?.player?.photoUrl;
-    if (pid && pUrl && pUrl.startsWith('data:image/')) {
-      secondaryPhotoMap.set(pid, pUrl);
+    if (pid) {
+      secondaryPlayerMap.set(pid, pq.player);
     }
   });
 
-  const currentQueue = baseQueue.map((pq: any) => {
+  let currentQueue = baseQueue.map((pq: any) => {
     const pid = pq?.player?.registrationId;
+    if (!pid) return pq;
+    const secPlayer = secondaryPlayerMap.get(pid);
+    const customEntry = customPlayersMap[pid];
     const curUrl = pq?.player?.photoUrl || '';
-    if (pid && !curUrl.startsWith('data:image/') && secondaryPhotoMap.has(pid)) {
-      return {
-        ...pq,
-        player: {
-          ...pq.player,
-          photoUrl: secondaryPhotoMap.get(pid)!,
-        },
-      };
+    const secUrl = secPlayer?.photoUrl || '';
+    const customUrl = customEntry?.photoUrl || '';
+
+    // Always prefer real uploaded raster photo (JPEG/PNG/WebP) over generated SVG avatar or URL
+    let bestPhoto = curUrl;
+    if (isRealRasterDataUri(customUrl)) {
+      bestPhoto = customUrl;
+    } else if (!isRealRasterDataUri(curUrl) && isRealRasterDataUri(secUrl)) {
+      bestPhoto = secUrl;
+    } else if (!curUrl.startsWith('data:image/') && secUrl.startsWith('data:image/')) {
+      bestPhoto = secUrl;
     }
-    return pq;
+
+    return {
+      ...pq,
+      basePrice: customEntry?.basePrice || pq.basePrice,
+      player: {
+        ...pq.player,
+        fullName: customEntry?.fullName || pq.player.fullName,
+        role: customEntry?.role || pq.player.role,
+        age: customEntry?.age || pq.player.age,
+        battingStyle: customEntry?.battingStyle || pq.player.battingStyle,
+        bowlingStyle: customEntry?.bowlingStyle || pq.player.bowlingStyle,
+        photoUrl: bestPhoto,
+      },
+    };
   });
 
-  // Also ensure resolvedPlayer gets rich data:image/ photoUrl if available in currentQueue
-  if (resolvedPlayer && (!resolvedPlayer.photoUrl || !resolvedPlayer.photoUrl.startsWith('data:image/'))) {
-    const matchedInQueue = currentQueue.find(
-      (pq: any) => pq?.player?.registrationId === resolvedPlayer?.registrationId
-    );
-    if (matchedInQueue?.player?.photoUrl?.startsWith('data:image/')) {
-      resolvedPlayer = {
-        ...resolvedPlayer,
-        photoUrl: matchedInQueue.player.photoUrl,
-      };
-    } else if (
-      prev.currentPlayer?.registrationId === resolvedPlayer.registrationId &&
-      prev.currentPlayer?.photoUrl?.startsWith('data:image/')
-    ) {
-      resolvedPlayer = {
-        ...resolvedPlayer,
-        photoUrl: prev.currentPlayer.photoUrl,
-      };
+  // Ensure any manually added players in customPlayersMap are never dropped if a cold-start poll arrives
+  const queueIds = new Set(currentQueue.map((pq: any) => pq?.player?.registrationId));
+  Object.values(customPlayersMap).forEach((cp: any) => {
+    if (cp && cp.isManuallyAdded && cp.registrationId && !queueIds.has(cp.registrationId)) {
+      currentQueue = [
+        {
+          player: {
+            registrationId: cp.registrationId,
+            tournamentSlug: cleanSlug,
+            tournamentTitle: cleanSlug,
+            fullName: cp.fullName,
+            phone: cp.phone || '9876543210',
+            age: String(cp.age || '24'),
+            role: cp.role || 'Batting All-Rounder',
+            battingStyle: cp.battingStyle || 'Right-hand',
+            bowlingStyle: cp.bowlingStyle || 'Right-arm Fast',
+            stats: cp.stats || 'Added by Admin',
+            photoUrl: cp.photoUrl || '',
+            paymentId: 'ADMIN_MANUAL',
+            orderId: 'ADMIN_MANUAL',
+            paymentStatus: 'PAID',
+            amount: 0,
+            timestamp: cp.timestamp || new Date().toISOString(),
+          },
+          status: 'PENDING',
+          basePrice: cp.basePrice || 1000,
+          soldPrice: null,
+          soldTeamName: null,
+          soldToTeamId: null,
+        },
+        ...currentQueue,
+      ];
+      queueIds.add(cp.registrationId);
     }
+  });
+
+  // Also ensure resolvedPlayer gets custom edited name/role and real raster data:image/ photoUrl
+  if (resolvedPlayer) {
+    const pid = resolvedPlayer.registrationId;
+    const customEntry = customPlayersMap[pid];
+    const matchedInQueue = currentQueue.find(
+      (pq: any) => pq?.player?.registrationId === pid
+    );
+    let bestStagePhoto = resolvedPlayer.photoUrl || '';
+    if (isRealRasterDataUri(customEntry?.photoUrl)) {
+      bestStagePhoto = customEntry.photoUrl;
+    } else if (!isRealRasterDataUri(bestStagePhoto) && isRealRasterDataUri(matchedInQueue?.player?.photoUrl)) {
+      bestStagePhoto = matchedInQueue.player.photoUrl;
+    } else if (
+      !isRealRasterDataUri(bestStagePhoto) &&
+      prev.currentPlayer?.registrationId === pid &&
+      isRealRasterDataUri(prev.currentPlayer?.photoUrl)
+    ) {
+      bestStagePhoto = prev.currentPlayer!.photoUrl!;
+    } else if (!bestStagePhoto.startsWith('data:image/') && matchedInQueue?.player?.photoUrl?.startsWith('data:image/')) {
+      bestStagePhoto = matchedInQueue.player.photoUrl;
+    }
+
+    resolvedPlayer = {
+      ...resolvedPlayer,
+      fullName: customEntry?.fullName || matchedInQueue?.player?.fullName || resolvedPlayer.fullName,
+      role: customEntry?.role || matchedInQueue?.player?.role || resolvedPlayer.role,
+      age: customEntry?.age || matchedInQueue?.player?.age || resolvedPlayer.age,
+      battingStyle: customEntry?.battingStyle || matchedInQueue?.player?.battingStyle || resolvedPlayer.battingStyle,
+      bowlingStyle: customEntry?.bowlingStyle || matchedInQueue?.player?.bowlingStyle || resolvedPlayer.bowlingStyle,
+      photoUrl: bestStagePhoto,
+    };
   }
 
   const hydratedSoldHistory = (incoming.soldHistory && incoming.soldHistory.length > 0
@@ -461,7 +548,37 @@ export default function AuctioneerControllerPage() {
     }
   };
 
-  // Build compact authoritative state snapshot (~4KB) to keep serverless containers 100% in sync
+  const saveCustomPlayerLocal = (playerData: {
+    registrationId: string;
+    fullName?: string;
+    role?: string;
+    age?: string | number;
+    battingStyle?: string;
+    bowlingStyle?: string;
+    stats?: string;
+    basePrice?: number;
+    photoUrl?: string;
+    isManuallyAdded?: boolean;
+  }) => {
+    if (!slug || !playerData.registrationId || typeof window === 'undefined' || !window.localStorage) return;
+    try {
+      const cleanSlug = slug.toLowerCase();
+      const key = `cricbid_custom_players_${cleanSlug}`;
+      const existing = getLocalCustomPlayersMap(cleanSlug);
+      const prevEntry = existing[playerData.registrationId] || {};
+      existing[playerData.registrationId] = {
+        ...prevEntry,
+        ...playerData,
+        photoUrl: isRealRasterDataUri(playerData.photoUrl)
+          ? playerData.photoUrl
+          : prevEntry.photoUrl || playerData.photoUrl || '',
+        updatedAt: Date.now(),
+      };
+      window.localStorage.setItem(key, JSON.stringify(existing));
+    } catch {}
+  };
+
+  // Build compact authoritative state snapshot to keep serverless containers 100% in sync
   const buildClientSyncPayload = (s: FullAuctionState | null) => {
     if (!s) return undefined;
     const playerStatesMap: Record<string, any> = {};
@@ -482,10 +599,13 @@ export default function AuctioneerControllerPage() {
         }
       });
     }
+    const customMap = getLocalCustomPlayersMap(slug);
+    const customPlayers = Object.values(customMap);
     return {
       room: s.room,
       teams: s.teams,
       playerStates: playerStatesMap,
+      customPlayers: customPlayers.length > 0 ? customPlayers : undefined,
     };
   };
 
@@ -722,6 +842,11 @@ export default function AuctioneerControllerPage() {
   // Manual Player Edit Modal State
   const [showPlayerEditModal, setShowPlayerEditModal] = useState(false);
   const [editingPlayerObj, setEditingPlayerObj] = useState<any | null>(null);
+  const [playerEditFullName, setPlayerEditFullName] = useState<string>('');
+  const [playerEditRole, setPlayerEditRole] = useState<string>('Batting All-Rounder');
+  const [playerEditAge, setPlayerEditAge] = useState<string>('24');
+  const [playerEditBatting, setPlayerEditBatting] = useState<string>('Right-hand');
+  const [playerEditBowling, setPlayerEditBowling] = useState<string>('Right-arm Fast');
   const [playerEditStatus, setPlayerEditStatus] = useState<string>('PENDING');
   const [playerEditBasePrice, setPlayerEditBasePrice] = useState<number | string>(1000);
   const [playerEditSoldPrice, setPlayerEditSoldPrice] = useState<number | string>('');
@@ -1422,6 +1547,11 @@ export default function AuctioneerControllerPage() {
     soldTeamName?: string | null
   ) => {
     setEditingPlayerObj(player);
+    setPlayerEditFullName(player.fullName || '');
+    setPlayerEditRole(player.role || 'Batting All-Rounder');
+    setPlayerEditAge(String(player.age || '24'));
+    setPlayerEditBatting(player.battingStyle || 'Right-hand');
+    setPlayerEditBowling(player.bowlingStyle || 'Right-arm Fast');
     setPlayerEditStatus(currentStatus || 'PENDING');
     setPlayerEditBasePrice(basePrice || 1000);
     setPlayerEditSoldPrice(soldPrice !== undefined && soldPrice !== null ? soldPrice : '');
@@ -1461,6 +1591,13 @@ export default function AuctioneerControllerPage() {
     e.preventDefault();
     if (!editingPlayerObj) return;
 
+    const updatedName = playerEditFullName.trim() || editingPlayerObj.fullName;
+    const updatedRole = playerEditRole || editingPlayerObj.role || 'Batting All-Rounder';
+    const updatedAge = String(playerEditAge || editingPlayerObj.age || '24');
+    const updatedBatting = playerEditBatting || editingPlayerObj.battingStyle || 'Right-hand';
+    const updatedBowling = playerEditBowling || editingPlayerObj.bowlingStyle || 'Right-arm Fast';
+    const updatedPhoto = playerEditPhotoUrl || editingPlayerObj.photoUrl || '';
+
     const baseP = Number(playerEditBasePrice) > 0 ? Number(playerEditBasePrice) : 1000;
     const isSold = playerEditStatus === 'SOLD';
     const soldP = isSold ? (playerEditSoldPrice !== '' ? Number(playerEditSoldPrice) : baseP) : undefined;
@@ -1471,20 +1608,43 @@ export default function AuctioneerControllerPage() {
       return;
     }
 
-    // 0ms instant optimistic update + broadcast to Projector TV
     const now = Date.now();
     const targetPid = editingPlayerObj.registrationId;
+
+    // 1. Persist locally so background polls never revert this player's name, role, or photo
+    saveCustomPlayerLocal({
+      registrationId: targetPid,
+      fullName: updatedName,
+      role: updatedRole,
+      age: updatedAge,
+      battingStyle: updatedBatting,
+      bowlingStyle: updatedBowling,
+      basePrice: baseP,
+      photoUrl: updatedPhoto,
+    });
+
+    // 2. 0ms instant optimistic update + broadcast to Projector TV
     applyOptimisticAndBroadcast((prev) => ({
       ...prev,
       room: {
         ...prev.room,
+        basePrice: prev.room.currentPlayerId === targetPid ? baseP : prev.room.basePrice,
+        currentBid:
+          prev.room.currentPlayerId === targetPid && !prev.room.currentBiddingTeamId
+            ? baseP
+            : prev.room.currentBid,
         lastActionTimestamp: now,
       },
       currentPlayer:
         prev.currentPlayer && prev.currentPlayer.registrationId === targetPid
           ? {
               ...prev.currentPlayer,
-              photoUrl: playerEditPhotoUrl || prev.currentPlayer.photoUrl,
+              fullName: updatedName,
+              role: updatedRole as any,
+              age: updatedAge,
+              battingStyle: updatedBatting as any,
+              bowlingStyle: updatedBowling as any,
+              photoUrl: updatedPhoto,
             }
           : prev.currentPlayer,
       playersQueue: (prev.playersQueue || []).map((pq) =>
@@ -1496,24 +1656,48 @@ export default function AuctioneerControllerPage() {
               soldPrice: soldP || null,
               player: {
                 ...pq.player,
-                photoUrl: playerEditPhotoUrl || pq.player.photoUrl,
+                fullName: updatedName,
+                role: updatedRole as any,
+                age: updatedAge,
+                battingStyle: updatedBatting as any,
+                bowlingStyle: updatedBowling as any,
+                photoUrl: updatedPhoto,
               },
             }
           : pq
       ),
     }));
 
+    // Also broadcast dedicated PLAYER_PHOTO packet if photo is a real raster Data URI
+    if (isRealRasterDataUri(updatedPhoto) && slug && typeof window !== 'undefined') {
+      const cleanSlug = slug.toLowerCase();
+      const photoPkt = { type: 'PLAYER_PHOTO', playerId: targetPid, photoUrl: updatedPhoto, ts: now };
+      if (broadcastChannelRef.current) {
+        try {
+          broadcastChannelRef.current.postMessage(photoPkt);
+        } catch {}
+      }
+      try {
+        window.localStorage.setItem(`cricbid_stage_photo_${cleanSlug}`, JSON.stringify(photoPkt));
+      } catch {}
+    }
+
     setShowPlayerEditModal(false);
     setEditingPlayerObj(null);
-    showToast(`✅ Player record for ${editingPlayerObj.fullName} updated!`, 'success');
+    showToast(`✅ Saved "${updatedName}" (Name + Photo + Details)!`, 'success');
 
     await executeAction('MANUAL_EDIT_PLAYER_AUCTION', {
       playerId: targetPid,
+      fullName: updatedName,
+      role: updatedRole,
+      age: updatedAge,
+      battingStyle: updatedBatting,
+      bowlingStyle: updatedBowling,
       status: playerEditStatus,
       basePrice: baseP,
       soldPrice: soldP,
       soldToTeamId: soldTeamId,
-      photoUrl: playerEditPhotoUrl || undefined,
+      photoUrl: updatedPhoto || undefined,
     });
   };
 
@@ -1751,6 +1935,16 @@ export default function AuctioneerControllerPage() {
       const now = Date.now();
       const pid = activePlayer.registrationId;
 
+      saveCustomPlayerLocal({
+        registrationId: pid,
+        fullName: activePlayer.fullName,
+        role: activePlayer.role,
+        age: activePlayer.age,
+        battingStyle: activePlayer.battingStyle,
+        bowlingStyle: activePlayer.bowlingStyle,
+        photoUrl: dataUrl,
+      });
+
       applyOptimisticAndBroadcast((prev) => ({
         ...prev,
         room: {
@@ -1870,6 +2064,19 @@ export default function AuctioneerControllerPage() {
       soldTeamName: null,
       soldToTeamId: null,
     };
+
+    saveCustomPlayerLocal({
+      registrationId: tempRegId,
+      fullName: playerName,
+      role: addPlayerRole,
+      age: playerAge,
+      battingStyle: addPlayerBatting,
+      bowlingStyle: addPlayerBowling,
+      stats: playerStats,
+      basePrice,
+      photoUrl: playerPhoto,
+      isManuallyAdded: true,
+    });
 
     // 0ms instant optimistic update + immediate broadcast to Projector TV!
     applyOptimisticAndBroadcast((prev) => {
@@ -2402,7 +2609,7 @@ export default function AuctioneerControllerPage() {
                       Age: {currentPlayer.age} yrs • {currentPlayer.battingStyle}
                       {currentPlayer.role !== 'Pure Batsman' && currentPlayer.bowlingStyle && currentPlayer.bowlingStyle !== 'None' ? ` • ${currentPlayer.bowlingStyle}` : ''}
                     </p>
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
                       <span className="text-xs text-amber-300 font-mono font-bold bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
                         Base Price: ₹ {room.basePrice.toLocaleString('en-IN')}
                       </span>
@@ -2419,6 +2626,20 @@ export default function AuctioneerControllerPage() {
                           Change
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleOpenManualEditPlayer(
+                            currentPlayer,
+                            state?.currentPlayerState?.status || 'IN_AUCTION',
+                            room.basePrice
+                          )
+                        }
+                        className="px-2.5 py-1 rounded-lg bg-amber-400/15 hover:bg-amber-400 text-amber-300 hover:text-slate-950 border border-amber-400/40 text-[11px] font-black uppercase flex items-center gap-1 transition-all shadow-sm"
+                        title="Edit Player Name, Role, Base Price & Photo"
+                      >
+                        <Edit className="w-3 h-3" /> Edit Name / Photo
+                      </button>
                     </div>
 
                     {/* Remote Projector Photo Zoom & Fit Controls (0ms Sync to TV) */}
@@ -3713,7 +3934,54 @@ export default function AuctioneerControllerPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveManualEditPlayer} className="space-y-4">
+            <form onSubmit={handleSaveManualEditPlayer} className="space-y-3.5 max-h-[80vh] overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-bold text-slate-400 block mb-1 uppercase">
+                    Player Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={playerEditFullName}
+                    onChange={(e) => setPlayerEditFullName(e.target.value)}
+                    placeholder="Enter full name"
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white font-bold focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-400 block mb-1 uppercase">
+                    Playing Role
+                  </label>
+                  <select
+                    value={playerEditRole}
+                    onChange={(e) => setPlayerEditRole(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white font-bold focus:outline-none focus:border-amber-400"
+                  >
+                    <option value="Batting All-Rounder">Batting All-Rounder</option>
+                    <option value="Bowling All-Rounder">Bowling All-Rounder</option>
+                    <option value="Pure Batsman">Pure Batsman</option>
+                    <option value="Pure Bowler">Pure Bowler</option>
+                    <option value="Wicket Keeper Batsman">Wicket Keeper Batsman</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-400 block mb-1 uppercase">
+                    Age (Years)
+                  </label>
+                  <input
+                    type="number"
+                    value={playerEditAge}
+                    onChange={(e) => setPlayerEditAge(e.target.value)}
+                    min={10}
+                    max={75}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white font-mono focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="text-xs font-bold text-slate-400 block mb-1.5 uppercase">
                   Auction Status

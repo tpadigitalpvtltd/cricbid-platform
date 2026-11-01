@@ -1118,6 +1118,28 @@ export function applyClientSyncSnapshot(slug: string, clientSync?: any): void {
     changed = true;
   }
 
+  if (Array.isArray(clientSync.customPlayers) && clientSync.customPlayers.length > 0) {
+    let playersUpdated = false;
+    clientSync.customPlayers.forEach((cp: any) => {
+      if (cp && cp.registrationId) {
+        updatePlayer(cp.registrationId, {
+          tournamentSlug: cleanSlug,
+          fullName: cp.fullName,
+          role: cp.role,
+          age: cp.age,
+          battingStyle: cp.battingStyle,
+          bowlingStyle: cp.bowlingStyle,
+          stats: cp.stats,
+          photoUrl: cp.photoUrl || undefined,
+        });
+        playersUpdated = true;
+      }
+    });
+    if (playersUpdated) {
+      invalidateAuctionPlayersCache(cleanSlug);
+    }
+  }
+
   if (changed) {
     saveLocalData(local);
   }
@@ -1743,15 +1765,33 @@ export async function executeAuctioneerAction(params: {
     await saveAuctionPlayerState(updatedState).catch((e) => console.error(e));
 
     // Also update player photo or details in registrations store and in-memory rawPlayers immediately
-    if (payload?.photoUrl || payload?.fullName || payload?.role) {
-      const playerUpdates: Partial<RegistrationSubmission> = {};
+    if (
+      payload?.photoUrl ||
+      payload?.fullName ||
+      payload?.role ||
+      payload?.age ||
+      payload?.battingStyle ||
+      payload?.bowlingStyle ||
+      payload?.stats
+    ) {
+      const playerUpdates: Partial<RegistrationSubmission> = {
+        tournamentSlug: cleanSlug,
+      };
       if (payload.photoUrl) playerUpdates.photoUrl = payload.photoUrl;
-      if (payload.fullName) playerUpdates.fullName = payload.fullName;
+      if (payload.fullName) playerUpdates.fullName = String(payload.fullName).trim();
       if (payload.role) playerUpdates.role = payload.role;
-      updatePlayer(targetPlayerId, playerUpdates);
-      const pIdx = rawPlayers.findIndex((p) => p.registrationId === targetPlayerId);
+      if (payload.age) playerUpdates.age = String(payload.age);
+      if (payload.battingStyle) playerUpdates.battingStyle = payload.battingStyle;
+      if (payload.bowlingStyle) playerUpdates.bowlingStyle = payload.bowlingStyle;
+      if (payload.stats) playerUpdates.stats = payload.stats;
+      const updatedRecord = updatePlayer(targetPlayerId, playerUpdates);
+      const pIdx = rawPlayers.findIndex(
+        (p) => (p.registrationId || '').toLowerCase() === targetPlayerId.toLowerCase()
+      );
       if (pIdx >= 0) {
         rawPlayers[pIdx] = { ...rawPlayers[pIdx], ...playerUpdates };
+      } else if (updatedRecord) {
+        rawPlayers.unshift(updatedRecord);
       }
       invalidateAuctionPlayersCache(cleanSlug);
     }

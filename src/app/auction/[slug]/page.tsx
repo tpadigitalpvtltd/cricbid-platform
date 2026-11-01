@@ -225,18 +225,49 @@ export default function ProjectorAuctionPage() {
         prevState.room.currentPlayerId === newState.room.currentPlayerId;
 
       let effectiveState = newState;
-      // Preserve rich base64 photoUrl if incoming compact packet only carries /api/player-photo/... for the same player
+      const isRealRasterDataUri = (url?: string) =>
+        Boolean(url && url.startsWith('data:image/') && !url.startsWith('data:image/svg+xml'));
+
+      // Apply any custom/edited player name, role, or photo saved on the same browser
+      if (effectiveState.currentPlayer && slug && typeof window !== 'undefined' && window.localStorage) {
+        try {
+          const cleanSlug = slug.toLowerCase();
+          const savedCustomRaw = window.localStorage.getItem(`cricbid_custom_players_${cleanSlug}`);
+          if (savedCustomRaw) {
+            const customMap = JSON.parse(savedCustomRaw);
+            const customEntry = customMap?.[effectiveState.currentPlayer.registrationId];
+            if (customEntry) {
+              effectiveState = {
+                ...effectiveState,
+                currentPlayer: {
+                  ...effectiveState.currentPlayer,
+                  fullName: customEntry.fullName || effectiveState.currentPlayer.fullName,
+                  role: customEntry.role || effectiveState.currentPlayer.role,
+                  age: customEntry.age || effectiveState.currentPlayer.age,
+                  battingStyle: customEntry.battingStyle || effectiveState.currentPlayer.battingStyle,
+                  bowlingStyle: customEntry.bowlingStyle || effectiveState.currentPlayer.bowlingStyle,
+                  photoUrl: isRealRasterDataUri(customEntry.photoUrl)
+                    ? customEntry.photoUrl
+                    : effectiveState.currentPlayer.photoUrl,
+                },
+              };
+            }
+          }
+        } catch {}
+      }
+
+      // Preserve rich raster base64 photoUrl if incoming compact packet only carries /api/player-photo/... or SVG placeholder for the same player
       if (
         isSamePlayer &&
-        prevState?.currentPlayer?.photoUrl?.startsWith('data:image/') &&
+        isRealRasterDataUri(prevState?.currentPlayer?.photoUrl) &&
         effectiveState.currentPlayer &&
-        (!effectiveState.currentPlayer.photoUrl || !effectiveState.currentPlayer.photoUrl.startsWith('data:image/'))
+        !isRealRasterDataUri(effectiveState.currentPlayer.photoUrl)
       ) {
         effectiveState = {
           ...effectiveState,
           currentPlayer: {
             ...effectiveState.currentPlayer,
-            photoUrl: prevState.currentPlayer.photoUrl,
+            photoUrl: prevState!.currentPlayer!.photoUrl,
           },
         };
       }

@@ -18,10 +18,11 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const view = searchParams.get('view');
 
-    const state = await getFullAuctionState(slug);
-    if (!state) {
+    const rawState = await getFullAuctionState(slug);
+    if (!rawState) {
       return NextResponse.json({ success: false, error: 'Tournament not found' }, { status: 404 });
     }
+    const state = { ...rawState };
 
     // Bandwidth Optimization:
     // 1. Neither Live Stream nor Team Bidder pages need the playersQueue.
