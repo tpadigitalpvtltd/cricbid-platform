@@ -1,0 +1,1265 @@
+{
+  "rooms": {
+    "ympl-season-2-organised-by-sr11-kqel": {
+      "id": "room_ympl-season-2-organised-by-sr11-kqel_1792922103554",
+      "tournamentId": null,
+      "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+      "status": "ACTIVE",
+      "currentPlayerId": "CRIC-2026-FPGA9",
+      "currentBid": 1000,
+      "currentBiddingTeamId": null,
+      "timerSeconds": 10,
+      "timerRunning": true,
+      "timerExpiresAt": null,
+      "basePrice": 1000,
+      "bidIncrement": 1000,
+      "lastAction": "NEXT",
+      "lastActionTimestamp": 1793515554881,
+      "updatedAt": "2026-11-01T06:45:54.881+00:00"
+    }
+  },
+  "teams": {
+    "ympl-season-2-organised-by-sr11-kqel": [
+      {
+        "id": "team_1793107809465_vdfp",
+        "tournamentId": null,
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "name": "Kohinoor Badshah",
+        "shortName": "KB",
+        "logoUrl": "/api/team-logo/team_1793107809465_vdfp",
+        "color": "#f97316",
+        "totalPurse": 100000,
+        "remainingPurse": 80000,
+        "secretPin": "555",
+        "maxPlayers": 12,
+        "boughtPlayersCount": 2,
+        "createdAt": "2026-10-27T13:30:11.479032+00:00"
+      },
+      {
+        "id": "team_1793195870417_djwm",
+        "tournamentId": null,
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "name": "SR Striker",
+        "shortName": "S",
+        "logoUrl": "/api/team-logo/team_1793195870417_djwm",
+        "color": "#06b6d4",
+        "totalPurse": 100000,
+        "remainingPurse": 80000,
+        "secretPin": "1457",
+        "maxPlayers": 15,
+        "boughtPlayersCount": 2,
+        "createdAt": "2026-10-28T13:57:52.718311+00:00"
+      },
+      {
+        "id": "team_1793195963027_y1cv",
+        "tournamentId": null,
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "name": "Sahara MSD",
+        "shortName": "S",
+        "logoUrl": "/api/team-logo/team_1793195963027_y1cv",
+        "color": "#10b981",
+        "totalPurse": 100000,
+        "remainingPurse": 100000,
+        "secretPin": "3960",
+        "maxPlayers": 15,
+        "boughtPlayersCount": 0,
+        "createdAt": "2026-10-28T13:59:24.435064+00:00"
+      },
+      {
+        "id": "team_1793276724182_52jb",
+        "tournamentId": null,
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "name": "GRCC",
+        "shortName": "G",
+        "logoUrl": "/api/team-logo/team_1793276724182_52jb",
+        "color": "#10b981",
+        "totalPurse": 100000,
+        "remainingPurse": 100000,
+        "secretPin": "1970",
+        "maxPlayers": 12,
+        "boughtPlayersCount": 0,
+        "createdAt": "2026-10-29T12:25:25.629408+00:00"
+      },
+      {
+        "id": "team_1793276890362_ftq3",
+        "tournamentId": null,
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "name": "CSK",
+        "shortName": "C",
+        "logoUrl": "/api/team-logo/team_1793276890362_ftq3",
+        "color": "#f59e0b",
+        "totalPurse": 100000,
+        "remainingPurse": 100000,
+        "secretPin": "2721",
+        "maxPlayers": 15,
+        "boughtPlayersCount": 0,
+        "createdAt": "2026-10-29T12:28:12.649277+00:00"
+      },
+      {
+        "id": "team_1793276932286_ehiz",
+        "tournamentId": null,
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "name": "2 Star Furniture",
+        "shortName": "2",
+        "logoUrl": "/api/team-logo/team_1793276932286_ehiz",
+        "color": "#3b82f6",
+        "totalPurse": 100000,
+        "remainingPurse": 100000,
+        "secretPin": "2247",
+        "maxPlayers": 15,
+        "boughtPlayersCount": 0,
+        "createdAt": "2026-10-29T12:28:54.352882+00:00"
+      },
+      {
+        "id": "team_1793276971870_0eoo",
+        "tournamentId": null,
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "name": "Super Titan",
+        "shortName": "T",
+        "logoUrl": "/api/team-logo/team_1793276971870_0eoo",
+        "color": "#ef4444",
+        "totalPurse": 100000,
+        "remainingPurse": 100000,
+        "secretPin": "6534",
+        "maxPlayers": 15,
+        "boughtPlayersCount": 0,
+        "createdAt": "2026-10-29T12:29:34.117495+00:00"
+      },
+      {
+        "id": "team_1793277027173_s0vg",
+        "tournamentId": null,
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "name": "Rani Amravati",
+        "shortName": "RA",
+        "logoUrl": "",
+        "color": "#3b82f6",
+        "totalPurse": 100000,
+        "remainingPurse": 100000,
+        "secretPin": "1691",
+        "maxPlayers": 15,
+        "boughtPlayersCount": 0,
+        "createdAt": "2026-10-29T12:30:29.323755+00:00"
+      }
+    ]
+  },
+  "teamsInitialized": {
+    "ympl-season-2-organised-by-sr11-kqel": true
+  },
+  "bids": {
+    "ympl-season-2-organised-by-sr11-kqel": [
+      {
+        "id": "bid_1793282448798_ku9l",
+        "auctionId": "room_ympl-season-2-organised-by-sr11-kqel_1792922103554",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "playerId": "CRIC-2026-JXTVZ",
+        "teamId": "team_1793276724182_52jb",
+        "teamName": "GRCC",
+        "teamShortName": "G",
+        "teamLogoUrl": "/api/team-logo/team_1793276724182_52jb",
+        "amount": 16000,
+        "createdAt": "2026-10-29T14:00:48.798+00:00"
+      },
+      {
+        "id": "bid_1793282446900_zim7",
+        "auctionId": "room_ympl-season-2-organised-by-sr11-kqel_1792922103554",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "playerId": "CRIC-2026-JXTVZ",
+        "teamId": "team_1793107809465_vdfp",
+        "teamName": "Kohinoor Badshah",
+        "teamShortName": "KB",
+        "teamLogoUrl": "/api/team-logo/team_1793107809465_vdfp",
+        "amount": 15000,
+        "createdAt": "2026-10-29T14:00:46.9+00:00"
+      },
+      {
+        "id": "bid_1793282444099_dkk7",
+        "auctionId": "room_ympl-season-2-organised-by-sr11-kqel_1792922103554",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "playerId": "CRIC-2026-JXTVZ",
+        "teamId": "team_1793195963027_y1cv",
+        "teamName": "Sahara MSD",
+        "teamShortName": "S",
+        "teamLogoUrl": "/api/team-logo/team_1793195963027_y1cv",
+        "amount": 14000,
+        "createdAt": "2026-10-29T14:00:44.099+00:00"
+      },
+      {
+        "id": "bid_1793282440675_95tl",
+        "auctionId": "room_ympl-season-2-organised-by-sr11-kqel_1792922103554",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "playerId": "CRIC-2026-JXTVZ",
+        "teamId": "team_1793276890362_ftq3",
+        "teamName": "CSK",
+        "teamShortName": "C",
+        "teamLogoUrl": "/api/team-logo/team_1793276890362_ftq3",
+        "amount": 13000,
+        "createdAt": "2026-10-29T14:00:40.675+00:00"
+      },
+      {
+        "id": "bid_1793282437722_x7bq",
+        "auctionId": "room_ympl-season-2-organised-by-sr11-kqel_1792922103554",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "playerId": "CRIC-2026-JXTVZ",
+        "teamId": "team_1793276932286_ehiz",
+        "teamName": "2 Star Furniture",
+        "teamShortName": "2",
+        "teamLogoUrl": "/api/team-logo/team_1793276932286_ehiz",
+        "amount": 12000,
+        "createdAt": "2026-10-29T14:00:37.722+00:00"
+      },
+      {
+        "id": "bid_1793282436205_lw1t",
+        "auctionId": "room_ympl-season-2-organised-by-sr11-kqel_1792922103554",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "playerId": "CRIC-2026-JXTVZ",
+        "teamId": "team_1793277027173_s0vg",
+        "teamName": "Rani Amravati",
+        "teamShortName": "RA",
+        "teamLogoUrl": "",
+        "amount": 11000,
+        "createdAt": "2026-10-29T14:00:36.205+00:00"
+      },
+      {
+        "id": "bid_1793282431935_igdu",
+        "auctionId": "room_ympl-season-2-organised-by-sr11-kqel_1792922103554",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "playerId": "CRIC-2026-JXTVZ",
+        "teamId": "team_1793276971870_0eoo",
+        "teamName": "Super Titan",
+        "teamShortName": "T",
+        "teamLogoUrl": "/api/team-logo/team_1793276971870_0eoo",
+        "amount": 10000,
+        "createdAt": "2026-10-29T14:00:31.935+00:00"
+      },
+      {
+        "id": "bid_1793282424003_mk2k",
+        "auctionId": "room_ympl-season-2-organised-by-sr11-kqel_1792922103554",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "playerId": "CRIC-2026-JXTVZ",
+        "teamId": "team_1793276724182_52jb",
+        "teamName": "GRCC",
+        "teamShortName": "G",
+        "teamLogoUrl": "/api/team-logo/team_1793276724182_52jb",
+        "amount": 9000,
+        "createdAt": "2026-10-29T14:00:24.003+00:00"
+      },
+      {
+        "id": "bid_1793282416347_0do2",
+        "auctionId": "room_ympl-season-2-organised-by-sr11-kqel_1792922103554",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "playerId": "CRIC-2026-JXTVZ",
+        "teamId": "team_1793107809465_vdfp",
+        "teamName": "Kohinoor Badshah",
+        "teamShortName": "KB",
+        "teamLogoUrl": "/api/team-logo/team_1793107809465_vdfp",
+        "amount": 8000,
+        "createdAt": "2026-10-29T14:00:16.347+00:00"
+      },
+      {
+        "id": "bid_1793282388643_5sth",
+        "auctionId": "room_ympl-season-2-organised-by-sr11-kqel_1792922103554",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "playerId": "CRIC-2026-JXTVZ",
+        "teamId": "team_1793276971870_0eoo",
+        "teamName": "Super Titan",
+        "teamShortName": "T",
+        "teamLogoUrl": "/api/team-logo/team_1793276971870_0eoo",
+        "amount": 7000,
+        "createdAt": "2026-10-29T13:59:48.643+00:00"
+      },
+      {
+        "id": "bid_1793282384880_nxfd",
+        "auctionId": "room_ympl-season-2-organised-by-sr11-kqel_1792922103554",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "playerId": "CRIC-2026-JXTVZ",
+        "teamId": "team_1793276932286_ehiz",
+        "teamName": "2 Star Furniture",
+        "teamShortName": "2",
+        "teamLogoUrl": "/api/team-logo/team_1793276932286_ehiz",
+        "amount": 6000,
+        "createdAt": "2026-10-29T13:59:44.88+00:00"
+      },
+      {
+        "id": "bid_1793282380710_dkrf",
+        "auctionId": "room_ympl-season-2-organised-by-sr11-kqel_1792922103554",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "playerId": "CRIC-2026-JXTVZ",
+        "teamId": "team_1793107809465_vdfp",
+        "teamName": "Kohinoor Badshah",
+        "teamShortName": "KB",
+        "teamLogoUrl": "/api/team-logo/team_1793107809465_vdfp",
+        "amount": 5000,
+        "createdAt": "2026-10-29T13:59:40.71+00:00"
+      },
+      {
+        "id": "bid_1793282377071_m8vq",
+        "auctionId": "room_ympl-season-2-organised-by-sr11-kqel_1792922103554",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "playerId": "CRIC-2026-JXTVZ",
+        "teamId": "team_1793195963027_y1cv",
+        "teamName": "Sahara MSD",
+        "teamShortName": "S",
+        "teamLogoUrl": "/api/team-logo/team_1793195963027_y1cv",
+        "amount": 4000,
+        "createdAt": "2026-10-29T13:59:37.071+00:00"
+      },
+      {
+        "id": "bid_1793282372444_9np5",
+        "auctionId": "room_ympl-season-2-organised-by-sr11-kqel_1792922103554",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "playerId": "CRIC-2026-JXTVZ",
+        "teamId": "team_1793276724182_52jb",
+        "teamName": "GRCC",
+        "teamShortName": "G",
+        "teamLogoUrl": "/api/team-logo/team_1793276724182_52jb",
+        "amount": 3000,
+        "createdAt": "2026-10-29T13:59:32.444+00:00"
+      },
+      {
+        "id": "bid_1793282314060_f8t9",
+        "auctionId": "room_ympl-season-2-organised-by-sr11-kqel_1792922103554",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "playerId": "CRIC-2026-JXTVZ",
+        "teamId": "team_1793195870417_djwm",
+        "teamName": "SR Striker",
+        "teamShortName": "S",
+        "teamLogoUrl": "/api/team-logo/team_1793195870417_djwm",
+        "amount": 2000,
+        "createdAt": "2026-10-29T13:58:34.06+00:00"
+      }
+    ]
+  },
+  "playerStates": {
+    "ympl-season-2-organised-by-sr11-kqel": {
+      "CRIC-2026-DX3HI": {
+        "playerId": "CRIC-2026-DX3HI",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "IN_AUCTION",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.788Z"
+      },
+      "CRIC-2026-W5D81": {
+        "playerId": "CRIC-2026-W5D81",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "IN_AUCTION",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.829Z"
+      },
+      "CRIC-2026-FL6IS": {
+        "playerId": "CRIC-2026-FL6IS",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "IN_AUCTION",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.829Z"
+      },
+      "CRIC-2026-02MPJ": {
+        "playerId": "CRIC-2026-02MPJ",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "IN_AUCTION",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.829Z"
+      },
+      "CRIC-2026-2J8LS": {
+        "playerId": "CRIC-2026-2J8LS",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "IN_AUCTION",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.829Z"
+      },
+      "CRIC-2026-000A0": {
+        "playerId": "CRIC-2026-000A0",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "IN_AUCTION",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.829Z"
+      },
+      "CRIC-2026-G5S3Q": {
+        "playerId": "CRIC-2026-G5S3Q",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.829Z"
+      },
+      "CRIC-2026-GLA9E": {
+        "playerId": "CRIC-2026-GLA9E",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.829Z"
+      },
+      "CRIC-2026-FPGA9": {
+        "playerId": "CRIC-2026-FPGA9",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "IN_AUCTION",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-2VF0C": {
+        "playerId": "CRIC-2026-2VF0C",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-G34J6": {
+        "playerId": "CRIC-2026-G34J6",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-TDI7P": {
+        "playerId": "CRIC-2026-TDI7P",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-QDZ6O": {
+        "playerId": "CRIC-2026-QDZ6O",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-6YA6M": {
+        "playerId": "CRIC-2026-6YA6M",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-YF2PS": {
+        "playerId": "CRIC-2026-YF2PS",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-1GVQM": {
+        "playerId": "CRIC-2026-1GVQM",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-42EWK": {
+        "playerId": "CRIC-2026-42EWK",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-5E4JE": {
+        "playerId": "CRIC-2026-5E4JE",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-5VQIS": {
+        "playerId": "CRIC-2026-5VQIS",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-6ASB2": {
+        "playerId": "CRIC-2026-6ASB2",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-LA89Z": {
+        "playerId": "CRIC-2026-LA89Z",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-F9S06": {
+        "playerId": "CRIC-2026-F9S06",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-CY6LW": {
+        "playerId": "CRIC-2026-CY6LW",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-QS11Y": {
+        "playerId": "CRIC-2026-QS11Y",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-ANC9H": {
+        "playerId": "CRIC-2026-ANC9H",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-7I1JQ": {
+        "playerId": "CRIC-2026-7I1JQ",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-BKMK2": {
+        "playerId": "CRIC-2026-BKMK2",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-VTT7Q": {
+        "playerId": "CRIC-2026-VTT7Q",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-GP5WN": {
+        "playerId": "CRIC-2026-GP5WN",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-9XYNP": {
+        "playerId": "CRIC-2026-9XYNP",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-NGS6C": {
+        "playerId": "CRIC-2026-NGS6C",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-IZG9E": {
+        "playerId": "CRIC-2026-IZG9E",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-VYWTD": {
+        "playerId": "CRIC-2026-VYWTD",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-BO15U": {
+        "playerId": "CRIC-2026-BO15U",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-U761O": {
+        "playerId": "CRIC-2026-U761O",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-G05NO": {
+        "playerId": "CRIC-2026-G05NO",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "SOLD",
+        "basePrice": 1000,
+        "soldPrice": 10000,
+        "soldToTeamId": "team_1793195870417_djwm",
+        "soldToTeamName": "SR Striker",
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-ZGQNH": {
+        "playerId": "CRIC-2026-ZGQNH",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-2P6P8": {
+        "playerId": "CRIC-2026-2P6P8",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-CGB39": {
+        "playerId": "CRIC-2026-CGB39",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "SOLD",
+        "basePrice": 1000,
+        "soldPrice": 10000,
+        "soldToTeamId": "team_1793195870417_djwm",
+        "soldToTeamName": "SR Striker",
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-2MIQ9": {
+        "playerId": "CRIC-2026-2MIQ9",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-K9WNY": {
+        "playerId": "CRIC-2026-K9WNY",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-XJDKN": {
+        "playerId": "CRIC-2026-XJDKN",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-3XEBQ": {
+        "playerId": "CRIC-2026-3XEBQ",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-AMHV4": {
+        "playerId": "CRIC-2026-AMHV4",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-DWS8I": {
+        "playerId": "CRIC-2026-DWS8I",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-85A8E": {
+        "playerId": "CRIC-2026-85A8E",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-NCOK6": {
+        "playerId": "CRIC-2026-NCOK6",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-KS1TM": {
+        "playerId": "CRIC-2026-KS1TM",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-SCB44": {
+        "playerId": "CRIC-2026-SCB44",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "SOLD",
+        "basePrice": 1000,
+        "soldPrice": 10000,
+        "soldToTeamId": "team_1793107809465_vdfp",
+        "soldToTeamName": "Kohinoor Badshah",
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-QJ9J7": {
+        "playerId": "CRIC-2026-QJ9J7",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-6PDZE": {
+        "playerId": "CRIC-2026-6PDZE",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-ZTBSR": {
+        "playerId": "CRIC-2026-ZTBSR",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-8SVM2": {
+        "playerId": "CRIC-2026-8SVM2",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-5VJRC": {
+        "playerId": "CRIC-2026-5VJRC",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-RXIOP": {
+        "playerId": "CRIC-2026-RXIOP",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.830Z"
+      },
+      "CRIC-2026-0XF3H": {
+        "playerId": "CRIC-2026-0XF3H",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-EIH74": {
+        "playerId": "CRIC-2026-EIH74",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-TGF6C": {
+        "playerId": "CRIC-2026-TGF6C",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-Q9177": {
+        "playerId": "CRIC-2026-Q9177",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-JQOPF": {
+        "playerId": "CRIC-2026-JQOPF",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-U5U8X": {
+        "playerId": "CRIC-2026-U5U8X",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-F1P8L": {
+        "playerId": "CRIC-2026-F1P8L",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-HVM8U": {
+        "playerId": "CRIC-2026-HVM8U",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-SIXLS": {
+        "playerId": "CRIC-2026-SIXLS",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-WYULE": {
+        "playerId": "CRIC-2026-WYULE",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-44XDJ": {
+        "playerId": "CRIC-2026-44XDJ",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-0MZP8": {
+        "playerId": "CRIC-2026-0MZP8",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-4Z89B": {
+        "playerId": "CRIC-2026-4Z89B",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-QGMSY": {
+        "playerId": "CRIC-2026-QGMSY",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-G4PMM": {
+        "playerId": "CRIC-2026-G4PMM",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-ZXYCN": {
+        "playerId": "CRIC-2026-ZXYCN",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-J32KO": {
+        "playerId": "CRIC-2026-J32KO",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-NJDIN": {
+        "playerId": "CRIC-2026-NJDIN",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-Y200G": {
+        "playerId": "CRIC-2026-Y200G",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-0KKR0": {
+        "playerId": "CRIC-2026-0KKR0",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-YV70O": {
+        "playerId": "CRIC-2026-YV70O",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-ADKA3": {
+        "playerId": "CRIC-2026-ADKA3",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-I552Y": {
+        "playerId": "CRIC-2026-I552Y",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-JLK57": {
+        "playerId": "CRIC-2026-JLK57",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-D596S": {
+        "playerId": "CRIC-2026-D596S",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-BIUKF": {
+        "playerId": "CRIC-2026-BIUKF",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-LX624": {
+        "playerId": "CRIC-2026-LX624",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-TX6JB": {
+        "playerId": "CRIC-2026-TX6JB",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-IPX84": {
+        "playerId": "CRIC-2026-IPX84",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-9AHWS": {
+        "playerId": "CRIC-2026-9AHWS",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-X5K8Y": {
+        "playerId": "CRIC-2026-X5K8Y",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.831Z"
+      },
+      "CRIC-2026-E5U7D": {
+        "playerId": "CRIC-2026-E5U7D",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-RNT2I": {
+        "playerId": "CRIC-2026-RNT2I",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-YELTU": {
+        "playerId": "CRIC-2026-YELTU",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-NH9CO": {
+        "playerId": "CRIC-2026-NH9CO",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-A8K6P": {
+        "playerId": "CRIC-2026-A8K6P",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-7103C": {
+        "playerId": "CRIC-2026-7103C",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-7UJC4": {
+        "playerId": "CRIC-2026-7UJC4",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-HI1K4": {
+        "playerId": "CRIC-2026-HI1K4",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-6FD7A": {
+        "playerId": "CRIC-2026-6FD7A",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "IN_AUCTION",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-WO90M": {
+        "playerId": "CRIC-2026-WO90M",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "IN_AUCTION",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-VFTCJ": {
+        "playerId": "CRIC-2026-VFTCJ",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-FMQLY": {
+        "playerId": "CRIC-2026-FMQLY",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-HZ4SB": {
+        "playerId": "CRIC-2026-HZ4SB",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "IN_AUCTION",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-P394Y": {
+        "playerId": "CRIC-2026-P394Y",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "IN_AUCTION",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-NE0K9": {
+        "playerId": "CRIC-2026-NE0K9",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "IN_AUCTION",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-JXTVZ": {
+        "playerId": "CRIC-2026-JXTVZ",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "IN_AUCTION",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-T7056": {
+        "playerId": "CRIC-2026-T7056",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "IN_AUCTION",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-GNN5I": {
+        "playerId": "CRIC-2026-GNN5I",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-0RHA8": {
+        "playerId": "CRIC-2026-0RHA8",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-33BE9": {
+        "playerId": "CRIC-2026-33BE9",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-NWJ3R": {
+        "playerId": "CRIC-2026-NWJ3R",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-G0Q37": {
+        "playerId": "CRIC-2026-G0Q37",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-Y5SWR": {
+        "playerId": "CRIC-2026-Y5SWR",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-6UQ1E": {
+        "playerId": "CRIC-2026-6UQ1E",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-SCLX3": {
+        "playerId": "CRIC-2026-SCLX3",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-FX5NQ": {
+        "playerId": "CRIC-2026-FX5NQ",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-XTWUM": {
+        "playerId": "CRIC-2026-XTWUM",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-I9TWO": {
+        "playerId": "CRIC-2026-I9TWO",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-SKM91": {
+        "playerId": "CRIC-2026-SKM91",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-2RIZE": {
+        "playerId": "CRIC-2026-2RIZE",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-4M8IQ": {
+        "playerId": "CRIC-2026-4M8IQ",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-ZSH74": {
+        "playerId": "CRIC-2026-ZSH74",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "PENDING",
+        "basePrice": 1000,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-EAL42": {
+        "playerId": "CRIC-2026-EAL42",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "IN_AUCTION",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-ZI8A1": {
+        "playerId": "CRIC-2026-ZI8A1",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "IN_AUCTION",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-J4WRV": {
+        "playerId": "CRIC-2026-J4WRV",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "IN_AUCTION",
+        "basePrice": 1000,
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null,
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      },
+      "CRIC-2026-F0OIK": {
+        "playerId": "CRIC-2026-F0OIK",
+        "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
+        "status": "SOLD",
+        "basePrice": 1000,
+        "soldPrice": 10000,
+        "soldToTeamId": "team_1793107809465_vdfp",
+        "soldToTeamName": "Kohinoor Badshah",
+        "updatedAt": "2026-11-01T11:14:12.832Z"
+      }
+    }
+  }
+}

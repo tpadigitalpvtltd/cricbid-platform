@@ -70,9 +70,14 @@ function readLocalData(): LocalAuctionData {
   if (globalThis.__CRICBID_AUCTION_DATA__ && Object.keys(globalThis.__CRICBID_AUCTION_DATA__.rooms).length > 0) {
     return globalThis.__CRICBID_AUCTION_DATA__;
   }
+  const SEED_AUCTION_DATA_FILE = path.join(process.cwd(), 'data', 'auction_data.json');
   try {
-    if (fs.existsSync(AUCTION_DATA_FILE)) {
-      const data = JSON.parse(fs.readFileSync(AUCTION_DATA_FILE, 'utf8') || '{}');
+    const fileToRead = fs.existsSync(AUCTION_DATA_FILE)
+      ? AUCTION_DATA_FILE
+      : (fs.existsSync(SEED_AUCTION_DATA_FILE) ? SEED_AUCTION_DATA_FILE : null);
+
+    if (fileToRead) {
+      const data = JSON.parse(fs.readFileSync(fileToRead, 'utf8') || '{}');
       if (data && typeof data === 'object') {
         globalThis.__CRICBID_AUCTION_DATA__ = {
           rooms: data.rooms || {},
@@ -113,116 +118,116 @@ export function getDefaultSeedTeams(slug: string): TournamentTeam[] {
   if (isYmpl) {
     return [
       {
-        id: `team_${slug}_st`,
+        id: 'team_1793107809465_vdfp',
         tournamentSlug: slug,
-        name: 'Super Titan',
-        shortName: 'ST',
-        logoUrl: '',
-        color: '#0ea5e9',
+        name: 'Kohinoor Badshah',
+        shortName: 'KB',
+        logoUrl: '/api/team-logo/team_1793107809465_vdfp',
+        color: '#f97316',
         totalPurse: 100000,
-        remainingPurse: 100000,
-        secretPin: '1111',
-        maxPlayers: 15,
-        boughtPlayersCount: 0,
-        createdAt: new Date().toISOString(),
+        remainingPurse: 80000,
+        secretPin: '555',
+        maxPlayers: 12,
+        boughtPlayersCount: 2,
+        createdAt: '2026-10-27T13:30:11.479032+00:00',
       },
       {
-        id: `team_${slug}_ra`,
+        id: 'team_1793195870417_djwm',
+        tournamentSlug: slug,
+        name: 'SR Striker',
+        shortName: 'S',
+        logoUrl: '/api/team-logo/team_1793195870417_djwm',
+        color: '#06b6d4',
+        totalPurse: 100000,
+        remainingPurse: 80000,
+        secretPin: '1457',
+        maxPlayers: 15,
+        boughtPlayersCount: 2,
+        createdAt: '2026-10-28T13:57:52.718311+00:00',
+      },
+      {
+        id: 'team_1793195963027_y1cv',
+        tournamentSlug: slug,
+        name: 'Sahara MSD',
+        shortName: 'S',
+        logoUrl: '/api/team-logo/team_1793195963027_y1cv',
+        color: '#10b981',
+        totalPurse: 100000,
+        remainingPurse: 100000,
+        secretPin: '3960',
+        maxPlayers: 15,
+        boughtPlayersCount: 0,
+        createdAt: '2026-10-28T13:59:24.435064+00:00',
+      },
+      {
+        id: 'team_1793276724182_52jb',
+        tournamentSlug: slug,
+        name: 'GRCC',
+        shortName: 'G',
+        logoUrl: '/api/team-logo/team_1793276724182_52jb',
+        color: '#10b981',
+        totalPurse: 100000,
+        remainingPurse: 100000,
+        secretPin: '1970',
+        maxPlayers: 12,
+        boughtPlayersCount: 0,
+        createdAt: '2026-10-29T12:25:25.629408+00:00',
+      },
+      {
+        id: 'team_1793276890362_ftq3',
+        tournamentSlug: slug,
+        name: 'CSK',
+        shortName: 'C',
+        logoUrl: '/api/team-logo/team_1793276890362_ftq3',
+        color: '#f59e0b',
+        totalPurse: 100000,
+        remainingPurse: 100000,
+        secretPin: '2721',
+        maxPlayers: 15,
+        boughtPlayersCount: 0,
+        createdAt: '2026-10-29T12:28:12.649277+00:00',
+      },
+      {
+        id: 'team_1793276932286_ehiz',
+        tournamentSlug: slug,
+        name: '2 Star Furniture',
+        shortName: '2',
+        logoUrl: '/api/team-logo/team_1793276932286_ehiz',
+        color: '#3b82f6',
+        totalPurse: 100000,
+        remainingPurse: 100000,
+        secretPin: '2247',
+        maxPlayers: 15,
+        boughtPlayersCount: 0,
+        createdAt: '2026-10-29T12:28:54.352882+00:00',
+      },
+      {
+        id: 'team_1793276971870_0eoo',
+        tournamentSlug: slug,
+        name: 'Super Titan',
+        shortName: 'T',
+        logoUrl: '/api/team-logo/team_1793276971870_0eoo',
+        color: '#ef4444',
+        totalPurse: 100000,
+        remainingPurse: 100000,
+        secretPin: '6534',
+        maxPlayers: 15,
+        boughtPlayersCount: 0,
+        createdAt: '2026-10-29T12:29:34.117495+00:00',
+      },
+      {
+        id: 'team_1793277027173_s0vg',
         tournamentSlug: slug,
         name: 'Rani Amravati',
         shortName: 'RA',
         logoUrl: '',
-        color: '#ec4899',
-        totalPurse: 100000,
-        remainingPurse: 100000,
-        secretPin: '2222',
-        maxPlayers: 15,
-        boughtPlayersCount: 0,
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: `team_${slug}_kb`,
-        tournamentSlug: slug,
-        name: 'Kohinoor Badshah',
-        shortName: 'KB',
-        logoUrl: '',
-        color: '#f59e0b',
-        totalPurse: 100000,
-        remainingPurse: 100000,
-        secretPin: '3333',
-        maxPlayers: 15,
-        boughtPlayersCount: 0,
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: `team_${slug}_sr`,
-        tournamentSlug: slug,
-        name: 'SR Striker',
-        shortName: 'SR',
-        logoUrl: '',
-        color: '#10b981',
-        totalPurse: 100000,
-        remainingPurse: 100000,
-        secretPin: '4444',
-        maxPlayers: 15,
-        boughtPlayersCount: 0,
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: `team_${slug}_sm`,
-        tournamentSlug: slug,
-        name: 'Sahara MSD',
-        shortName: 'SM',
-        logoUrl: '',
         color: '#3b82f6',
         totalPurse: 100000,
         remainingPurse: 100000,
-        secretPin: '5555',
+        secretPin: '1691',
         maxPlayers: 15,
         boughtPlayersCount: 0,
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: `team_${slug}_gr`,
-        tournamentSlug: slug,
-        name: 'GRCC',
-        shortName: 'GR',
-        logoUrl: '',
-        color: '#8b5cf6',
-        totalPurse: 100000,
-        remainingPurse: 100000,
-        secretPin: '6666',
-        maxPlayers: 15,
-        boughtPlayersCount: 0,
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: `team_${slug}_cs`,
-        tournamentSlug: slug,
-        name: 'CSK',
-        shortName: 'CS',
-        logoUrl: '',
-        color: '#eab308',
-        totalPurse: 100000,
-        remainingPurse: 100000,
-        secretPin: '7777',
-        maxPlayers: 15,
-        boughtPlayersCount: 0,
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: `team_${slug}_2s`,
-        tournamentSlug: slug,
-        name: '2 Star Furniture',
-        shortName: '2S',
-        logoUrl: '',
-        color: '#14b8a6',
-        totalPurse: 100000,
-        remainingPurse: 100000,
-        secretPin: '8888',
-        maxPlayers: 15,
-        boughtPlayersCount: 0,
-        createdAt: new Date().toISOString(),
+        createdAt: '2026-10-29T12:30:29.323755+00:00',
       },
     ];
   }
@@ -893,12 +898,9 @@ export function buildFullAuctionStateSync(params: {
     currentPlayerState = playerStates[room.currentPlayerId] || null;
   }
 
-  // If no current player is set, pick the first pending player
+  // If no current player is set, deterministically pick the first pending player (NEVER random on poll)
   if (!currentPlayer && playersQueue.length > 0) {
-    const allPending = playersQueue.filter((pq) => pq.status === 'PENDING');
-    const firstPending = allPending.length > 0 
-      ? allPending[Math.floor(Math.random() * allPending.length)]
-      : playersQueue[0];
+    const firstPending = playersQueue.find((pq) => pq.status === 'PENDING') || playersQueue[0];
     if (firstPending) {
       currentPlayer = firstPending.player;
       currentPlayerState = {
