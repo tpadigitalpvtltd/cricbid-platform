@@ -113,36 +113,36 @@ function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionStat
   let resolvedBiddingTeam = incoming.currentBiddingTeam;
 
   if (prevActionTime > incomingActionTime && prev.room?.lastAction !== 'INIT') {
-    resolvedRoom = {
-      ...incoming.room,
-      currentPlayerId: prev.room.currentPlayerId,
-      currentBid: prev.room.currentBid,
-      currentBiddingTeamId: prev.room.currentBiddingTeamId,
-      timerSeconds: prev.room.timerSeconds,
-      timerRunning: prev.room.timerRunning,
-      lastAction: prev.room.lastAction,
-      lastActionTimestamp: prev.room.lastActionTimestamp,
-    };
-    resolvedPlayer = prev.currentPlayer;
-    resolvedPlayerState = prev.currentPlayerState;
-    resolvedBiddingTeam = prev.currentBiddingTeam;
-  } else {
-    const isSamePlayer =
-      prev.room?.currentPlayerId &&
-      incoming.room?.currentPlayerId &&
-      prev.room.currentPlayerId === incoming.room.currentPlayerId;
+    return prev;
+  }
 
-    if (
-      isSamePlayer &&
-      incoming.room.currentBid < prev.room.currentBid &&
-      incoming.room.lastAction !== 'UNDO' &&
-      incoming.room.lastAction !== 'RESET' &&
-      incoming.room.lastAction !== 'NEXT'
-    ) {
-      resolvedRoom.currentBid = prev.room.currentBid;
-      resolvedRoom.currentBiddingTeamId = prev.room.currentBiddingTeamId;
-      resolvedBiddingTeam = prev.currentBiddingTeam || incoming.currentBiddingTeam;
-    }
+  const isSamePlayer =
+    prev.room?.currentPlayerId &&
+    incoming.room?.currentPlayerId &&
+    prev.room.currentPlayerId === incoming.room.currentPlayerId;
+
+  if (
+    isSamePlayer &&
+    prev.currentPlayer?.photoUrl?.startsWith('data:image/') &&
+    resolvedPlayer &&
+    (!resolvedPlayer.photoUrl || !resolvedPlayer.photoUrl.startsWith('data:image/'))
+  ) {
+    resolvedPlayer = {
+      ...resolvedPlayer,
+      photoUrl: prev.currentPlayer.photoUrl,
+    };
+  }
+
+  if (
+    isSamePlayer &&
+    incoming.room.currentBid < prev.room.currentBid &&
+    incoming.room.lastAction !== 'UNDO' &&
+    incoming.room.lastAction !== 'RESET' &&
+    incoming.room.lastAction !== 'NEXT'
+  ) {
+    resolvedRoom.currentBid = prev.room.currentBid;
+    resolvedRoom.currentBiddingTeamId = prev.room.currentBiddingTeamId;
+    resolvedBiddingTeam = prev.currentBiddingTeam || incoming.currentBiddingTeam;
   }
 
   return {

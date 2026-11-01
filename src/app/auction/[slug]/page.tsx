@@ -60,7 +60,12 @@ function isStateUnchanged(prev: FullAuctionState | null, incoming: FullAuctionSt
     return false;
   }
 
-  if (prev.currentPlayer?.registrationId !== incoming.currentPlayer?.registrationId) {
+  if (
+    prev.currentPlayer?.registrationId !== incoming.currentPlayer?.registrationId ||
+    prev.currentPlayer?.photoUrl !== incoming.currentPlayer?.photoUrl ||
+    prev.currentPlayer?.fullName !== incoming.currentPlayer?.fullName ||
+    prev.room?.basePrice !== incoming.room?.basePrice
+  ) {
     return false;
   }
 
@@ -98,6 +103,7 @@ export default function ProjectorAuctionPage() {
   const [photoFit, setPhotoFit] = useState<'contain' | 'cover'>('contain');
   const [zoomScale, setZoomScale] = useState<number>(1);
   const [panY, setPanY] = useState<number>(0);
+  const [photoLoadError, setPhotoLoadError] = useState<boolean>(false);
 
   // Sold / Unsold Celebration Modals
   const [showSoldModal, setShowSoldModal] = useState(false);
@@ -212,6 +218,22 @@ export default function ProjectorAuctionPage() {
         prevState.room.currentPlayerId === newState.room.currentPlayerId;
 
       let effectiveState = newState;
+      // Preserve rich base64 photoUrl if incoming compact packet only carries /api/player-photo/... for the same player
+      if (
+        isSamePlayer &&
+        prevState?.currentPlayer?.photoUrl?.startsWith('data:image/') &&
+        effectiveState.currentPlayer &&
+        (!effectiveState.currentPlayer.photoUrl || !effectiveState.currentPlayer.photoUrl.startsWith('data:image/'))
+      ) {
+        effectiveState = {
+          ...effectiveState,
+          currentPlayer: {
+            ...effectiveState.currentPlayer,
+            photoUrl: prevState.currentPlayer.photoUrl,
+          },
+        };
+      }
+
       if (
         isSamePlayer &&
         prevState &&
@@ -221,9 +243,9 @@ export default function ProjectorAuctionPage() {
         newState.room.lastAction !== 'NEXT'
       ) {
         effectiveState = {
-          ...newState,
+          ...effectiveState,
           room: {
-            ...newState.room,
+            ...effectiveState.room,
             currentBid: prevState.room.currentBid,
             currentBiddingTeamId: prevState.room.currentBiddingTeamId,
           },
@@ -300,15 +322,35 @@ export default function ProjectorAuctionPage() {
 
   // 1. Native Browser BroadcastChannel + localStorage + SSE event stream for 0ms instantaneous sync
   useEffect(() => {
+    setPhotoLoadError(false);
+  }, [state?.currentPlayer?.registrationId, state?.currentPlayer?.photoUrl]);
+
+  useEffect(() => {
     if (!slug || typeof window === 'undefined') return;
     const cleanSlug = slug.toLowerCase();
     const storageKey = `cricbid_live_state_${cleanSlug}`;
     const photoTransformKey = `cricbid_photo_transform_${cleanSlug}`;
+    const playerPhotoKey = `cricbid_player_photo_${cleanSlug}`;
 
     const applyPhotoPacket = (pkt: any) => {
       if (typeof pkt?.zoomScale === 'number') setZoomScale(pkt.zoomScale);
       if (typeof pkt?.panY === 'number') setPanY(pkt.panY);
       if (pkt?.photoFit === 'contain' || pkt?.photoFit === 'cover') setPhotoFit(pkt.photoFit);
+    };
+
+    const applyPlayerPhotoUpdate = (pkt: any) => {
+      if (!pkt?.playerId || !pkt?.photoUrl) return;
+      setPhotoLoadError(false);
+      setState((prev) => {
+        if (!prev || !prev.currentPlayer || prev.currentPlayer.registrationId !== pkt.playerId) return prev;
+        return {
+          ...prev,
+          currentPlayer: {
+            ...prev.currentPlayer,
+            photoUrl: String(pkt.photoUrl),
+          },
+        };
+      });
     };
 
     // Hydrate immediately from localStorage if controller has active state on this machine
@@ -336,6 +378,10 @@ export default function ProjectorAuctionPage() {
         try {
           applyPhotoPacket(JSON.parse(e.newValue));
         } catch {}
+      } else if (e.key === playerPhotoKey && e.newValue) {
+        try {
+          applyPlayerPhotoUpdate(JSON.parse(e.newValue));
+        } catch {}
       }
     };
     window.addEventListener('storage', onStorage);
@@ -347,6 +393,8 @@ export default function ProjectorAuctionPage() {
       bc.onmessage = (event) => {
         if (event.data?.type === 'PHOTO_TRANSFORM') {
           applyPhotoPacket(event.data);
+        } else if (event.data?.type === 'PLAYER_PHOTO') {
+          applyPlayerPhotoUpdate(event.data);
         } else if (event.data?.state) {
           handleIncomingState(event.data.state);
         }
@@ -390,6 +438,18 @@ export default function ProjectorAuctionPage() {
         if (typeof inner.zoomScale === 'number') setZoomScale(inner.zoomScale);
         if (typeof inner.panY === 'number') setPanY(inner.panY);
         if (inner.photoFit === 'contain' || inner.photoFit === 'cover') setPhotoFit(inner.photoFit);
+      } else if (inner?.type === 'PLAYER_PHOTO' && inner?.playerId && inner?.photoUrl) {
+        setPhotoLoadError(false);
+        setState((prev) => {
+          if (!prev || !prev.currentPlayer || prev.currentPlayer.registrationId !== inner.playerId) return prev;
+          return {
+            ...prev,
+            currentPlayer: {
+              ...prev.currentPlayer,
+              photoUrl: String(inner.photoUrl),
+            },
+          };
+        });
       } else if (inner?.state?.room) {
         handleIncomingState(inner.state);
       }
@@ -607,20 +667,23 @@ export default function ProjectorAuctionPage() {
                 <div className="absolute inset-0 bg-radial from-amber-500/20 via-transparent to-transparent opacity-80 pointer-events-none" />
 
                 {/* Massive Hero Photo with Ambient Glow & Smart Framing */}
-                {currentPlayer.photoUrl ? (
+                {currentPlayer.photoUrl && !photoLoadError ? (
                   <>
                     {/* Ambient Blurred Backdrop so there are never empty black bars */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={currentPlayer.photoUrl}
                       alt=""
+                      onError={() => setPhotoLoadError(true)}
                       className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-40 scale-125 pointer-events-none"
                     />
                     {/* Foreground Sharp Player Photo with Zoom & Pan */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
+                      key={`${currentPlayer.registrationId}_${(currentPlayer.photoUrl || '').slice(-24)}`}
                       src={currentPlayer.photoUrl}
                       alt={currentPlayer.fullName}
+                      onError={() => setPhotoLoadError(true)}
                       style={{
                         transform: `scale(${zoomScale}) translateY(${panY}%)`,
                         transformOrigin: 'center center',
@@ -631,8 +694,16 @@ export default function ProjectorAuctionPage() {
                     />
                   </>
                 ) : (
-                  <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-950 to-amber-950/80 flex items-center justify-center font-black text-amber-400 text-6xl sm:text-8xl tracking-widest">
-                    {getInitials(currentPlayer.fullName)}
+                  <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-950 to-amber-950/80 flex flex-col items-center justify-center pb-24 z-10">
+                    <div className="w-36 h-36 sm:w-44 sm:h-44 rounded-full bg-slate-900/90 border-4 border-amber-400/80 shadow-[0_0_40px_rgba(245,158,11,0.45)] flex items-center justify-center font-black text-amber-400 text-5xl sm:text-7xl tracking-widest mb-3">
+                      {getInitials(currentPlayer.fullName)}
+                    </div>
+                    <p className="text-lg sm:text-2xl font-black text-white uppercase tracking-wider px-4 text-center">
+                      {currentPlayer.fullName}
+                    </p>
+                    <p className="text-xs sm:text-sm font-bold text-amber-400/90 uppercase tracking-widest mt-1">
+                      {currentPlayer.role || 'Official Draft Player'}
+                    </p>
                   </div>
                 )}
 

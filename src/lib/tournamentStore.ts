@@ -9,11 +9,11 @@ export const MASTER_GOOGLE_SHEET_URL =
   process.env.GOOGLE_SHEET_SCRIPT_URL ||
   'https://script.google.com/macros/s/AKfycbzLUMKCXZlwJH972TR45nfiXOYwEfIZoMsEHQWsSftcg0JSKHZRXegh_0iUgXMnpzDG7A/exec';
 
-// Serverless environment detection (Vercel / AWS Lambda)
+// Serverless environment detection (Vercel / AWS Lambda / Netlify)
 const isServerless = Boolean(
   process.env.VERCEL ||
   process.env.AWS_LAMBDA_FUNCTION_NAME ||
-  process.env.NODE_ENV === 'production'
+  process.env.NETLIFY
 );
 
 // Use os.tmpdir() for writable storage in serverless environments to prevent EROFS errors

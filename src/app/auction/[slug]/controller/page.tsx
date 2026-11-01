@@ -1413,47 +1413,50 @@ export default function AuctioneerControllerPage() {
       return;
     }
 
-    // 0ms instant optimistic update
-    setState((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        playersQueue: (prev.playersQueue || []).map((pq) =>
-          pq.player.registrationId === editingPlayerObj.registrationId
-            ? {
-                ...pq,
-                status: playerEditStatus as any,
-                basePrice: baseP,
-                soldPrice: soldP || null,
-                player: {
-                  ...pq.player,
-                  photoUrl: playerEditPhotoUrl || pq.player.photoUrl,
-                },
-              }
-            : pq
-        ),
-      };
-    });
+    // 0ms instant optimistic update + broadcast to Projector TV
+    const now = Date.now();
+    const targetPid = editingPlayerObj.registrationId;
+    applyOptimisticAndBroadcast((prev) => ({
+      ...prev,
+      room: {
+        ...prev.room,
+        lastActionTimestamp: now,
+      },
+      currentPlayer:
+        prev.currentPlayer && prev.currentPlayer.registrationId === targetPid
+          ? {
+              ...prev.currentPlayer,
+              photoUrl: playerEditPhotoUrl || prev.currentPlayer.photoUrl,
+            }
+          : prev.currentPlayer,
+      playersQueue: (prev.playersQueue || []).map((pq) =>
+        pq.player.registrationId === targetPid
+          ? {
+              ...pq,
+              status: playerEditStatus as any,
+              basePrice: baseP,
+              soldPrice: soldP || null,
+              player: {
+                ...pq.player,
+                photoUrl: playerEditPhotoUrl || pq.player.photoUrl,
+              },
+            }
+          : pq
+      ),
+    }));
 
-    const res = await executeAction('MANUAL_EDIT_PLAYER_AUCTION', {
-      playerId: editingPlayerObj.registrationId,
+    setShowPlayerEditModal(false);
+    setEditingPlayerObj(null);
+    showToast(`✅ Player record for ${editingPlayerObj.fullName} updated!`, 'success');
+
+    await executeAction('MANUAL_EDIT_PLAYER_AUCTION', {
+      playerId: targetPid,
       status: playerEditStatus,
       basePrice: baseP,
       soldPrice: soldP,
       soldToTeamId: soldTeamId,
       photoUrl: playerEditPhotoUrl || undefined,
     });
-
-    if (res?.success) {
-      setShowPlayerEditModal(false);
-      setEditingPlayerObj(null);
-      setLastDecisionMsg({
-        type: 'SOLD',
-        text: `✅ Player record for ${editingPlayerObj.fullName} updated manually!`,
-      });
-      setTimeout(() => setLastDecisionMsg(null), 5000);
-      fetchState();
-    }
   };
 
   // Re-Auction a player (works for any player whether SOLD, UNSOLD, or PENDING)
@@ -1676,6 +1679,70 @@ export default function AuctioneerControllerPage() {
     }
   };
 
+  const stagePhotoInputRef = useRef<HTMLInputElement>(null);
+
+  // Instant 1-Click Photo Upload right on the Active Stage Player Card (0ms Sync to Projector TV)
+  const handleStageQuickPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const activePlayer = stateRef.current?.currentPlayer || currentPlayer;
+    if (!file || !activePlayer) return;
+
+    try {
+      setIsPhotoCompressing(true);
+      const dataUrl = await compressImage(file, 520, 520, 0.84);
+      const now = Date.now();
+      const pid = activePlayer.registrationId;
+
+      applyOptimisticAndBroadcast((prev) => ({
+        ...prev,
+        room: {
+          ...prev.room,
+          lastActionTimestamp: now,
+        },
+        currentPlayer: prev.currentPlayer
+          ? { ...prev.currentPlayer, photoUrl: dataUrl }
+          : prev.currentPlayer,
+        playersQueue: (prev.playersQueue || []).map((pq) =>
+          pq.player.registrationId === pid
+            ? { ...pq, player: { ...pq.player, photoUrl: dataUrl } }
+            : pq
+        ),
+      }));
+
+      // Also broadcast dedicated PLAYER_PHOTO packet for cross-device / localStorage cache
+      if (slug && typeof window !== 'undefined') {
+        const cleanSlug = slug.toLowerCase();
+        const photoPkt = { type: 'PLAYER_PHOTO', playerId: pid, photoUrl: dataUrl, ts: now };
+        if (broadcastChannelRef.current) {
+          try {
+            broadcastChannelRef.current.postMessage(photoPkt);
+          } catch {}
+        }
+        try {
+          window.localStorage.setItem(`cricbid_stage_photo_${cleanSlug}`, JSON.stringify(photoPkt));
+        } catch {}
+        try {
+          const ntfyTopic = `cricbid_live_${cleanSlug.replace(/[^a-z0-9]/g, '_').slice(0, 48)}`;
+          fetch(`https://ntfy.sh/${ntfyTopic}`, {
+            method: 'POST',
+            body: JSON.stringify(photoPkt),
+          }).catch(() => {});
+        } catch {}
+      }
+
+      showToast(`📸 Photo updated on Live Projector for ${activePlayer.fullName}!`, 'success');
+      executeAction('MANUAL_EDIT_PLAYER_AUCTION', {
+        playerId: pid,
+        photoUrl: dataUrl,
+      }).catch(() => {});
+    } catch (err) {
+      showToast('Could not process photo', 'error');
+    } finally {
+      setIsPhotoCompressing(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
   // Add New Player Photo Upload with automatic compression
   const handlePlayerPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1683,7 +1750,7 @@ export default function AuctioneerControllerPage() {
 
     try {
       setIsPhotoCompressing(true);
-      const dataUrl = await compressImage(file, 600, 600, 0.85);
+      const dataUrl = await compressImage(file, 520, 520, 0.84);
       setAddPlayerPhotoUrl(dataUrl);
       showToast('Photo uploaded & optimized successfully!', 'success');
     } catch (err) {
@@ -1701,14 +1768,15 @@ export default function AuctioneerControllerPage() {
     }
   };
 
-  // Save New Player Action Handler (0ms Instant Optimistic UI + Background Sync)
-  const handleSaveNewPlayer = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Save New Player Action Handler (0ms Instant Direct Save + Optional Direct Stage Load)
+  const handleSaveNewPlayer = async (e?: React.FormEvent, loadOnStage: boolean = false) => {
+    if (e) e.preventDefault();
     if (!addPlayerName.trim()) {
       showToast('Please enter Player Name', 'error');
       return;
     }
 
+    const now = Date.now();
     const tempRegId = `CRIC-2026-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
     const basePrice = Number(addPlayerBasePrice) || 1000;
     const playerName = addPlayerName.trim();
@@ -1717,44 +1785,88 @@ export default function AuctioneerControllerPage() {
     const playerStats = addPlayerStats.trim() || 'Added by Admin';
     const playerPhoto = addPlayerPhotoUrl || '';
 
+    const newPlayerObj = {
+      registrationId: tempRegId,
+      tournamentSlug: slug,
+      tournamentTitle: state?.room?.tournamentSlug || slug,
+      fullName: playerName,
+      phone: playerPhone,
+      age: playerAge,
+      role: addPlayerRole,
+      battingStyle: addPlayerBatting,
+      bowlingStyle: addPlayerBowling,
+      stats: playerStats,
+      photoUrl: playerPhoto,
+      paymentId: 'ADMIN_MANUAL',
+      orderId: 'ADMIN_MANUAL',
+      paymentStatus: 'PAID' as const,
+      amount: 0,
+      timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+    };
+
     const newPlayerItem: FullAuctionState['playersQueue'][0] = {
-      player: {
-        registrationId: tempRegId,
-        tournamentSlug: slug,
-        tournamentTitle: state?.room?.tournamentSlug || slug,
-        fullName: playerName,
-        phone: playerPhone,
-        age: playerAge,
-        role: addPlayerRole,
-        battingStyle: addPlayerBatting,
-        bowlingStyle: addPlayerBowling,
-        stats: playerStats,
-        photoUrl: playerPhoto,
-        paymentId: 'ADMIN_MANUAL',
-        orderId: 'ADMIN_MANUAL',
-        paymentStatus: 'PAID',
-        amount: 0,
-        timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-      },
-      status: 'PENDING',
+      player: newPlayerObj,
+      status: loadOnStage ? 'IN_AUCTION' : 'PENDING',
       basePrice,
       soldPrice: null,
       soldTeamName: null,
       soldToTeamId: null,
     };
 
-    // 0ms instant optimistic update on desk!
-    setState((prev) => {
-      if (!prev) return prev;
+    // 0ms instant optimistic update + immediate broadcast to Projector TV!
+    applyOptimisticAndBroadcast((prev) => {
       const currentQueue = prev.playersQueue || [];
+      if (loadOnStage) {
+        return {
+          ...prev,
+          currentPlayer: newPlayerObj,
+          currentPlayerState: {
+            playerId: tempRegId,
+            tournamentSlug: slug,
+            status: 'IN_AUCTION',
+            basePrice,
+            updatedAt: new Date(now).toISOString(),
+          },
+          currentBiddingTeam: null,
+          room: {
+            ...prev.room,
+            currentPlayerId: tempRegId,
+            currentBid: basePrice,
+            currentBiddingTeamId: null,
+            timerSeconds: 10,
+            timerRunning: prev.room.status === 'ACTIVE',
+            lastAction: 'NEXT',
+            lastActionTimestamp: now,
+          },
+          playersQueue: [newPlayerItem, ...currentQueue],
+        };
+      }
       return {
         ...prev,
+        room: {
+          ...prev.room,
+          lastActionTimestamp: now,
+        },
         playersQueue: [newPlayerItem, ...currentQueue],
       };
     });
 
-    // Reset modal & close immediately - no waiting!
-    showToast(`Player "${playerName}" added to tournament pool!`, 'success');
+    if (playerPhoto && slug && typeof window !== 'undefined') {
+      const cleanSlug = slug.toLowerCase();
+      const photoPkt = { type: 'PLAYER_PHOTO', playerId: tempRegId, photoUrl: playerPhoto, ts: now };
+      try {
+        window.localStorage.setItem(`cricbid_stage_photo_${cleanSlug}`, JSON.stringify(photoPkt));
+      } catch {}
+    }
+
+    if (loadOnStage) {
+      setActiveTab('control');
+      showToast(`🔥 "${playerName}" saved & loaded LIVE on Bidding Stage!`, 'success');
+    } else {
+      showToast(`✅ Player "${playerName}" saved directly to tournament pool!`, 'success');
+    }
+
+    // Reset modal & close immediately in 0ms - no waiting!
     setShowAddPlayerModal(false);
     setAddPlayerName('');
     setAddPlayerPhone('');
@@ -1766,10 +1878,11 @@ export default function AuctioneerControllerPage() {
     setAddPlayerBasePrice(1000);
     setAddPlayerPhotoUrl('');
 
-    // Persist to backend and Supabase in background
+    // Persist to backend in background
     try {
       setAddPlayerLoading(true);
       await executeAction('ADD_PLAYER', {
+        loadOnStage,
         player: {
           registrationId: tempRegId,
           fullName: playerName,
@@ -1783,7 +1896,6 @@ export default function AuctioneerControllerPage() {
           photoUrl: playerPhoto,
         },
       });
-      fetchState();
     } catch (err: any) {
       console.warn('Background add player sync notice:', err?.message);
     } finally {
@@ -1998,6 +2110,15 @@ export default function AuctioneerControllerPage() {
 
         {/* Master Room Controls, TV & Mobile Owner Links */}
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowAddPlayerModal(true)}
+            className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black uppercase flex items-center gap-1.5 transition-all shadow-md"
+            title="Manually Add New Player (0ms Direct Save)"
+          >
+            <UserPlus className="w-3.5 h-3.5" /> + Add Player
+          </button>
+
           <Link
             href={`/auction/${slug}/bid`}
             target="_blank"
@@ -2084,6 +2205,14 @@ export default function AuctioneerControllerPage() {
                 </span>
                 <div className="flex items-center gap-1.5">
                   <button
+                    type="button"
+                    onClick={() => setShowAddPlayerModal(true)}
+                    className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black transition-colors flex items-center gap-1 shadow"
+                    title="Manually Add New Player (0ms Save)"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" /> + Add Player
+                  </button>
+                  <button
                     onClick={handleSkipPlayer}
                     disabled={actionLoading}
                     className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-400 text-xs font-bold transition-colors flex items-center gap-1"
@@ -2157,31 +2286,51 @@ export default function AuctioneerControllerPage() {
 
               {currentPlayer ? (
                 <div className="flex items-center gap-5 mb-5">
-                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl p-[2px] bg-gradient-to-tr from-amber-400 to-emerald-400 shrink-0 shadow-lg">
-                    <div className="w-full h-full rounded-[14px] bg-slate-950 overflow-hidden flex items-center justify-center relative">
-                      {currentPlayer.photoUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={currentPlayer.photoUrl}
-                          alt={currentPlayer.fullName}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                            const parent = (e.target as HTMLElement).parentElement;
-                            if (parent) {
-                              const fallback = parent.querySelector('.stage-initials-badge');
-                              if (fallback) (fallback as HTMLElement).style.display = 'flex';
-                            }
-                          }}
-                        />
-                      ) : null}
-                      <div
-                        className="stage-initials-badge w-full h-full bg-slate-900 flex items-center justify-center font-black text-amber-400 text-2xl"
-                        style={{ display: currentPlayer.photoUrl ? 'none' : 'flex' }}
-                      >
-                        {getInitials(currentPlayer.fullName)}
+                  <div className="relative group shrink-0">
+                    <input
+                      type="file"
+                      ref={stagePhotoInputRef}
+                      onChange={handleStageQuickPhotoUpload}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl p-[2px] bg-gradient-to-tr from-amber-400 to-emerald-400 shadow-lg">
+                      <div className="w-full h-full rounded-[14px] bg-slate-950 overflow-hidden flex items-center justify-center relative">
+                        {currentPlayer.photoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={`${currentPlayer.registrationId}_${currentPlayer.photoUrl.slice(-24)}`}
+                            src={currentPlayer.photoUrl}
+                            alt={currentPlayer.fullName}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                              const parent = (e.target as HTMLElement).parentElement;
+                              if (parent) {
+                                const fallback = parent.querySelector('.stage-initials-badge');
+                                if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                              }
+                            }}
+                          />
+                        ) : null}
+                        <div
+                          className="stage-initials-badge w-full h-full bg-slate-900 flex items-center justify-center font-black text-amber-400 text-2xl"
+                          style={{ display: currentPlayer.photoUrl ? 'none' : 'flex' }}
+                        >
+                          {getInitials(currentPlayer.fullName)}
+                        </div>
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => stagePhotoInputRef.current?.click()}
+                      disabled={isPhotoCompressing}
+                      className="mt-1.5 w-full py-1 px-2 rounded-lg bg-slate-800 hover:bg-amber-400 text-amber-300 hover:text-slate-950 border border-amber-400/30 text-[10px] font-black uppercase flex items-center justify-center gap-1 transition-all shadow"
+                      title="Upload or change photo for this player (Instant 0ms sync to Projector TV)"
+                    >
+                      <Upload className="w-3 h-3" />
+                      <span>{isPhotoCompressing ? 'Wait...' : '📷 Photo'}</span>
+                    </button>
                   </div>
 
                   <div className="min-w-0 flex-1">
@@ -3846,21 +3995,30 @@ export default function AuctioneerControllerPage() {
               </div>
 
               {/* Form Buttons */}
-              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5">
+              <div className="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setShowAddPlayerModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300"
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={addPlayerLoading || isPhotoCompressing}
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-black uppercase tracking-wider shadow-lg disabled:opacity-40 flex items-center gap-1.5"
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-amber-500/40 text-amber-300 text-xs font-black uppercase tracking-wider shadow-lg disabled:opacity-40 flex items-center gap-1.5"
                 >
                   <UserPlus className="w-4 h-4" />
-                  <span>{isPhotoCompressing ? 'Optimizing Photo...' : addPlayerLoading ? 'Saving...' : 'Add Player to Pool'}</span>
+                  <span>{isPhotoCompressing ? 'Optimizing...' : addPlayerLoading ? 'Saving...' : '➕ Direct Save to Pool'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleSaveNewPlayer(e, true)}
+                  disabled={addPlayerLoading || isPhotoCompressing}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-400 to-emerald-500 hover:from-emerald-300 hover:to-emerald-400 text-slate-950 text-xs font-black uppercase tracking-wider shadow-lg disabled:opacity-40 flex items-center gap-1.5"
+                >
+                  <Zap className="w-4 h-4" />
+                  <span>{isPhotoCompressing ? 'Optimizing...' : addPlayerLoading ? 'Saving...' : '⚡ Save & Put on Stage'}</span>
                 </button>
               </div>
             </form>

@@ -391,7 +391,7 @@ export async function broadcastAuctionUpdate(slug: string, event: string, payloa
       if (broadcastPayload.state.currentPlayer) {
         broadcastPayload.state.currentPlayer = {
           ...broadcastPayload.state.currentPlayer,
-          photoUrl: optPhoto(broadcastPayload.state.currentPlayer),
+          photoUrl: broadcastPayload.state.currentPlayer.photoUrl || optPhoto(broadcastPayload.state.currentPlayer),
         };
       }
 
@@ -1735,17 +1735,25 @@ export async function executeAuctioneerAction(params: {
       }
       room.lastActionTimestamp = Date.now();
       await saveAuctionRoom(room);
+    } else {
+      room.lastActionTimestamp = Date.now();
+      await saveAuctionRoom(room);
     }
 
     await saveAuctionPlayerState(updatedState).catch((e) => console.error(e));
 
-    // Also update player photo or details in registrations store and Supabase if provided
+    // Also update player photo or details in registrations store and in-memory rawPlayers immediately
     if (payload?.photoUrl || payload?.fullName || payload?.role) {
       const playerUpdates: Partial<RegistrationSubmission> = {};
       if (payload.photoUrl) playerUpdates.photoUrl = payload.photoUrl;
       if (payload.fullName) playerUpdates.fullName = payload.fullName;
       if (payload.role) playerUpdates.role = payload.role;
       updatePlayer(targetPlayerId, playerUpdates);
+      const pIdx = rawPlayers.findIndex((p) => p.registrationId === targetPlayerId);
+      if (pIdx >= 0) {
+        rawPlayers[pIdx] = { ...rawPlayers[pIdx], ...playerUpdates };
+      }
+      invalidateAuctionPlayersCache(cleanSlug);
     }
   } else if (action === 'SEED_TEAMS') {
     const defaultTeams = getDefaultSeedTeams(cleanSlug);
@@ -1872,16 +1880,27 @@ export async function executeAuctioneerAction(params: {
     // 2. Increment registration count instantly in memory and disk
     incrementRegistrationCount(cleanSlug);
 
-    // 3. Save initial player auction state (status: PENDING)
+    // 3. Save initial player auction state (PENDING, or IN_AUCTION if loadOnStage is requested)
+    const shouldLoadOnStage = Boolean(payload?.loadOnStage);
     const newPlayerState: AuctionPlayerState = {
       playerId: regId,
       tournamentSlug: cleanSlug,
-      status: 'PENDING',
+      status: shouldLoadOnStage ? 'IN_AUCTION' : 'PENDING',
       basePrice,
       updatedAt: new Date().toISOString(),
     };
     playerStates[regId] = newPlayerState;
     saveAuctionPlayerState(newPlayerState);
+
+    if (shouldLoadOnStage) {
+      room.currentPlayerId = regId;
+      room.currentBid = basePrice;
+      room.currentBiddingTeamId = null;
+      room.timerSeconds = 10;
+      room.lastAction = 'NEXT';
+    }
+    room.lastActionTimestamp = Date.now();
+    await saveAuctionRoom(room);
 
     // 4. Invalidate cache and update memory queue
     invalidateAuctionPlayersCache(cleanSlug);

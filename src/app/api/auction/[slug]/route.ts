@@ -59,10 +59,11 @@ export async function GET(
       }));
     }
 
+    // Keep currentPlayer.photoUrl intact (including data:image/ base64) so the Live Projector always renders the stage player's photo in 0ms without an extra round-trip!
     if (state.currentPlayer) {
       state.currentPlayer = {
         ...state.currentPlayer,
-        photoUrl: optimizePhotoUrl(state.currentPlayer),
+        photoUrl: state.currentPlayer.photoUrl || `/api/player-photo/${encodeURIComponent(state.currentPlayer.registrationId)}`,
       };
     }
 

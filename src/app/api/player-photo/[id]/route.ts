@@ -9,19 +9,65 @@ const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour memory TTL
 export const dynamic = 'force-dynamic';
 export const revalidate = 3600;
 
-function renderFallbackPlayerSvg(): Response {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
-  <rect width="200" height="200" fill="#0b1329"/>
-  <circle cx="100" cy="75" r="42" fill="#1e293b"/>
-  <path d="M35 185 C35 130 65 115 100 115 C135 115 165 130 165 185 Z" fill="#1e293b"/>
-  <circle cx="100" cy="75" r="35" fill="#f59e0b" opacity="0.85"/>
-  <path d="M45 185 C45 140 70 125 100 125 C130 125 155 140 155 185 Z" fill="#f59e0b" opacity="0.65"/>
+function getInitials(name: string): string {
+  if (!name) return 'CR';
+  const parts = name.replace(/[()[\]{}]/g, ' ').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'CR';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function escapeXml(str: string): string {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function renderFallbackPlayerSvg(player?: { fullName?: string; role?: string; registrationId?: string }): Response {
+  const fullName = (player?.fullName || 'CRICKET PLAYER').toUpperCase();
+  const initials = escapeXml(getInitials(fullName));
+  const displayRole = escapeXml((player?.role || 'OFFICIAL DRAFT PLAYER').toUpperCase());
+  const displayName = escapeXml(fullName.length > 22 ? fullName.slice(0, 20) + '..' : fullName);
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="42%" r="55%">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.38"/>
+      <stop offset="55%" stop-color="#1e293b" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#070c18" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+    <linearGradient id="jersey" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="600" fill="#070c18"/>
+  <rect width="600" height="600" fill="url(#glow)"/>
+  <circle cx="300" cy="245" r="185" fill="none" stroke="#f59e0b" stroke-width="2" stroke-opacity="0.22" stroke-dasharray="10 8"/>
+  <!-- Cricket Silhouette / Jersey Shoulders -->
+  <path d="M120 510 C120 375 200 340 300 340 C400 340 480 375 480 510 Z" fill="url(#jersey)" stroke="#f59e0b" stroke-width="3" stroke-opacity="0.5"/>
+  <path d="M235 342 L300 410 L365 342" fill="none" stroke="#fbbf24" stroke-width="5" stroke-opacity="0.8"/>
+  <!-- Avatar Head Circle -->
+  <circle cx="300" cy="215" r="96" fill="#0f172a" stroke="url(#gold)" stroke-width="5"/>
+  <text x="300" y="242" text-anchor="middle" fill="#fbbf24" font-family="Arial, sans-serif" font-weight="900" font-size="78" letter-spacing="3">${initials}</text>
+  <!-- Nameplate Banner -->
+  <rect x="60" y="455" width="480" height="64" rx="16" fill="#090f1f" stroke="#f59e0b" stroke-width="2.5" stroke-opacity="0.7"/>
+  <text x="300" y="496" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-weight="900" font-size="28" letter-spacing="1.5">${displayName}</text>
+  <rect x="170" y="530" width="260" height="32" rx="10" fill="#f59e0b" fill-opacity="0.18"/>
+  <text x="300" y="551" text-anchor="middle" fill="#fbbf24" font-family="Arial, sans-serif" font-weight="800" font-size="15" letter-spacing="2">${displayRole}</text>
 </svg>`;
   return new Response(svg, {
     status: 200,
     headers: {
       'Content-Type': 'image/svg+xml',
-      'Cache-Control': 'public, max-age=300',
+      'Cache-Control': 'no-store, must-revalidate',
     },
   });
 }
@@ -38,29 +84,32 @@ export async function GET(
 
     const registrationId = decodeURIComponent(rawId).trim();
 
-    // 1. Check in-memory LRU cache first (instant response in <1ms)
-    const cached = photoCache.get(registrationId);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-      return new Response(new Uint8Array(cached.buffer), {
-        status: 200,
-        headers: {
-          'Content-Type': cached.contentType,
-          'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
-        },
-      });
-    }
-
-    // 2. Check local players store first (in case photo was uploaded/edited locally)
+    // 1. Check local players store first (in case photo was uploaded/edited locally)
     let photoUrl = '';
+    let foundLocal: any = undefined;
     try {
       const localPlayers = getAllPlayers();
-      const foundLocal = localPlayers.find(
+      foundLocal = localPlayers.find(
         (p) => p.registrationId && p.registrationId.toLowerCase() === registrationId.toLowerCase()
       );
       if (foundLocal?.photoUrl && !foundLocal.photoUrl.startsWith('/api/player-photo/')) {
         photoUrl = foundLocal.photoUrl.trim();
       }
     } catch {}
+
+    // 2. Check in-memory LRU cache if not overridden by local data:image
+    if (!photoUrl) {
+      const cached = photoCache.get(registrationId);
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+        return new Response(new Uint8Array(cached.buffer), {
+          status: 200,
+          headers: {
+            'Content-Type': cached.contentType,
+            'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+          },
+        });
+      }
+    }
 
     // 3. Fetch photo_url from Supabase if not in local store and Supabase is healthy
     if (!photoUrl && isSupabaseHealthy()) {
@@ -79,7 +128,7 @@ export async function GET(
     }
 
     if (!photoUrl) {
-      return renderFallbackPlayerSvg();
+      return renderFallbackPlayerSvg(foundLocal);
     }
 
     // 4. Handle external image URLs
@@ -106,13 +155,13 @@ export async function GET(
           status: 200,
           headers: {
             'Content-Type': contentType,
-            'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+            'Cache-Control': 'no-cache, must-revalidate',
           },
         });
       }
     }
 
-    return renderFallbackPlayerSvg();
+    return renderFallbackPlayerSvg(foundLocal);
   } catch (err: any) {
     console.error('Error in GET /api/player-photo/[id]:', err);
     return renderFallbackPlayerSvg();
