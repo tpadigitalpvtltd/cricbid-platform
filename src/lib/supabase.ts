@@ -25,8 +25,8 @@ declare global {
   var __CRICBID_SUPABASE_OFFLINE_UNTIL__: number | undefined;
 }
 
-const CIRCUIT_BREAKER_COOLDOWN_MS = 120 * 1000; // 2 minutes cooldown on 522/timeout
-const FAST_FETCH_TIMEOUT_MS = 550; // 550ms max wait before tripping circuit breaker
+const CIRCUIT_BREAKER_COOLDOWN_MS = 15 * 1000; // 15 seconds cooldown on 522/timeout
+const FAST_FETCH_TIMEOUT_MS = 3500; // 3500ms max wait before tripping circuit breaker
 
 export function isSupabaseHealthy(): boolean {
   const offlineUntil = globalThis.__CRICBID_SUPABASE_OFFLINE_UNTIL__ || 0;

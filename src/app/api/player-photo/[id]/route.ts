@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase, isSupabaseHealthy } from '@/lib/supabase';
-import { getAllPlayers } from '@/lib/tournamentStore';
+import { getAllPlayers, updatePlayer } from '@/lib/tournamentStore';
 
 // In-memory cache to prevent redundant Supabase queries and speed up rendering
 const photoCache = new Map<string, { buffer: Buffer; contentType: string; timestamp: number }>();
@@ -140,6 +140,9 @@ export async function GET(
             const candidate = rows?.[0]?.photo_url?.trim?.();
             if (candidate && !candidate.startsWith('/api/player-photo/')) {
               photoUrl = candidate;
+              try {
+                updatePlayer(registrationId, { photoUrl: candidate });
+              } catch {}
             }
           }
         } catch {}
