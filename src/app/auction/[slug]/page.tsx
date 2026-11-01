@@ -204,10 +204,17 @@ export default function ProjectorAuctionPage() {
       if (!newState || !newState.room) return prevState;
       if (prevState && isStateUnchanged(prevState, newState)) return prevState;
 
-      // Strict Stale Packet Protection: NEVER let an older server poll overwrite a newer realtime broadcast!
+      // Strict Stale Packet Protection: only block older poll if local broadcast arrived within the last 8 seconds!
       const prevTs = Number(prevState?.room?.lastActionTimestamp) || 0;
       const incomingTs = Number(newState?.room?.lastActionTimestamp) || 0;
-      if (prevState && prevTs > 0 && incomingTs > 0 && incomingTs < prevTs && prevState.room?.lastAction !== 'INIT') {
+      if (
+        prevState &&
+        prevTs > 0 &&
+        incomingTs > 0 &&
+        incomingTs < prevTs &&
+        Date.now() - prevTs < 8000 &&
+        prevState.room?.lastAction !== 'INIT'
+      ) {
         return prevState;
       }
 

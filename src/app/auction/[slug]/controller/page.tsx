@@ -99,7 +99,12 @@ function isStateUnchanged(prev: FullAuctionState | null, incoming: FullAuctionSt
     return false;
   }
 
-  if (prev.currentPlayer?.registrationId !== incoming.currentPlayer?.registrationId) {
+  if (
+    prev.currentPlayer?.registrationId !== incoming.currentPlayer?.registrationId ||
+    prev.currentPlayer?.photoUrl !== incoming.currentPlayer?.photoUrl ||
+    (prev.playersQueue?.length || 0) !== (incoming.playersQueue?.length || 0) ||
+    prev.playersQueue?.[0]?.player?.photoUrl !== incoming.playersQueue?.[0]?.player?.photoUrl
+  ) {
     return false;
   }
 
@@ -136,11 +141,55 @@ function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionStat
     resolvedPlayerState = prev.currentPlayerState;
   }
 
-  // 3. Maintain queue and hydrate photos
-  const currentQueue =
-    incoming.playersQueue && incoming.playersQueue.length > 0
-      ? incoming.playersQueue
-      : (prev.playersQueue || []);
+  // 3. Maintain queue and hydrate photos (always prefer data:image/ base64 photos from incoming or prev)
+  const incomingQueue = incoming.playersQueue || [];
+  const prevQueue = prev.playersQueue || [];
+  const baseQueue = incomingQueue.length >= prevQueue.length ? incomingQueue : prevQueue;
+  const secondaryQueue = incomingQueue.length >= prevQueue.length ? prevQueue : incomingQueue;
+  const secondaryPhotoMap = new Map<string, string>();
+  secondaryQueue.forEach((pq: any) => {
+    const pid = pq?.player?.registrationId;
+    const pUrl = pq?.player?.photoUrl;
+    if (pid && pUrl && pUrl.startsWith('data:image/')) {
+      secondaryPhotoMap.set(pid, pUrl);
+    }
+  });
+
+  const currentQueue = baseQueue.map((pq: any) => {
+    const pid = pq?.player?.registrationId;
+    const curUrl = pq?.player?.photoUrl || '';
+    if (pid && !curUrl.startsWith('data:image/') && secondaryPhotoMap.has(pid)) {
+      return {
+        ...pq,
+        player: {
+          ...pq.player,
+          photoUrl: secondaryPhotoMap.get(pid)!,
+        },
+      };
+    }
+    return pq;
+  });
+
+  // Also ensure resolvedPlayer gets rich data:image/ photoUrl if available in currentQueue
+  if (resolvedPlayer && (!resolvedPlayer.photoUrl || !resolvedPlayer.photoUrl.startsWith('data:image/'))) {
+    const matchedInQueue = currentQueue.find(
+      (pq: any) => pq?.player?.registrationId === resolvedPlayer?.registrationId
+    );
+    if (matchedInQueue?.player?.photoUrl?.startsWith('data:image/')) {
+      resolvedPlayer = {
+        ...resolvedPlayer,
+        photoUrl: matchedInQueue.player.photoUrl,
+      };
+    } else if (
+      prev.currentPlayer?.registrationId === resolvedPlayer.registrationId &&
+      prev.currentPlayer?.photoUrl?.startsWith('data:image/')
+    ) {
+      resolvedPlayer = {
+        ...resolvedPlayer,
+        photoUrl: prev.currentPlayer.photoUrl,
+      };
+    }
+  }
 
   const hydratedSoldHistory = (incoming.soldHistory && incoming.soldHistory.length > 0
     ? incoming.soldHistory
@@ -167,9 +216,18 @@ function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionStat
   let resolvedRoom = { ...incoming.room };
   let resolvedBiddingTeam = incoming.currentBiddingTeam;
 
-  // Stale packet protection: if user locally triggered an action more recently than the packet, keep prev 100% intact
-  if (prevActionTime > incomingActionTime && prev.room?.lastAction !== 'INIT') {
-    return prev;
+  // Stale packet protection: only block incoming poll if user triggered a local action within the last 8 seconds!
+  // Always allow currentQueue & photo upgrades so localStorage never traps stale player counts or missing photos.
+  if (
+    prevActionTime > incomingActionTime &&
+    prev.room?.lastAction !== 'INIT' &&
+    Date.now() - prevActionTime < 8000
+  ) {
+    return {
+      ...prev,
+      currentPlayer: resolvedPlayer || prev.currentPlayer,
+      playersQueue: currentQueue,
+    };
   } else {
     // BID PROTECTION: Never downgrade the bid on the same player unless explicit UNDO/RESET
     const isSamePlayer =

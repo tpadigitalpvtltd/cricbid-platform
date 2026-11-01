@@ -5,7 +5,7 @@
       "tournamentId": null,
       "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
       "status": "ACTIVE",
-      "currentPlayerId": "CRIC-2026-Q9177",
+      "currentPlayerId": "CRIC-2026-JQOPF",
       "currentBid": 1000,
       "currentBiddingTeamId": null,
       "timerSeconds": 10,
@@ -14,8 +14,8 @@
       "basePrice": 1000,
       "bidIncrement": 1000,
       "lastAction": "NEXT",
-      "lastActionTimestamp": 1793544338429,
-      "updatedAt": "2026-11-01T14:45:38.430Z"
+      "lastActionTimestamp": 1793546633530,
+      "updatedAt": "2026-11-01T15:23:11.976Z"
     }
   },
   "teams": {
@@ -52,8 +52,9 @@
       },
       {
         "id": "team_1793195963027_y1cv",
+        "tournamentId": null,
         "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
-        "name": "Sahara MDS",
+        "name": "Sahara MSD",
         "shortName": "S",
         "logoUrl": "/api/team-logo/team_1793195963027_y1cv",
         "color": "#10b981",
@@ -61,7 +62,8 @@
         "remainingPurse": 100000,
         "secretPin": "3960",
         "maxPlayers": 15,
-        "boughtPlayersCount": 0
+        "boughtPlayersCount": 0,
+        "createdAt": "2026-10-28T13:59:24.435064+00:00"
       },
       {
         "id": "team_1793276724182_52jb",
@@ -774,19 +776,23 @@
       "CRIC-2026-Q9177": {
         "playerId": "CRIC-2026-Q9177",
         "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
-        "status": "IN_AUCTION",
+        "status": "UNSOLD",
         "basePrice": 1000,
-        "updatedAt": "2026-11-01T14:45:38.429Z",
         "soldPrice": null,
         "soldToTeamId": null,
-        "soldToTeamName": null
+        "soldToTeamName": null,
+        "soldToTeamLogo": null,
+        "updatedAt": "2026-11-01T15:23:10.951Z"
       },
       "CRIC-2026-JQOPF": {
         "playerId": "CRIC-2026-JQOPF",
         "tournamentSlug": "ympl-season-2-organised-by-sr11-kqel",
-        "status": "PENDING",
+        "status": "IN_AUCTION",
         "basePrice": 1000,
-        "updatedAt": "2026-11-01T11:14:12.831Z"
+        "updatedAt": "2026-11-01T15:23:11.976Z",
+        "soldPrice": null,
+        "soldToTeamId": null,
+        "soldToTeamName": null
       },
       "CRIC-2026-U5U8X": {
         "playerId": "CRIC-2026-U5U8X",

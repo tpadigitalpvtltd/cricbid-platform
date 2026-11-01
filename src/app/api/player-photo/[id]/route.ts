@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase, isSupabaseHealthy } from '@/lib/supabase';
+import { supabase, isSupabaseHealthy, tripSupabaseCircuitBreaker } from '@/lib/supabase';
 import { getAllPlayers, updatePlayer } from '@/lib/tournamentStore';
 
 // In-memory cache to prevent redundant Supabase queries and speed up rendering
@@ -111,8 +111,8 @@ export async function GET(
       }
     }
 
-    // 3. Fetch photo_url directly from Supabase REST index (bypassing 550ms circuit breaker)
-    if (!photoUrl) {
+    // 3. Fetch photo_url from Supabase REST index ONLY if circuit breaker is healthy (prevents 6-connection browser queue stall)
+    if (!photoUrl && isSupabaseHealthy()) {
       const sbUrl =
         process.env.SUPABASE_URL ||
         process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -132,7 +132,7 @@ export async function GET(
                 apikey: sbKey,
                 Authorization: `Bearer ${sbKey}`,
               },
-              signal: AbortSignal.timeout(4500),
+              signal: AbortSignal.timeout(700),
             }
           );
           if (restRes.ok) {
@@ -144,8 +144,12 @@ export async function GET(
                 updatePlayer(registrationId, { photoUrl: candidate });
               } catch {}
             }
+          } else if (restRes.status >= 500) {
+            tripSupabaseCircuitBreaker();
           }
-        } catch {}
+        } catch {
+          tripSupabaseCircuitBreaker();
+        }
       }
     }
 
