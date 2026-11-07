@@ -1556,7 +1556,6 @@ export default function AuctioneerControllerPage() {
     const pendingList = queue.filter(
       (pq) =>
         (pq.status === 'PENDING' || pq.status === 'IN_AUCTION') &&
-        pq.status !== 'SOLD' &&
         !soldLock[pq.player?.registrationId] &&
         pq.player.registrationId !== currId
     );
