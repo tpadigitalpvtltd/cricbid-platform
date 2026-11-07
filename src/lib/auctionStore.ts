@@ -561,51 +561,46 @@ export async function getAuctionRoom(slug: string): Promise<AuctionRoom> {
   const local = readLocalData();
   const cachedRoom = local.rooms[cleanSlug];
 
-  // 1. Try Supabase
-  try {
-    const roomQuery = supabase
-      .from('auction_rooms')
-      .select('*')
-      .ilike('tournament_slug', cleanSlug)
-      .maybeSingle();
-    const { data, error } = await withTimeout(roomQuery, 2500);
-
-    if (!error && data) {
-      const dbBid = Number(data.current_bid) || 0;
-      const dbPlayerId = data.current_player_id;
-      const dbTimestamp = Number(data.last_action_timestamp) || 0;
-
-      // Bid Protection: If local memory room has a higher bid for the same player, use local memory!
-      if (cachedRoom && cachedRoom.currentPlayerId === dbPlayerId && cachedRoom.currentBid > dbBid) {
-        return cachedRoom;
-      }
-      if (cachedRoom && (cachedRoom.lastActionTimestamp || 0) > dbTimestamp) {
-        return cachedRoom;
-      }
-
-      return {
-        id: data.id,
-        tournamentId: data.tournament_id,
-        tournamentSlug: data.tournament_slug,
-        status: data.status as AuctionRoomStatus,
-        currentPlayerId: data.current_player_id,
-        currentBid: dbBid,
-        currentBiddingTeamId: data.current_bidding_team_id,
-        timerSeconds: Number(data.timer_seconds) || 10,
-        timerRunning: Boolean(data.timer_running),
-        timerExpiresAt: data.timer_expires_at ? Number(data.timer_expires_at) : null,
-        basePrice: Number(data.base_price) || 1000,
-        bidIncrement: Number(data.bid_increment) || 500,
-        lastAction: data.last_action,
-        lastActionTimestamp: dbTimestamp || Date.now(),
-        updatedAt: data.updated_at || new Date().toISOString(),
-      };
-    }
-  } catch (err) {}
-
-  // 2. Try Local Store
+  // 1. Return Local Store immediately in 0ms if available (authoritative, never stalls on Supabase)
   if (cachedRoom) {
     return cachedRoom;
+  }
+
+  // 2. Try Supabase only if local has no room and Supabase is healthy
+  if (isSupabaseHealthy()) {
+    try {
+      const roomQuery = supabase
+        .from('auction_rooms')
+        .select('*')
+        .ilike('tournament_slug', cleanSlug)
+        .maybeSingle();
+      const { data, error } = await withTimeout(roomQuery, 650);
+
+      if (!error && data) {
+        const dbBid = Number(data.current_bid) || 0;
+        const dbTimestamp = Number(data.last_action_timestamp) || 0;
+        const fetchedRoom: AuctionRoom = {
+          id: data.id,
+          tournamentId: data.tournament_id,
+          tournamentSlug: data.tournament_slug,
+          status: data.status as AuctionRoomStatus,
+          currentPlayerId: data.current_player_id,
+          currentBid: dbBid,
+          currentBiddingTeamId: data.current_bidding_team_id,
+          timerSeconds: Number(data.timer_seconds) || 10,
+          timerRunning: Boolean(data.timer_running),
+          timerExpiresAt: data.timer_expires_at ? Number(data.timer_expires_at) : null,
+          basePrice: Number(data.base_price) || 1000,
+          bidIncrement: Number(data.bid_increment) || 500,
+          lastAction: data.last_action,
+          lastActionTimestamp: dbTimestamp || Date.now(),
+          updatedAt: data.updated_at || new Date().toISOString(),
+        };
+        local.rooms[cleanSlug] = fetchedRoom;
+        saveLocalData(local);
+        return fetchedRoom;
+      }
+    } catch (err) {}
   }
 
   // 3. Create initial room
@@ -628,24 +623,25 @@ export async function getAuctionRoom(slug: string): Promise<AuctionRoom> {
   local.rooms[cleanSlug] = newRoom;
   saveLocalData(local);
 
-  // Sync with Supabase in background
-  try {
-    await withTimeout(supabase.from('auction_rooms').upsert({
-      id: newRoom.id,
-      tournament_slug: newRoom.tournamentSlug,
-      status: newRoom.status,
-      current_player_id: newRoom.currentPlayerId,
-      current_bid: newRoom.currentBid,
-      current_bidding_team_id: newRoom.currentBiddingTeamId,
-      timer_seconds: newRoom.timerSeconds,
-      timer_running: newRoom.timerRunning,
-      base_price: newRoom.basePrice,
-      bid_increment: newRoom.bidIncrement,
-      last_action: newRoom.lastAction,
-      last_action_timestamp: newRoom.lastActionTimestamp,
-      updated_at: newRoom.updatedAt,
-    }), 2000).catch(() => ({ error: 'timeout' }));
-  } catch (e) {}
+  if (isSupabaseHealthy()) {
+    try {
+      await withTimeout(supabase.from('auction_rooms').upsert({
+        id: newRoom.id,
+        tournament_slug: newRoom.tournamentSlug,
+        status: newRoom.status,
+        current_player_id: newRoom.currentPlayerId,
+        current_bid: newRoom.currentBid,
+        current_bidding_team_id: newRoom.currentBiddingTeamId,
+        timer_seconds: newRoom.timerSeconds,
+        timer_running: newRoom.timerRunning,
+        base_price: newRoom.basePrice,
+        bid_increment: newRoom.bidIncrement,
+        last_action: newRoom.lastAction,
+        last_action_timestamp: newRoom.lastActionTimestamp,
+        updated_at: newRoom.updatedAt,
+      }), 550).catch(() => ({ error: 'timeout' }));
+    } catch (e) {}
+  }
 
   return newRoom;
 }
@@ -698,47 +694,50 @@ export async function getTournamentTeams(slug: string): Promise<TournamentTeam[]
   const local = readLocalData();
   const cachedTeams = local.teams[cleanSlug];
 
-  // 1. Try Supabase with fast timeout
-  try {
-    const query = supabase
-      .from('tournament_teams')
-      .select('*')
-      .ilike('tournament_slug', cleanSlug)
-      .order('created_at', { ascending: true });
-
-    const { data, error } = await withTimeout(query, 2500);
-
-    if (!error && Array.isArray(data) && data.length > 0) {
-      const teams = data.map((t) => ({
-        id: t.id,
-        tournamentId: t.tournament_id,
-        tournamentSlug: t.tournament_slug,
-        name: t.name,
-        shortName: t.short_name,
-        logoUrl: t.logo_url || '',
-        color: t.color || '#f59e0b',
-        totalPurse: Number(t.total_purse) || 100000,
-        remainingPurse: Number(t.remaining_purse) || 100000,
-        secretPin: String(t.secret_pin || '1111'),
-        maxPlayers: Number(t.max_players) || 15,
-        boughtPlayersCount: Number(t.bought_players_count) || 0,
-        createdAt: t.created_at,
-      }));
-      local.teams[cleanSlug] = teams;
-      local.teamsInitialized[cleanSlug] = true;
-      TEAMS_CACHE[cleanSlug] = { data: teams, timestamp: Date.now() };
-      saveLocalData(local);
-      return teams;
-    }
-  } catch (err) {}
-
-  // 2. Return cached memory teams if available
+  // 1. Return local memory/disk teams immediately in 0ms if available
   const memTeams = TEAMS_CACHE[cleanSlug];
   if (memTeams && memTeams.data && memTeams.data.length > 0) {
     return memTeams.data;
   }
   if (cachedTeams && cachedTeams.length > 0) {
+    TEAMS_CACHE[cleanSlug] = { data: cachedTeams, timestamp: Date.now() };
     return cachedTeams;
+  }
+
+  // 2. Try Supabase with fast timeout only if local has no teams
+  if (isSupabaseHealthy()) {
+    try {
+      const query = supabase
+        .from('tournament_teams')
+        .select('*')
+        .ilike('tournament_slug', cleanSlug)
+        .order('created_at', { ascending: true });
+
+      const { data, error } = await withTimeout(query, 650);
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const teams = data.map((t) => ({
+          id: t.id,
+          tournamentId: t.tournament_id,
+          tournamentSlug: t.tournament_slug,
+          name: t.name,
+          shortName: t.short_name,
+          logoUrl: t.logo_url || '',
+          color: t.color || '#f59e0b',
+          totalPurse: Number(t.total_purse) || 100000,
+          remainingPurse: Number(t.remaining_purse) || 100000,
+          secretPin: String(t.secret_pin || '1111'),
+          maxPlayers: Number(t.max_players) || 15,
+          boughtPlayersCount: Number(t.bought_players_count) || 0,
+          createdAt: t.created_at,
+        }));
+        local.teams[cleanSlug] = teams;
+        local.teamsInitialized[cleanSlug] = true;
+        TEAMS_CACHE[cleanSlug] = { data: teams, timestamp: Date.now() };
+        saveLocalData(local);
+        return teams;
+      }
+    } catch (err) {}
   }
 
   // 3. Fallback to default seed teams (guarantees teams are NEVER 0!)
@@ -810,33 +809,39 @@ export async function saveTournamentTeams(slug: string, teams: TournamentTeam[])
  */
 export async function getAuctionBids(slug: string, limit = 20): Promise<AuctionBid[]> {
   const cleanSlug = slug.toLowerCase();
-
-  try {
-    const bidsQuery = supabase
-      .from('auction_bids')
-      .select('*')
-      .ilike('tournament_slug', cleanSlug)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    const { data, error } = await withTimeout(bidsQuery, 2500);
-
-    if (!error && Array.isArray(data)) {
-      return data.map((b) => ({
-        id: b.id,
-        auctionId: b.auction_id,
-        tournamentSlug: b.tournament_slug,
-        playerId: b.player_id,
-        teamId: b.team_id,
-        teamName: b.team_name,
-        teamShortName: b.team_short_name,
-        teamLogoUrl: b.team_logo_url,
-        amount: Number(b.amount),
-        createdAt: b.created_at,
-      }));
-    }
-  } catch (err) {}
-
   const local = readLocalData();
+  const localBids = local.bids[cleanSlug];
+  if (Array.isArray(localBids) && localBids.length > 0) {
+    return localBids.slice(0, limit);
+  }
+
+  if (isSupabaseHealthy()) {
+    try {
+      const bidsQuery = supabase
+        .from('auction_bids')
+        .select('*')
+        .ilike('tournament_slug', cleanSlug)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      const { data, error } = await withTimeout(bidsQuery, 650);
+
+      if (!error && Array.isArray(data)) {
+        return data.map((b) => ({
+          id: b.id,
+          auctionId: b.auction_id,
+          tournamentSlug: b.tournament_slug,
+          playerId: b.player_id,
+          teamId: b.team_id,
+          teamName: b.team_name,
+          teamShortName: b.team_short_name,
+          teamLogoUrl: b.team_logo_url,
+          amount: Number(b.amount),
+          createdAt: b.created_at,
+        }));
+      }
+    } catch (err) {}
+  }
+
   return (local.bids[cleanSlug] || []).slice(0, limit);
 }
 
@@ -850,20 +855,22 @@ export async function recordAuctionBid(bid: AuctionBid): Promise<void> {
   local.bids[cleanSlug].unshift(bid);
   saveLocalData(local);
 
-  try {
-    await withTimeout(supabase.from('auction_bids').insert({
-      id: bid.id,
-      auction_id: bid.auctionId,
-      tournament_slug: cleanSlug,
-      player_id: bid.playerId,
-      team_id: bid.teamId,
-      team_name: bid.teamName,
-      team_short_name: bid.teamShortName || '',
-      team_logo_url: bid.teamLogoUrl || '',
-      amount: bid.amount,
-      created_at: bid.createdAt,
-    }), 2000).catch(() => ({ error: 'timeout' }));
-  } catch (err) {}
+  if (isSupabaseHealthy()) {
+    try {
+      await withTimeout(supabase.from('auction_bids').insert({
+        id: bid.id,
+        auction_id: bid.auctionId,
+        tournament_slug: cleanSlug,
+        player_id: bid.playerId,
+        team_id: bid.teamId,
+        team_name: bid.teamName,
+        team_short_name: bid.teamShortName || '',
+        team_logo_url: bid.teamLogoUrl || '',
+        amount: bid.amount,
+        created_at: bid.createdAt,
+      }), 550).catch(() => ({ error: 'timeout' }));
+    } catch (err) {}
+  }
 }
 
 /**
@@ -871,35 +878,45 @@ export async function recordAuctionBid(bid: AuctionBid): Promise<void> {
  */
 export async function getAuctionPlayerStates(slug: string): Promise<Record<string, AuctionPlayerState>> {
   const cleanSlug = slug.toLowerCase();
-
-  try {
-    const pStateQuery = supabase
-      .from('auction_players')
-      .select('*')
-      .ilike('tournament_slug', cleanSlug);
-    const { data, error } = await withTimeout(pStateQuery, 2500);
-
-    if (!error && Array.isArray(data) && data.length > 0) {
-      const map: Record<string, AuctionPlayerState> = {};
-      data.forEach((p) => {
-        map[p.player_id] = {
-          playerId: p.player_id,
-          tournamentSlug: p.tournament_slug,
-          status: p.status,
-          basePrice: Number(p.base_price) || 1000,
-          soldPrice: p.sold_price ? Number(p.sold_price) : null,
-          soldToTeamId: p.sold_to_team_id,
-          soldToTeamName: p.sold_to_team_name,
-          soldToTeamLogo: p.sold_to_team_logo,
-          updatedAt: p.updated_at,
-        };
-      });
-      return map;
-    }
-  } catch (err) {}
-
   const local = readLocalData();
-  return local.playerStates[cleanSlug] || {};
+  const localStates = local.playerStates[cleanSlug] || {};
+
+  // If local already has player states, return immediately in 0ms so SOLD/UNSOLD states never lag or revert!
+  if (Object.keys(localStates).length > 0) {
+    return localStates;
+  }
+
+  if (isSupabaseHealthy()) {
+    try {
+      const pStateQuery = supabase
+        .from('auction_players')
+        .select('*')
+        .ilike('tournament_slug', cleanSlug);
+      const { data, error } = await withTimeout(pStateQuery, 650);
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const map: Record<string, AuctionPlayerState> = {};
+        data.forEach((p) => {
+          map[p.player_id] = {
+            playerId: p.player_id,
+            tournamentSlug: p.tournament_slug,
+            status: p.status,
+            basePrice: Number(p.base_price) || 1000,
+            soldPrice: p.sold_price ? Number(p.sold_price) : null,
+            soldToTeamId: p.sold_to_team_id,
+            soldToTeamName: p.sold_to_team_name,
+            soldToTeamLogo: p.sold_to_team_logo,
+            updatedAt: p.updated_at,
+          };
+        });
+        local.playerStates[cleanSlug] = { ...map, ...localStates };
+        saveLocalData(local);
+        return local.playerStates[cleanSlug];
+      }
+    } catch (err) {}
+  }
+
+  return localStates;
 }
 
 /**
@@ -912,20 +929,22 @@ export async function saveAuctionPlayerState(state: AuctionPlayerState): Promise
   local.playerStates[cleanSlug][state.playerId] = state;
   saveLocalData(local);
 
-  try {
-    await withTimeout(supabase.from('auction_players').upsert({
-      id: `${cleanSlug}_${state.playerId}`,
-      tournament_slug: cleanSlug,
-      player_id: state.playerId,
-      status: state.status,
-      base_price: state.basePrice,
-      sold_price: state.soldPrice,
-      sold_to_team_id: state.soldToTeamId,
-      sold_to_team_name: state.soldToTeamName,
-      sold_to_team_logo: state.soldToTeamLogo,
-      updated_at: new Date().toISOString(),
-    }), 2000).catch(() => ({ error: 'timeout' }));
-  } catch (err) {}
+  if (isSupabaseHealthy()) {
+    try {
+      await withTimeout(supabase.from('auction_players').upsert({
+        id: `${cleanSlug}_${state.playerId}`,
+        tournament_slug: cleanSlug,
+        player_id: state.playerId,
+        status: state.status,
+        base_price: state.basePrice,
+        sold_price: state.soldPrice,
+        sold_to_team_id: state.soldToTeamId,
+        sold_to_team_name: state.soldToTeamName,
+        sold_to_team_logo: state.soldToTeamLogo,
+        updated_at: new Date().toISOString(),
+      }), 550).catch(() => ({ error: 'timeout' }));
+    } catch (err) {}
+  }
 }
 
 /**
@@ -970,12 +989,22 @@ export function buildFullAuctionStateSync(params: {
   if (room.currentPlayerId) {
     currentPlayer = rawPlayers.find((p) => p.registrationId === room.currentPlayerId) || null;
     currentPlayerState = playerStates[room.currentPlayerId] || null;
+
+    // STRICT RULE: If currentPlayer is already SOLD and the room is NOT in the middle of the 'SOLD' celebration,
+    // never leave a SOLD player on stage!
+    if (currentPlayerState && currentPlayerState.status === 'SOLD' && room.lastAction !== 'SOLD') {
+      currentPlayer = null;
+      currentPlayerState = null;
+    }
   }
 
-  // If no current player is set, deterministically pick the first pending player (NEVER random on poll)
+  // If no current player is set, deterministically pick the first pending (non-SOLD) player (NEVER random on poll)
   if (!currentPlayer && playersQueue.length > 0) {
-    const firstPending = playersQueue.find((pq) => pq.status === 'PENDING') || playersQueue[0];
-    if (firstPending) {
+    const firstPending =
+      playersQueue.find((pq) => pq.status === 'PENDING') ||
+      playersQueue.find((pq) => pq.status !== 'SOLD') ||
+      playersQueue[0];
+    if (firstPending && firstPending.status !== 'SOLD') {
       currentPlayer = firstPending.player;
       currentPlayerState = {
         playerId: firstPending.player.registrationId,
@@ -1423,18 +1452,32 @@ export async function executeAuctioneerAction(params: {
       saveAuctionPlayerState(newPState),
     ]).catch((err) => console.error('Save error:', err));
   } else if (action === 'NEXT_PLAYER' || action === 'PREV_PLAYER') {
+    // If previous stage player was IN_AUCTION (not SOLD or UNSOLD), return them to PENDING
+    if (room.currentPlayerId) {
+      const prevSt = playerStates[room.currentPlayerId];
+      if (prevSt && prevSt.status === 'IN_AUCTION') {
+        prevSt.status = 'PENDING';
+        prevSt.updatedAt = new Date().toISOString();
+        saveAuctionPlayerState(prevSt).catch(() => {});
+      }
+    }
+
     let nextPlayer: any = null;
     if (payload?.playerId) {
-      nextPlayer = rawPlayers.find((p) => p.registrationId === payload.playerId);
+      const candidate = rawPlayers.find((p) => p.registrationId === payload.playerId);
+      // Strictly forbid NEXT_PLAYER / PREV_PLAYER from ever loading an already-SOLD player onto stage
+      if (candidate && playerStates[candidate.registrationId]?.status !== 'SOLD') {
+        nextPlayer = candidate;
+      }
     }
 
     if (!nextPlayer) {
       const currentIndex = rawPlayers.findIndex((p) => p.registrationId === room.currentPlayerId);
       if (action === 'NEXT_PLAYER') {
-        // 1. Gather all un-auctioned (PENDING) players in the draft pool
+        // 1. Gather all un-auctioned (PENDING) players in the draft pool (strictly excluding SOLD)
         const pendingPlayers = rawPlayers.filter((p) => {
           const st = playerStates[p.registrationId];
-          return (!st || st.status === 'PENDING') && p.registrationId !== room.currentPlayerId;
+          return (!st || st.status === 'PENDING' || st.status === 'IN_AUCTION') && p.registrationId !== room.currentPlayerId;
         });
 
         // 2. Pick a RANDOM pending player so sequence is NOT ascending / predictable!
@@ -1442,7 +1485,7 @@ export async function executeAuctioneerAction(params: {
           const randomIndex = Math.floor(Math.random() * pendingPlayers.length);
           nextPlayer = pendingPlayers[randomIndex];
         } else {
-          // If no pending players left, check un-sold players
+          // If no pending players left, check un-sold players (NEVER pick SOLD players!)
           const unsoldPlayers = rawPlayers.filter((p) => {
             const st = playerStates[p.registrationId];
             return st && st.status === 'UNSOLD' && p.registrationId !== room.currentPlayerId;
@@ -1450,14 +1493,18 @@ export async function executeAuctioneerAction(params: {
           if (unsoldPlayers.length > 0) {
             const randomIndex = Math.floor(Math.random() * unsoldPlayers.length);
             nextPlayer = unsoldPlayers[randomIndex];
-          } else if (rawPlayers.length > 0) {
-            const targetIndex = currentIndex >= 0 && currentIndex < rawPlayers.length - 1 ? currentIndex + 1 : 0;
-            nextPlayer = rawPlayers[targetIndex];
           }
         }
       } else {
-        const targetIndex = currentIndex > 0 ? currentIndex - 1 : rawPlayers.length - 1;
-        nextPlayer = rawPlayers[targetIndex];
+        // PREV_PLAYER: walk backwards to the nearest non-SOLD player
+        for (let step = 1; step <= rawPlayers.length; step++) {
+          const idx = (currentIndex - step + rawPlayers.length) % rawPlayers.length;
+          const cand = rawPlayers[idx];
+          if (cand && playerStates[cand.registrationId]?.status !== 'SOLD') {
+            nextPlayer = cand;
+            break;
+          }
+        }
       }
     }
     if (nextPlayer) {
@@ -1488,8 +1535,8 @@ export async function executeAuctioneerAction(params: {
   } else if (action === 'SKIP_PLAYER') {
     if (room.currentPlayerId) {
       const currState = playerStates[room.currentPlayerId];
-      // If current player was IN_AUCTION with no bids, reset back to PENDING so they can be auctioned later
-      if (currState && currState.status === 'IN_AUCTION' && !room.currentBiddingTeamId) {
+      // If current player was IN_AUCTION, reset back to PENDING so they can be auctioned later
+      if (currState && currState.status === 'IN_AUCTION') {
         currState.status = 'PENDING';
         currState.updatedAt = new Date().toISOString();
         saveAuctionPlayerState(currState).catch((e) => console.error(e));
@@ -1498,21 +1545,29 @@ export async function executeAuctioneerAction(params: {
 
     let nextPlayer: any = null;
     if (payload?.playerId) {
-      nextPlayer = rawPlayers.find((p) => p.registrationId === payload.playerId);
+      const candidate = rawPlayers.find((p) => p.registrationId === payload.playerId);
+      if (candidate && playerStates[candidate.registrationId]?.status !== 'SOLD') {
+        nextPlayer = candidate;
+      }
     }
 
     if (!nextPlayer) {
-      const currentIndex = rawPlayers.findIndex((p) => p.registrationId === room.currentPlayerId);
       const pendingPlayers = rawPlayers.filter((p) => {
         const st = playerStates[p.registrationId];
-        return (!st || st.status === 'PENDING') && p.registrationId !== room.currentPlayerId;
+        return (!st || st.status === 'PENDING' || st.status === 'IN_AUCTION') && p.registrationId !== room.currentPlayerId;
       });
       if (pendingPlayers.length > 0) {
         const randomIndex = Math.floor(Math.random() * pendingPlayers.length);
         nextPlayer = pendingPlayers[randomIndex];
-      } else if (rawPlayers.length > 0) {
-        const targetIndex = currentIndex >= 0 && currentIndex < rawPlayers.length - 1 ? currentIndex + 1 : 0;
-        nextPlayer = rawPlayers[targetIndex];
+      } else {
+        const unsoldPlayers = rawPlayers.filter((p) => {
+          const st = playerStates[p.registrationId];
+          return st && st.status === 'UNSOLD' && p.registrationId !== room.currentPlayerId;
+        });
+        if (unsoldPlayers.length > 0) {
+          const randomIndex = Math.floor(Math.random() * unsoldPlayers.length);
+          nextPlayer = unsoldPlayers[randomIndex];
+        }
       }
     }
 
@@ -1542,39 +1597,46 @@ export async function executeAuctioneerAction(params: {
       ]).catch((err) => console.error('Save error:', err));
     }
   } else if (action === 'MARK_SOLD') {
-    if (!room.currentPlayerId) {
+    const soldPlayerId = payload?.playerId || room.currentPlayerId;
+    const soldTeamId = payload?.teamId || room.currentBiddingTeamId;
+    const soldBidAmount = Number(payload?.soldPrice) || room.currentBid;
+
+    if (!soldPlayerId) {
       return { success: false, error: 'No player on auction block to sell.' };
     }
-    if (!room.currentBiddingTeamId || room.currentBid <= 0) {
+    if (!soldTeamId || soldBidAmount <= 0) {
       return { success: false, error: 'Cannot mark as SOLD without at least one valid bid from a team!' };
     }
 
-    const winningTeam = teams.find((t) => t.id === room.currentBiddingTeamId);
+    const winningTeam = teams.find((t) => t.id === soldTeamId);
     if (!winningTeam) {
       return { success: false, error: 'Winning team not found' };
     }
 
-    // Deduct purse and increment squad count
-    winningTeam.remainingPurse = Math.max(0, winningTeam.remainingPurse - room.currentBid);
+    // Deduct purse and increment squad count (buildFullAuctionStateSync will also self-heal exact totals)
+    winningTeam.remainingPurse = Math.max(0, winningTeam.remainingPurse - soldBidAmount);
     winningTeam.boughtPlayersCount = (winningTeam.boughtPlayersCount || 0) + 1;
 
-    // Mark player as SOLD
+    // Mark player as SOLD permanently
     const soldPState: AuctionPlayerState = {
-      playerId: room.currentPlayerId,
+      playerId: soldPlayerId,
       tournamentSlug: cleanSlug,
       status: 'SOLD',
-      basePrice: room.basePrice,
-      soldPrice: room.currentBid,
+      basePrice: playerStates[soldPlayerId]?.basePrice || room.basePrice || 1000,
+      soldPrice: soldBidAmount,
       soldToTeamId: winningTeam.id,
       soldToTeamName: winningTeam.name,
       soldToTeamLogo: winningTeam.logoUrl,
       updatedAt: new Date().toISOString(),
     };
-    playerStates[room.currentPlayerId] = soldPState;
+    playerStates[soldPlayerId] = soldPState;
 
-    room.lastAction = 'SOLD';
-    room.lastActionTimestamp = Date.now();
-    room.timerRunning = false;
+    // Only update room.lastAction = 'SOLD' if room hasn't already moved to the next player!
+    if (room.currentPlayerId === soldPlayerId) {
+      room.lastAction = 'SOLD';
+      room.lastActionTimestamp = Number(payload?.actionTimestamp) || Date.now();
+      room.timerRunning = false;
+    }
 
     await Promise.all([
       saveTournamentTeams(cleanSlug, teams),

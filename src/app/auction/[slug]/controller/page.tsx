@@ -94,6 +94,58 @@ function getLocalCustomPlayersMap(slug?: string): Record<string, any> {
   return {};
 }
 
+function getLocalSoldLockMap(slug?: string): Record<
+  string,
+  {
+    playerId: string;
+    soldPrice: number;
+    soldToTeamId: string;
+    soldTeamName: string;
+    soldAt: string;
+  }
+> {
+  if (!slug || typeof window === 'undefined' || !window.localStorage) return {};
+  try {
+    const raw = window.localStorage.getItem(`cricbid_sold_lock_${slug.toLowerCase()}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+  } catch {}
+  return {};
+}
+
+function saveLocalSoldLock(
+  slug: string | undefined,
+  entry: {
+    playerId: string;
+    soldPrice: number;
+    soldToTeamId: string;
+    soldTeamName: string;
+    soldAt: string;
+  }
+) {
+  if (!slug || !entry.playerId || typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const cleanSlug = slug.toLowerCase();
+    const map = getLocalSoldLockMap(cleanSlug);
+    map[entry.playerId] = entry;
+    window.localStorage.setItem(`cricbid_sold_lock_${cleanSlug}`, JSON.stringify(map));
+  } catch {}
+}
+
+function removeLocalSoldLock(slug: string | undefined, playerId?: string) {
+  if (!slug || !playerId || typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const cleanSlug = slug.toLowerCase();
+    const map = getLocalSoldLockMap(cleanSlug);
+    if (map[playerId]) {
+      delete map[playerId];
+      window.localStorage.setItem(`cricbid_sold_lock_${cleanSlug}`, JSON.stringify(map));
+    }
+  } catch {}
+}
+
 function isStateUnchanged(prev: FullAuctionState | null, incoming: FullAuctionState | null): boolean {
   if (prev === incoming) return true;
   if (!prev || !incoming) return false;
@@ -119,9 +171,7 @@ function isStateUnchanged(prev: FullAuctionState | null, incoming: FullAuctionSt
     prev.currentPlayer?.registrationId !== incoming.currentPlayer?.registrationId ||
     prev.currentPlayer?.fullName !== incoming.currentPlayer?.fullName ||
     prev.currentPlayer?.role !== incoming.currentPlayer?.role ||
-    prev.currentPlayer?.photoUrl !== incoming.currentPlayer?.photoUrl ||
-    (prev.playersQueue?.length || 0) !== (incoming.playersQueue?.length || 0) ||
-    prev.playersQueue?.[0]?.player?.photoUrl !== incoming.playersQueue?.[0]?.player?.photoUrl
+    (prev.playersQueue?.length || 0) !== (incoming.playersQueue?.length || 0)
   ) {
     return false;
   }
@@ -150,36 +200,63 @@ function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionStat
     return prev;
   }
 
-  const cleanSlug = (incoming.room?.tournamentSlug || prev.room?.tournamentSlug || '').toLowerCase();
-  const customPlayersMap = getLocalCustomPlayersMap(cleanSlug);
+  const prevActionTime = prev.room?.lastActionTimestamp || 0;
+  const incomingActionTime = incoming.room?.lastActionTimestamp || 0;
 
-  // 2. Protect against dropping current player during active bidding
-  let resolvedPlayer = incoming.currentPlayer;
-  let resolvedPlayerState = incoming.currentPlayerState;
-
-  if (!resolvedPlayer && prev.currentPlayer && incoming.room?.status === 'ACTIVE') {
-    resolvedPlayer = prev.currentPlayer;
-    resolvedPlayerState = prev.currentPlayerState;
+  // 2. STRICT STALE POLL PROTECTION:
+  // If user performed a local action (SOLD, NEXT, SKIP, BID) more recently than incoming poll,
+  // return `prev` untouched so the stage player NEVER blinks or reverts to an older player!
+  if (
+    prevActionTime > incomingActionTime &&
+    prev.room?.lastAction !== 'INIT' &&
+    Date.now() - prevActionTime < 15000 &&
+    (prev.playersQueue?.length || 0) >= (incoming.playersQueue?.length || 0)
+  ) {
+    return prev;
   }
 
-  // 3. Maintain queue and hydrate real photos + custom edited player names/roles
+  const cleanSlug = (incoming.room?.tournamentSlug || prev.room?.tournamentSlug || '').toLowerCase();
+  const customPlayersMap = getLocalCustomPlayersMap(cleanSlug);
+  const soldLockMap = getLocalSoldLockMap(cleanSlug);
+
+  // Also absorb any SOLD players from prev.playersQueue into soldLockMap unless explicit UNDO
+  if (incoming.room?.lastAction !== 'UNDO') {
+    (prev.playersQueue || []).forEach((pq: any) => {
+      const pid = pq?.player?.registrationId;
+      if (pid && pq.status === 'SOLD' && (pq.soldToTeamId || pq.soldTeamName)) {
+        if (!soldLockMap[pid]) {
+          soldLockMap[pid] = {
+            playerId: pid,
+            soldPrice: pq.soldPrice || 1000,
+            soldToTeamId: pq.soldToTeamId || '',
+            soldTeamName: pq.soldTeamName || pq.soldToTeamName || '',
+            soldAt: new Date().toISOString(),
+          };
+        }
+      }
+    });
+  }
+
+  // 3. Maintain queue and hydrate real photos + custom edited player names/roles + strict SOLD lock
   const incomingQueue = incoming.playersQueue || [];
   const prevQueue = prev.playersQueue || [];
   const baseQueue = incomingQueue.length >= prevQueue.length ? incomingQueue : prevQueue;
   const secondaryQueue = incomingQueue.length >= prevQueue.length ? prevQueue : incomingQueue;
-  const secondaryPlayerMap = new Map<string, any>();
+  const secondaryItemMap = new Map<string, any>();
   secondaryQueue.forEach((pq: any) => {
     const pid = pq?.player?.registrationId;
     if (pid) {
-      secondaryPlayerMap.set(pid, pq.player);
+      secondaryItemMap.set(pid, pq);
     }
   });
 
   let currentQueue = baseQueue.map((pq: any) => {
     const pid = pq?.player?.registrationId;
     if (!pid) return pq;
-    const secPlayer = secondaryPlayerMap.get(pid);
+    const secItem = secondaryItemMap.get(pid);
+    const secPlayer = secItem?.player;
     const customEntry = customPlayersMap[pid];
+    const lockedSold = soldLockMap[pid];
     const curUrl = pq?.player?.photoUrl || '';
     const secUrl = secPlayer?.photoUrl || '';
     const customUrl = customEntry?.photoUrl || '';
@@ -194,9 +271,20 @@ function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionStat
       bestPhoto = secUrl;
     }
 
+    // Strict SOLD status preservation: once SOLD, never downgrade to PENDING/IN_AUCTION on poll!
+    const effectiveStatus = lockedSold
+      ? ('SOLD' as const)
+      : pq.status === 'PENDING' && secItem?.status === 'UNSOLD' && incoming.room?.lastAction !== 'RESET'
+      ? ('UNSOLD' as const)
+      : pq.status;
+
     return {
       ...pq,
+      status: effectiveStatus,
       basePrice: customEntry?.basePrice || pq.basePrice,
+      soldPrice: lockedSold ? lockedSold.soldPrice : pq.soldPrice,
+      soldToTeamId: lockedSold ? lockedSold.soldToTeamId : pq.soldToTeamId,
+      soldTeamName: lockedSold ? lockedSold.soldTeamName : pq.soldTeamName,
       player: {
         ...pq.player,
         fullName: customEntry?.fullName || pq.player.fullName,
@@ -213,6 +301,7 @@ function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionStat
   const queueIds = new Set(currentQueue.map((pq: any) => pq?.player?.registrationId));
   Object.values(customPlayersMap).forEach((cp: any) => {
     if (cp && cp.isManuallyAdded && cp.registrationId && !queueIds.has(cp.registrationId)) {
+      const lockedSold = soldLockMap[cp.registrationId];
       currentQueue = [
         {
           player: {
@@ -233,17 +322,60 @@ function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionStat
             amount: 0,
             timestamp: cp.timestamp || new Date().toISOString(),
           },
-          status: 'PENDING',
+          status: lockedSold ? 'SOLD' : 'PENDING',
           basePrice: cp.basePrice || 1000,
-          soldPrice: null,
-          soldTeamName: null,
-          soldToTeamId: null,
+          soldPrice: lockedSold ? lockedSold.soldPrice : null,
+          soldTeamName: lockedSold ? lockedSold.soldTeamName : null,
+          soldToTeamId: lockedSold ? lockedSold.soldToTeamId : null,
         },
         ...currentQueue,
       ];
       queueIds.add(cp.registrationId);
     }
   });
+
+  // 4. Protect against dropping current player OR putting an already-SOLD player back on stage!
+  let resolvedPlayer = incoming.currentPlayer;
+  let resolvedPlayerState = incoming.currentPlayerState;
+  let resolvedRoom = { ...incoming.room };
+  let resolvedBiddingTeam = incoming.currentBiddingTeam;
+
+  if (!resolvedPlayer && prev.currentPlayer && incoming.room?.status === 'ACTIVE') {
+    resolvedPlayer = prev.currentPlayer;
+    resolvedPlayerState = prev.currentPlayerState;
+  }
+
+  // STRICT STAGE RULE: If incoming poll tries to put a SOLD player back on stage after we already moved on
+  // (or when room.lastAction is not 'SOLD'), block it and keep prev.currentPlayer (or pick next PENDING)!
+  if (resolvedPlayer && soldLockMap[resolvedPlayer.registrationId]) {
+    const prevPid = prev.currentPlayer?.registrationId;
+    if (prevPid && prevPid !== resolvedPlayer.registrationId && !soldLockMap[prevPid]) {
+      resolvedPlayer = prev.currentPlayer;
+      resolvedPlayerState = prev.currentPlayerState;
+      resolvedRoom = {
+        ...prev.room,
+        currentPlayerId: prevPid,
+      };
+      resolvedBiddingTeam = prev.currentBiddingTeam;
+    } else if (resolvedRoom.lastAction !== 'SOLD') {
+      const nextPending = currentQueue.find(
+        (pq: any) => pq.status !== 'SOLD' && !soldLockMap[pq.player?.registrationId]
+      );
+      if (nextPending) {
+        resolvedPlayer = nextPending.player;
+        resolvedPlayerState = {
+          playerId: nextPending.player.registrationId,
+          tournamentSlug: cleanSlug,
+          status: 'IN_AUCTION',
+          basePrice: nextPending.basePrice || resolvedRoom.basePrice || 1000,
+        };
+        resolvedRoom.currentPlayerId = nextPending.player.registrationId;
+        resolvedRoom.currentBid = resolvedPlayerState.basePrice;
+        resolvedRoom.currentBiddingTeamId = null;
+        resolvedBiddingTeam = null;
+      }
+    }
+  }
 
   // Also ensure resolvedPlayer gets custom edited name/role and real raster data:image/ photoUrl
   if (resolvedPlayer) {
@@ -278,66 +410,87 @@ function mergeStateSafe(prev: FullAuctionState | null, incoming: FullAuctionStat
     };
   }
 
-  const hydratedSoldHistory = (incoming.soldHistory && incoming.soldHistory.length > 0
-    ? incoming.soldHistory
-    : (prev.soldHistory || [])
-  ).map((sh: any) => {
-    if (!sh.player?.photoUrl) {
-      const matched = currentQueue?.find((pq: any) => pq.player?.registrationId === sh.player?.registrationId);
-      if (matched?.player?.photoUrl) {
-        return {
-          ...sh,
-          player: {
-            ...sh.player,
-            photoUrl: matched.player.photoUrl,
-          },
-        };
+  // 5. Rebuild authoritative soldHistory and team counts from currentQueue + soldLockMap so SOLD count NEVER drops!
+  const baseTeams = incoming.teams && incoming.teams.length > 0 ? incoming.teams : (prev.teams || []);
+  const soldHistoryMap = new Map<string, any>();
+
+  (incoming.soldHistory || []).forEach((sh: any) => {
+    const pid = sh?.player?.registrationId;
+    if (pid) soldHistoryMap.set(pid, sh);
+  });
+  (prev.soldHistory || []).forEach((sh: any) => {
+    const pid = sh?.player?.registrationId;
+    if (pid && !soldHistoryMap.has(pid) && soldLockMap[pid]) {
+      soldHistoryMap.set(pid, sh);
+    }
+  });
+
+  currentQueue.forEach((pq: any) => {
+    const pid = pq?.player?.registrationId;
+    if (pid && pq.status === 'SOLD' && (pq.soldToTeamId || pq.soldTeamName)) {
+      const teamObj = baseTeams.find(
+        (t: any) =>
+          t.id === pq.soldToTeamId ||
+          (pq.soldTeamName && t.name?.toLowerCase() === pq.soldTeamName.toLowerCase())
+      );
+      if (teamObj) {
+        soldHistoryMap.set(pid, {
+          player: pq.player,
+          soldPrice: pq.soldPrice || 1000,
+          team: teamObj,
+          soldAt: soldLockMap[pid]?.soldAt || new Date().toISOString(),
+        });
       }
+    }
+  });
+
+  const hydratedSoldHistory = Array.from(soldHistoryMap.values()).map((sh: any) => {
+    const matched = currentQueue.find((pq: any) => pq.player?.registrationId === sh.player?.registrationId);
+    if (matched?.player) {
+      return {
+        ...sh,
+        player: matched.player,
+      };
     }
     return sh;
   });
 
-  const prevActionTime = prev.room?.lastActionTimestamp || 0;
-  const incomingActionTime = incoming.room?.lastActionTimestamp || 0;
-
-  let resolvedRoom = { ...incoming.room };
-  let resolvedBiddingTeam = incoming.currentBiddingTeam;
-
-  // Stale packet protection: only block incoming poll if user triggered a local action within the last 8 seconds!
-  // Always allow currentQueue & photo upgrades so localStorage never traps stale player counts or missing photos.
-  if (
-    prevActionTime > incomingActionTime &&
-    prev.room?.lastAction !== 'INIT' &&
-    Date.now() - prevActionTime < 8000
-  ) {
+  // Recalculate exact boughtPlayersCount and remainingPurse for every franchise from hydratedSoldHistory
+  const reconciledTeams = baseTeams.map((t: any) => {
+    const teamSales = hydratedSoldHistory.filter(
+      (sh: any) =>
+        sh.team?.id === t.id ||
+        (sh.team?.name && t.name && sh.team.name.toLowerCase() === t.name.toLowerCase())
+    );
+    const spent = teamSales.reduce((acc: number, sh: any) => acc + (Number(sh.soldPrice) || 0), 0);
     return {
-      ...prev,
-      currentPlayer: resolvedPlayer || prev.currentPlayer,
-      playersQueue: currentQueue,
+      ...t,
+      boughtPlayersCount: teamSales.length,
+      remainingPurse: t.totalPurse > 0 ? Math.max(0, t.totalPurse - spent) : t.remainingPurse,
     };
-  } else {
-    // BID PROTECTION: Never downgrade the bid on the same player unless explicit UNDO/RESET
-    const isSamePlayer =
-      prev.room?.currentPlayerId &&
-      incoming.room?.currentPlayerId &&
-      prev.room.currentPlayerId === incoming.room.currentPlayerId;
+  });
 
-    if (
-      isSamePlayer &&
-      incoming.room.currentBid < prev.room.currentBid &&
-      incoming.room.lastAction !== 'UNDO' &&
-      incoming.room.lastAction !== 'RESET' &&
-      incoming.room.lastAction !== 'NEXT'
-    ) {
-      resolvedRoom.currentBid = prev.room.currentBid;
-      resolvedRoom.currentBiddingTeamId = prev.room.currentBiddingTeamId;
-      resolvedBiddingTeam = prev.currentBiddingTeam || incoming.currentBiddingTeam;
-    }
+  // BID PROTECTION: Never downgrade the bid on the same player unless explicit UNDO/RESET
+  const isSamePlayer =
+    prev.room?.currentPlayerId &&
+    resolvedRoom.currentPlayerId &&
+    prev.room.currentPlayerId === resolvedRoom.currentPlayerId;
+
+  if (
+    isSamePlayer &&
+    resolvedRoom.currentBid < prev.room.currentBid &&
+    resolvedRoom.lastAction !== 'UNDO' &&
+    resolvedRoom.lastAction !== 'RESET' &&
+    resolvedRoom.lastAction !== 'NEXT'
+  ) {
+    resolvedRoom.currentBid = prev.room.currentBid;
+    resolvedRoom.currentBiddingTeamId = prev.room.currentBiddingTeamId;
+    resolvedBiddingTeam = prev.currentBiddingTeam || incoming.currentBiddingTeam;
   }
 
   return {
     ...incoming,
-    teams: incoming.teams && incoming.teams.length > 0 ? incoming.teams : (prev.teams || []),
+    teams: reconciledTeams,
     room: resolvedRoom,
     currentPlayer: resolvedPlayer,
     currentPlayerState: resolvedPlayerState,
@@ -599,6 +752,21 @@ export default function AuctioneerControllerPage() {
         }
       });
     }
+    const soldLockMap = getLocalSoldLockMap(slug);
+    Object.values(soldLockMap).forEach((sl) => {
+      if (sl && sl.playerId) {
+        playerStatesMap[sl.playerId] = {
+          ...(playerStatesMap[sl.playerId] || {}),
+          playerId: sl.playerId,
+          tournamentSlug: slug,
+          status: 'SOLD',
+          basePrice: playerStatesMap[sl.playerId]?.basePrice || 1000,
+          soldPrice: sl.soldPrice,
+          soldToTeamId: sl.soldToTeamId,
+          soldToTeamName: sl.soldTeamName,
+        };
+      }
+    });
     const customMap = getLocalCustomPlayersMap(slug);
     const customPlayers = Object.values(customMap);
     return {
@@ -1032,6 +1200,8 @@ export default function AuctioneerControllerPage() {
       return { success: true };
     }
 
+    const actionDispatchedAt = stateRef.current?.room?.lastActionTimestamp || now;
+
     try {
       setActionLoading(true);
       const res = await fetch(`/api/auction/${slug}/action`, {
@@ -1058,12 +1228,17 @@ export default function AuctioneerControllerPage() {
           setPinError('Session expired. Please enter Admin PIN again.');
         }
       } else if (json.state) {
-        setState((prev) => {
-          const merged = mergeStateSafe(prev, json.state);
-          stateRef.current = merged;
-          broadcastStateToScreens(merged);
-          return merged;
-        });
+        // If a newer local action (e.g. Auto-Next or Next Player after SOLD) already occurred while this request was in flight,
+        // do NOT overwrite the newer client state with this older response!
+        const latestLocalTs = stateRef.current?.room?.lastActionTimestamp || 0;
+        if (latestLocalTs <= actionDispatchedAt || action === 'REAUCTION_PLAYER' || action === 'UNDO_SOLD') {
+          setState((prev) => {
+            const merged = mergeStateSafe(prev, json.state);
+            stateRef.current = merged;
+            broadcastStateToScreens(merged);
+            return merged;
+          });
+        }
       }
       return json;
     } catch (e: any) {
@@ -1212,34 +1387,53 @@ export default function AuctioneerControllerPage() {
     handlePlaceFloorBid(teamId, bidAmount);
   };
 
-  // 0ms INSTANT OPTIMISTIC PLAYER NAVIGATION (Prefers next un-auctioned PENDING player)
+  // 0ms INSTANT OPTIMISTIC PLAYER NAVIGATION (Strictly excludes SOLD players!)
   const handleNextPlayerOptimistic = (preferPending: boolean | any = true) => {
     const isPrefer = typeof preferPending === 'boolean' ? preferPending : true;
     clearAutoNextTimers();
     const activeState = stateRef.current || state;
     const queue = activeState?.playersQueue || playersQueue;
     if (queue.length === 0) return;
+    const soldLock = getLocalSoldLockMap(slug);
     const currId = activeState?.currentPlayer?.registrationId || currentPlayer?.registrationId;
     const currIdx = queue.findIndex((pq) => pq.player.registrationId === currId);
+
+    const isEligibleNotSold = (pq: any) =>
+      pq &&
+      pq.status !== 'SOLD' &&
+      !soldLock[pq.player?.registrationId] &&
+      pq.player?.registrationId !== currId;
 
     let nextItem: any = null;
     if (isPrefer) {
       const pendingList = queue.filter(
-        (pq) => pq.status === 'PENDING' && pq.player.registrationId !== currId
+        (pq) => (pq.status === 'PENDING' || pq.status === 'IN_AUCTION') && isEligibleNotSold(pq)
       );
       if (pendingList.length > 0) {
         const randIdx = Math.floor(Math.random() * pendingList.length);
         nextItem = pendingList[randIdx];
+      } else {
+        const unsoldList = queue.filter((pq) => pq.status === 'UNSOLD' && isEligibleNotSold(pq));
+        if (unsoldList.length > 0) {
+          const randIdx = Math.floor(Math.random() * unsoldList.length);
+          nextItem = unsoldList[randIdx];
+        }
       }
     }
 
     if (!nextItem && !isPrefer) {
-      const nextIdx = currIdx >= 0 && currIdx < queue.length - 1 ? currIdx + 1 : 0;
-      nextItem = queue[nextIdx];
+      for (let step = 1; step <= queue.length; step++) {
+        const idx = (currIdx + step) % queue.length;
+        const cand = queue[idx];
+        if (isEligibleNotSold(cand)) {
+          nextItem = cand;
+          break;
+        }
+      }
     }
 
     if (!nextItem) {
-      const soldCount = queue.filter((pq) => pq.status === 'SOLD').length;
+      const soldCount = queue.filter((pq) => pq.status === 'SOLD' || soldLock[pq.player?.registrationId]).length;
       const unsoldCount = queue.filter((pq) => pq.status === 'UNSOLD').length;
       setLastDecisionMsg({
         type: 'SOLD',
@@ -1272,6 +1466,15 @@ export default function AuctioneerControllerPage() {
         lastAction: 'NEXT',
         lastActionTimestamp: now,
       },
+      playersQueue: (prev.playersQueue || []).map((pq) => {
+        if (pq.player.registrationId === nextItem.player.registrationId) {
+          return { ...pq, status: 'IN_AUCTION' as const };
+        }
+        if (pq.player.registrationId === currId && pq.status === 'IN_AUCTION') {
+          return { ...pq, status: 'PENDING' as const };
+        }
+        return pq;
+      }),
       currentBiddingTeam: null,
     }));
 
@@ -1283,10 +1486,24 @@ export default function AuctioneerControllerPage() {
     const activeState = stateRef.current || state;
     const queue = activeState?.playersQueue || playersQueue;
     if (queue.length === 0) return;
+    const soldLock = getLocalSoldLockMap(slug);
     const currId = activeState?.currentPlayer?.registrationId || currentPlayer?.registrationId;
     const currIdx = queue.findIndex((pq) => pq.player.registrationId === currId);
-    const prevIdx = currIdx > 0 ? currIdx - 1 : queue.length - 1;
-    const prevItem = queue[prevIdx];
+
+    let prevItem: any = null;
+    for (let step = 1; step <= queue.length; step++) {
+      const idx = (currIdx - step + queue.length) % queue.length;
+      const cand = queue[idx];
+      if (
+        cand &&
+        cand.status !== 'SOLD' &&
+        !soldLock[cand.player?.registrationId] &&
+        cand.player?.registrationId !== currId
+      ) {
+        prevItem = cand;
+        break;
+      }
+    }
     if (!prevItem) return;
 
     const basePrice = prevItem.basePrice || room.basePrice || 1000;
@@ -1313,31 +1530,51 @@ export default function AuctioneerControllerPage() {
         lastAction: 'NEXT',
         lastActionTimestamp: now,
       },
+      playersQueue: (prev.playersQueue || []).map((pq) => {
+        if (pq.player.registrationId === prevItem.player.registrationId) {
+          return { ...pq, status: 'IN_AUCTION' as const };
+        }
+        if (pq.player.registrationId === currId && pq.status === 'IN_AUCTION') {
+          return { ...pq, status: 'PENDING' as const };
+        }
+        return pq;
+      }),
       currentBiddingTeam: null,
     }));
 
     executeAction('PREV_PLAYER', { playerId: prevItem.player.registrationId }).catch((e) => console.error(e));
   };
 
-  // Skip Player to Pool with instant 0ms optimistic transition
+  // Skip Player to Pool with instant 0ms optimistic transition (Strictly excludes SOLD players!)
   const handleSkipPlayer = async () => {
     clearAutoNextTimers();
     const activeState = stateRef.current || state;
     const queue = activeState?.playersQueue || playersQueue;
     if (queue.length === 0) return;
+    const soldLock = getLocalSoldLockMap(slug);
     const currId = activeState?.currentPlayer?.registrationId || currentPlayer?.registrationId;
-    const currIdx = queue.findIndex((pq) => pq.player.registrationId === currId);
     const pendingList = queue.filter(
-      (pq) => pq.status === 'PENDING' && pq.player.registrationId !== currId
+      (pq) =>
+        (pq.status === 'PENDING' || pq.status === 'IN_AUCTION') &&
+        pq.status !== 'SOLD' &&
+        !soldLock[pq.player?.registrationId] &&
+        pq.player.registrationId !== currId
     );
     let nextItem: any = null;
     if (pendingList.length > 0) {
       const randomIdx = Math.floor(Math.random() * pendingList.length);
       nextItem = pendingList[randomIdx];
-    }
-    if (!nextItem) {
-      const nextIdx = currIdx >= 0 && currIdx < queue.length - 1 ? currIdx + 1 : 0;
-      nextItem = queue[nextIdx];
+    } else {
+      const unsoldList = queue.filter(
+        (pq) =>
+          pq.status === 'UNSOLD' &&
+          !soldLock[pq.player?.registrationId] &&
+          pq.player.registrationId !== currId
+      );
+      if (unsoldList.length > 0) {
+        const randomIdx = Math.floor(Math.random() * unsoldList.length);
+        nextItem = unsoldList[randomIdx];
+      }
     }
     if (!nextItem) return;
 
@@ -1365,6 +1602,15 @@ export default function AuctioneerControllerPage() {
         lastAction: 'NEXT',
         lastActionTimestamp: now,
       },
+      playersQueue: (prev.playersQueue || []).map((pq) => {
+        if (pq.player.registrationId === nextItem.player.registrationId) {
+          return { ...pq, status: 'IN_AUCTION' as const };
+        }
+        if (pq.player.registrationId === currId && pq.status === 'IN_AUCTION') {
+          return { ...pq, status: 'PENDING' as const };
+        }
+        return pq;
+      }),
       currentBiddingTeam: null,
     }));
 
@@ -1396,6 +1642,15 @@ export default function AuctioneerControllerPage() {
     const playerName = activePlayer.fullName;
     const now = Date.now();
 
+    // Strictly lock this SOLD record in localStorage so background polls can NEVER revert it!
+    saveLocalSoldLock(slug, {
+      playerId: activePlayer.registrationId,
+      soldPrice,
+      soldToTeamId: activeBidTeam.id,
+      soldTeamName: activeBidTeam.name,
+      soldAt: new Date(now).toISOString(),
+    });
+
     // Instant 0ms synchronous update + broadcast to Projector (triggers SOLD modal + confetti immediately!)
     applyOptimisticAndBroadcast((prev) => {
       const updatedPlayersQueue = prev.playersQueue.map((pq) =>
@@ -1410,21 +1665,27 @@ export default function AuctioneerControllerPage() {
             }
           : pq
       );
-      const updatedTeams = prev.teams.map((t) =>
-        t.id === activeBidTeam.id
-          ? {
-              ...t,
-              remainingPurse: Math.max(0, t.remainingPurse - soldPrice),
-              boughtPlayersCount: (t.boughtPlayersCount || 0) + 1,
-            }
-          : t
-      );
       const newSoldRecord = {
         player: activePlayer,
         soldPrice,
         team: activeBidTeam,
         soldAt: new Date(now).toISOString(),
       };
+      const updatedSoldHistory = [
+        newSoldRecord,
+        ...(prev.soldHistory || []).filter((sh) => sh.player?.registrationId !== activePlayer.registrationId),
+      ];
+      const updatedTeams = prev.teams.map((t) => {
+        const teamSales = updatedSoldHistory.filter(
+          (sh) => sh.team?.id === t.id || (sh.team?.name && t.name && sh.team.name.toLowerCase() === t.name.toLowerCase())
+        );
+        const spent = teamSales.reduce((acc, sh) => acc + (Number(sh.soldPrice) || 0), 0);
+        return {
+          ...t,
+          boughtPlayersCount: teamSales.length,
+          remainingPurse: t.totalPurse > 0 ? Math.max(0, t.totalPurse - spent) : t.remainingPurse,
+        };
+      });
       return {
         ...prev,
         room: {
@@ -1435,10 +1696,7 @@ export default function AuctioneerControllerPage() {
         },
         playersQueue: updatedPlayersQueue,
         teams: updatedTeams,
-        soldHistory: [
-          newSoldRecord,
-          ...(prev.soldHistory || []).filter((sh) => sh.player?.registrationId !== activePlayer.registrationId),
-        ],
+        soldHistory: updatedSoldHistory,
       };
     });
 
@@ -1447,7 +1705,12 @@ export default function AuctioneerControllerPage() {
       text: `🎉 SOLD! ${playerName} sold to ${soldTeamName} for ₹${soldPrice.toLocaleString('en-IN')}!`,
     });
 
-    executeAction('MARK_SOLD').catch((err) => console.error(err));
+    executeAction('MARK_SOLD', {
+      playerId: activePlayer.registrationId,
+      teamId: activeBidTeam.id,
+      soldPrice,
+      actionTimestamp: now,
+    }).catch((err) => console.error(err));
 
     // Auto-advance to next un-auctioned player after 2.4 seconds
     if (isAutoNextEnabled) {
@@ -1611,6 +1874,19 @@ export default function AuctioneerControllerPage() {
     const now = Date.now();
     const targetPid = editingPlayerObj.registrationId;
 
+    if (isSold && soldTeamId) {
+      const tObj = teams.find((t) => t.id === soldTeamId);
+      saveLocalSoldLock(slug, {
+        playerId: targetPid,
+        soldPrice: soldP || baseP,
+        soldToTeamId: soldTeamId,
+        soldTeamName: tObj?.name || '',
+        soldAt: new Date(now).toISOString(),
+      });
+    } else {
+      removeLocalSoldLock(slug, targetPid);
+    }
+
     // 1. Persist locally so background polls never revert this player's name, role, or photo
     saveCustomPlayerLocal({
       registrationId: targetPid,
@@ -1706,6 +1982,7 @@ export default function AuctioneerControllerPage() {
     const p = playersQueue.find((pq) => pq.player.registrationId === playerId);
     const name = p?.player.fullName || 'Player';
     if (confirm(`Do you want to put ${name} back on the auction block for Re-Auction? (If sold, previous franchise purse will be refunded automatically).`)) {
+      removeLocalSoldLock(slug, playerId);
       const res = await executeAction('REAUCTION_PLAYER', { playerId });
       if (res?.success) {
         setActiveTab('control');
@@ -1722,6 +1999,8 @@ export default function AuctioneerControllerPage() {
   const handleUndoSold = async () => {
     clearAutoNextTimers();
     if (confirm('Undo the last sold decision? This will refund the franchise purse and put the player back on the bidding stage.')) {
+      const latestSoldId = stateRef.current?.soldHistory?.[0]?.player?.registrationId || stateRef.current?.currentPlayer?.registrationId;
+      if (latestSoldId) removeLocalSoldLock(slug, latestSoldId);
       const res = await executeAction('UNDO_SOLD');
       if (res?.success) {
         setLastDecisionMsg({
@@ -1737,6 +2016,8 @@ export default function AuctioneerControllerPage() {
   const handleReleasePlayerFromTeam = async (player: any, team: TournamentTeam, soldPrice: number) => {
     const confirmMsg = `Kya aap "${player.fullName}" ko "${team.name}" se nikal kar UNSOLD karna chahte hain?\n\n₹${soldPrice.toLocaleString('en-IN')} automatically "${team.name}" ke purse me wapas add (refund) ho jayenge.`;
     if (!confirm(confirmMsg)) return;
+
+    removeLocalSoldLock(slug, player.registrationId);
 
     // Instant optimistic UI update (0ms latency)
     setState((prev) => {
@@ -1789,6 +2070,8 @@ export default function AuctioneerControllerPage() {
   const handleReAuctionFromTeam = async (player: any, team: TournamentTeam, soldPrice: number) => {
     const confirmMsg = `Kya aap "${player.fullName}" ko wapas Live Stage par la kar RE-AUCTION karna chahte hain?\n\nIsse "${team.name}" ka ₹${soldPrice.toLocaleString('en-IN')} purse refund ho jayega aur player live stage par aa jayega.`;
     if (!confirm(confirmMsg)) return;
+
+    removeLocalSoldLock(slug, player.registrationId);
 
     const res = await executeAction('REAUCTION_PLAYER', { playerId: player.registrationId });
     if (res?.success) {

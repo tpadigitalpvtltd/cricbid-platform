@@ -265,34 +265,6 @@ export function getTournamentBySlug(slug: string): Tournament | null {
 
 export async function getTournamentBySlugAsync(slug: string): Promise<Tournament | null> {
   const cleanSlug = slug.toLowerCase();
-  try {
-    const tQuery = supabase
-      .from('tournaments')
-      .select('id, slug, title, tagline, city, venue, banner_url, registration_deadline, auction_date, is_paid, entry_fee, organizer_name, organizer_contact, registered_count, created_at')
-      .ilike('slug', cleanSlug)
-      .maybeSingle();
-
-    const pQuery = supabase
-      .from('players')
-      .select('tournament_slug')
-      .ilike('tournament_slug', cleanSlug)
-      .neq('payment_status', 'PENDING_PAYMENT');
-
-    const [tRes, pRes] = await withTimeout(Promise.all([tQuery, pQuery]), 3500);
-
-    if (tRes && !tRes.error && tRes.data) {
-      const model = mapDbTournamentToModel(tRes.data);
-      const playerCount = Array.isArray(pRes?.data) ? pRes.data.length : 0;
-      model.registeredCount = Math.max(Number(tRes.data.registered_count) || 0, playerCount);
-      if (!model.bannerUrl || model.bannerUrl.startsWith('data:image/')) {
-        model.bannerUrl = `/api/tournament-banner/${encodeURIComponent(model.slug)}`;
-      }
-      return model;
-    }
-  } catch (err) {
-    console.warn('Supabase getTournamentBySlug notice (using instant cache):', err);
-  }
-
   const all = readTournamentsFromFile();
   const found = all.find((t) => t.slug.toLowerCase() === cleanSlug);
   if (found) {
@@ -306,6 +278,33 @@ export async function getTournamentBySlugAsync(slug: string): Promise<Tournament
       bannerUrl: found.bannerUrl || `/api/tournament-banner/${encodeURIComponent(found.slug)}`,
     };
   }
+
+  try {
+    const tQuery = supabase
+      .from('tournaments')
+      .select('id, slug, title, tagline, city, venue, banner_url, registration_deadline, auction_date, is_paid, entry_fee, organizer_name, organizer_contact, registered_count, created_at')
+      .ilike('slug', cleanSlug)
+      .maybeSingle();
+
+    const pQuery = supabase
+      .from('players')
+      .select('tournament_slug')
+      .ilike('tournament_slug', cleanSlug)
+      .neq('payment_status', 'PENDING_PAYMENT');
+
+    const [tRes, pRes] = await withTimeout(Promise.all([tQuery, pQuery]), 650);
+
+    if (tRes && !tRes.error && tRes.data) {
+      const model = mapDbTournamentToModel(tRes.data);
+      const playerCount = Array.isArray(pRes?.data) ? pRes.data.length : 0;
+      model.registeredCount = Math.max(Number(tRes.data.registered_count) || 0, playerCount);
+      if (!model.bannerUrl || model.bannerUrl.startsWith('data:image/')) {
+        model.bannerUrl = `/api/tournament-banner/${encodeURIComponent(model.slug)}`;
+      }
+      return model;
+    }
+  } catch (err) {}
+
   return null;
 }
 
@@ -678,6 +677,11 @@ function deduplicatePlayers(players: RegistrationSubmission[]): RegistrationSubm
 }
 
 export async function getPlayersByTournamentAsync(slug: string): Promise<RegistrationSubmission[]> {
+  const localTourneyPlayers = deduplicatePlayers(getPlayersByTournament(slug));
+  if (localTourneyPlayers.length > 0) {
+    return localTourneyPlayers;
+  }
+
   try {
     const query = supabase
       .from('players')
@@ -686,7 +690,7 @@ export async function getPlayersByTournamentAsync(slug: string): Promise<Registr
       .neq('payment_status', 'PENDING_PAYMENT')
       .order('created_at', { ascending: false });
 
-    const { data, error } = await withTimeout(query, 2500);
+    const { data, error } = await withTimeout(query, 650);
 
     if (!error && Array.isArray(data) && data.length > 0) {
       const existingLocal = readPlayersFromFile();
